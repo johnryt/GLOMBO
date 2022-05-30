@@ -48,8 +48,8 @@ class Integration():
 
         # refining only
         hyperparameters.loc['refining only',:] = np.nan
-        hyperparameters.loc['pri CU TCRC elas',:] = 0.4, 'Capacity at primary-only refineries'
-        hyperparameters.loc['sec CU TCRC elas',:] = 0.4, 'Capacity at secondary-consuming refineries'
+        hyperparameters.loc['pri CU TCRC elas',:] = 0.1, 'Capacity utilization at primary-only refineries'
+        hyperparameters.loc['sec CU TCRC elas',:] = 0.1, 'Capacity utilization at secondary-consuming refineries'
         hyperparameters.loc['sec ratio TCRC elas',:] = -0.4, 'Secondary ratio elasticity to TCRC'
         hyperparameters.loc['sec ratio scrap spread elas',:] = 0.8, 'Secondary ratio elasticity to scrap spread'
         hyperparameters.loc['Use regions'] = False, 'True makes it so global refining is determined from combo of China and RoW; False means we ignore the region level'

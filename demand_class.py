@@ -376,6 +376,6 @@ class demandModel():
         else:
             self.run_intensity_prediction()
             self.scrap_generation_collection()
-        self.scrap_supply = self.old_scrap_collected.unstack().groupby(level=1,axis=1).sum()
+        self.scrap_supply = self.scrap_collected.unstack().groupby(level=1,axis=1).sum()
         self.scrap_supply.loc[:,'Global'] = self.scrap_supply['China']+self.scrap_supply['RoW']
         

@@ -88,7 +88,7 @@ class Integration():
         hyperparameters.loc['primary_production_var','Value'] = 0.5
         hyperparameters.loc['primary_ore_grade_var','Value'] = 1
         hyperparameters.loc['incentive_opening_probability','Value'] = 0.05
-        hyperparameters.loc['incentive_require_tune_years',:] = 0,'requires incentive tuning for however many years such that supply=demand, with no requirements on incentive_opening_probability and allowing the given incentive_opening_probability to be used'
+        hyperparameters.loc['incentive_require_tune_years',:] = 5,'requires incentive tuning for however many years such that supply=demand, with no requirements on incentive_opening_probability and allowing the given incentive_opening_probability to be used'
         hyperparameters.loc['demand_series_method','Value'] = 'none'
         hyperparameters.loc['end_calibrate_years','Value'] = 20
         hyperparameters.loc['start_calibrate_years','Value'] = 10
@@ -218,10 +218,10 @@ class Integration():
         i = self.i
         h = self.h
         # refined
-        self.primary_commodity_price.loc[i] = self.primary_commodity_price.loc[i-1]*(self.refined_supply['Global'][i-1]/self.refined_demand['Global'][i-1])**h['primary_commodity_price_elas_sd']
+        self.primary_commodity_price.loc[i] = self.primary_commodity_price.loc[i-1]*(self.refined_supply.replace(0,1e-6)['Global'][i-1]/self.refined_demand.replace(0,1e-6)['Global'][i-1])**h['primary_commodity_price_elas_sd']
         
         # tcrc
-        self.tcrc.loc[i] = self.tcrc.loc[i-1]*(self.concentrate_supply[i-1]/self.concentrate_demand['Global'][i-1])**h['tcrc_elas_sd']\
+        self.tcrc.loc[i] = self.tcrc.loc[i-1]*(self.concentrate_supply.replace(0,1e-6)[i-1]/self.concentrate_demand.replace(0,1e-6)['Global'][i-1])**h['tcrc_elas_sd']\
                                 *(self.primary_commodity_price.loc[i]/self.primary_commodity_price.loc[i-1])**h['tcrc_elas_price']
         
         # scrap trade
@@ -253,6 +253,8 @@ class Integration():
 #                 hyperparameters.loc['collection_elas_scrap_price',:] = 0.6,'% increase in collection corresponding with a 1% increase in scrap price'
         scrap_price_l1 = self.primary_commodity_price[i-1]-self.scrap_spread.loc[i-1]
         scrap_price_l2 = self.primary_commodity_price[i-2]-self.scrap_spread.loc[i-2]
+        scrap_price_l1[scrap_price_l1<0] = 1e-6
+        scrap_price_l2[scrap_price_l2<0] = 1e-6
         if h['Use regions']:
             self.collection_rate.loc[idx[i,'China'],:] = self.collection_rate.loc[idx[i-1,'China'],:].rename({i-1:i})*(scrap_price_l1['China']/scrap_price_l2['China'])**h['collection_elas_scrap_price']
             self.collection_rate.loc[idx[i,'RoW'],:]   = self.collection_rate.loc[idx[i-1,'RoW'],:].rename({i-1:i})*(scrap_price_l1['RoW']/scrap_price_l2['RoW'])**h['collection_elas_scrap_price']
@@ -400,3 +402,5 @@ class Integration():
                 self.run_refine()
                 self.update_integration_variables()
                 self.run_mining()
+        self.concentrate_demand = pd.concat([self.mining.demand_series,self.concentrate_demand['China'],
+                                            self.concentrate_demand['RoW']],axis=1,keys=['Global','China','RoW'])

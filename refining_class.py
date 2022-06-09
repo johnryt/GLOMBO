@@ -74,9 +74,15 @@ class refiningModel():
          (global_sec_ref_fraction_of_recycled - china_sec_ref_fraction_of_recycled*china_fraction_recycled) / \
          (1-china_fraction_recycled)
 
-        sec_frac_of_refined = 1/ (1+(1-global_rir-sxew_fraction)/global_sec_ref_fraction_of_recycled/global_rir)
-        sec_frac_of_refined_cn = 1/ (1+(1-china_rir-sxew_fraction_cn)/china_sec_ref_fraction_of_recycled/china_rir)
-        sec_frac_of_refined_rw = 1/ (1+(1-row_rir-sxew_fraction_rw)/row_sec_ref_fraction_of_recycled/row_rir)
+        if global_sec_ref_fraction_of_recycled!=0:
+            sec_frac_of_refined = 1/ (1+(1-global_rir-sxew_fraction)/global_sec_ref_fraction_of_recycled/global_rir)
+        else: sec_frac_of_refined=0
+        if china_sec_ref_fraction_of_recycled!=0:
+            sec_frac_of_refined_cn = 1/ (1+(1-china_rir-sxew_fraction_cn)/china_sec_ref_fraction_of_recycled/china_rir)
+        else: sec_frac_of_refined_cn=0
+        if row_sec_ref_fraction_of_recycled!=0:
+            sec_frac_of_refined_rw = 1/ (1+(1-row_rir-sxew_fraction_rw)/row_sec_ref_fraction_of_recycled/row_rir)
+        else: sec_frac_of_refined_rw=0
 
         global_ref_frac_production = global_sec_ref_fraction_of_recycled*global_rir + (1-global_rir) - sxew_fraction
         china_ref_frac_production = china_sec_ref_fraction_of_recycled*china_rir + (1-china_rir) - sxew_fraction_cn

@@ -33,12 +33,6 @@ class demandModel():
         self.sectors = list(self.intensities.columns.get_level_values(1).unique())
         
         self.init_hyperparams()
-        self.sector_specific_dematerialization_tech_growth = self.hyperparam['Value']['sector_specific_dematerialization_tech_growth']
-        self.sector_specific_price_response = self.hyperparam['Value']['sector_specific_price_response']
-        self.region_specific_price_response = self.hyperparam['Value']['region_specific_price_response']
-        self.intensity_response_to_gdp = self.hyperparam['Value']['intensity_response_to_gdp']
-        self.initial_demand = self.hyperparam['Value']['initial_demand']
-        self.volume_growth_rate = self.hyperparam['Value']['volume_growth_rate']
         self.row = [i for i in self.volumes.columns.levels[0] if i!='China']
         
     def init_hyperparams(self):
@@ -48,7 +42,7 @@ class demandModel():
         hyperparameters.loc['sector_specific_price_response',['Value','Notes']] = -0.06,'should be negative, sets elasticity mean parameter for sectors in intensity_param/intensity_parameters, can be float or series with indices from self.sectors'
         hyperparameters.loc['region_specific_price_response',['Value','Notes']] = -0.1,'should be negative, sets elasticity mean parameter for regions in intensity_param/intensity_parameters, can be float or series with indices from self.regions'
         hyperparameters.loc['intensity_response_to_gdp',['Value','Notes']] = 0.69,'float, should be positive, sets elasticity mean parameter for gdp in intensity_param/intensity_parameters'
-        hyperparameters.loc['initial_demand',['Value','Notes']] = 1,'float/int, demand in first year in kt'
+        hyperparameters.loc['initial_demand',['Value','Notes']] = 1000,'float/int, demand in first year in kt'
         hyperparameters.loc['volume_growth_rate',['Value','Notes']] = 0.02546855,'float, default 0.02546855, annual growth rate'
         hyperparameters.loc['recycling_input_rate_china',['Value','Notes']] = 0.1, 'float, fraction of demand in the initial year satisfied by recycled inputs; includes refined and direct melt'
         hyperparameters.loc['recycling_input_rate_row',['Value','Notes']] = 0.1, 'float, fraction of demand in the initial year satisfied by recycled inputs; includes refined and direct melt'
@@ -106,7 +100,7 @@ class demandModel():
     def update_volumes(self):
         imported_volumes = self.volumes.copy()
         new_volumes = imported_volumes.copy()
-        growth_rate = 1+self.volume_growth_rate
+        growth_rate = 1+self.hyperparam['Value']['volume_growth_rate']
         imported_growth_rates = imported_volumes/imported_volumes.shift(1)
         new_growth_rates = imported_growth_rates.apply(lambda x: x*growth_rate/x.loc[self.simulation_time[0]:].mean())
         
@@ -119,17 +113,17 @@ class demandModel():
         intensity_parameters = self.intensity_parameters.copy()
         sectors, regions = self.sectors, self.regions
         
-        if type(self.sector_specific_dematerialization_tech_growth) != pd.core.series.Series:
-            self.sector_specific_dematerialization_tech_growth = pd.Series(self.sector_specific_dematerialization_tech_growth,sectors)
-        if type(self.sector_specific_price_response) != pd.core.series.Series:
-            self.sector_specific_price_response = pd.Series(self.sector_specific_price_response,sectors)
-        if type(self.region_specific_price_response) != pd.core.series.Series:
-            self.region_specific_price_response = pd.Series(self.region_specific_price_response,regions)
+        if type(self.hyperparam['Value']['sector_specific_dematerialization_tech_growth']) != pd.core.series.Series:
+            self.sector_specific_dematerialization_tech_growth = pd.Series(self.hyperparam['Value']['sector_specific_dematerialization_tech_growth'],sectors)
+        if type(self.hyperparam['Value']['sector_specific_price_response']) != pd.core.series.Series:
+            self.sector_specific_price_response = pd.Series(self.hyperparam['Value']['sector_specific_price_response'],sectors)
+        if type(self.hyperparam['Value']['region_specific_price_response']) != pd.core.series.Series:
+            self.region_specific_price_response = pd.Series(self.hyperparam['Value']['region_specific_price_response'],regions)
             
-        intensity_parameters.loc[sectors,'Intercept mean'] = self.sector_specific_dematerialization_tech_growth
-        intensity_parameters.loc[sectors,'Elasticity mean'] = self.sector_specific_price_response
-        intensity_parameters.loc[regions,'Elasticity mean'] = self.region_specific_price_response
-        intensity_parameters.loc['GDP','Elasticity mean'] = self.intensity_response_to_gdp
+        intensity_parameters.loc[sectors,'Intercept mean'] = self.hyperparam['Value']['sector_specific_dematerialization_tech_growth']
+        intensity_parameters.loc[sectors,'Elasticity mean'] = self.hyperparam['Value']['sector_specific_price_response']
+        intensity_parameters.loc[regions,'Elasticity mean'] = self.hyperparam['Value']['region_specific_price_response']
+        intensity_parameters.loc['GDP','Elasticity mean'] = self.hyperparam['Value']['intensity_response_to_gdp']
         intensity_param = pd.DataFrame(np.nan,self.intensity_parameters_al.index,self.volumes.columns)
         for r in regions:
             for s in sectors:
@@ -207,7 +201,7 @@ class demandModel():
             for s in sector_dist.columns:
                 new_demand.loc[:,idx[r,s]] = new_demand.loc[:,idx[r,:]].sum(axis=1)*sector_dist[s]
         new_demand = new_demand.apply(lambda x: x*total_demand_series)
-        new_demand *= self.initial_demand/new_demand.loc[initial_year].sum()
+        new_demand *= self.hyperparam['Value']['initial_demand']/new_demand.loc[initial_year].sum()
         self.new_demand = new_demand.copy()
         new_intensities = new_demand/volumes
 
@@ -298,7 +292,7 @@ class demandModel():
 
             target_collected = recycling_input_rate*init_demand - init_new_scrap
             flag = 0
-            if (target_collected<0).any().any(): 
+            if (target_collected<01e-10).any().any(): 
                 flag = 1
                 prev_new_scrap_fraction = self.hyperparam['Value'].copy()['new_scrap_fraction']
                 ('new scrap rate is too high or recycling input rate is too low, getting a negative number for old scrap collection target.')

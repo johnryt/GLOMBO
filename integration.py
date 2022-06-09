@@ -94,7 +94,7 @@ class Integration():
         hyperparameters.loc['start_calibrate_years','Value'] = 10
         hyperparameters.loc['ramp_up_cu','Value'] = 0.7
         hyperparameters.loc['ml_accelerate_initialize_years','Value'] = max(hyperparameters['Value'][['ml_accelerate_initialize_years','end_calibrate_years']])
-        
+        hyperparameters.loc['mine_cu_margin_elas','Value'] = 0.8
         
         self.hyperparam = hyperparameters.copy()
         self.h = hyperparameters.copy()['Value']

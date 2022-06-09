@@ -223,6 +223,7 @@ class Sensitivity():
         self.initialize_big_df()
         mod = Integration(simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct)
         params_to_change = [i for i in mod.hyperparam.dropna().index if 'elas' in i]
+        
         for n in np.arange(0,n_scenarios):
             if self.verbosity>-1: 
                 print(f'Scenario {n+1}/{n_scenarios}')
@@ -230,7 +231,7 @@ class Sensitivity():
             
             ###### CHANGING BASE PARAMETERS ######
             changing_base_parameters_series = self.changing_base_parameters_series.copy()
-            for base in np.intersect1d(mod.hyperparam.index, changing_base_parameters_series.index):
+            for base in changing_base_parameters_series.index:
                 mod.hyperparam.loc[base,'Value'] = changing_base_parameters_series[base]
                 if n==0 and self.verbosity>0:
                     print(base,changing_base_parameters_series[base])
@@ -240,7 +241,8 @@ class Sensitivity():
             rs = 220530+n
             values = stats.uniform.rvs(loc=0,scale=1,size=len(params_to_change),random_state=rs)
             new_param_series = pd.Series(values, params_to_change)
-            mod.hyperparam.loc[params_to_change,'Value'] = new_param_series*np.sign(mod.hyperparam.loc[params_to_change,'Value'])
+            for param in params_to_change:
+                mod.hyperparam.loc[param,'Value'] = new_param_series[param]*np.sign(mod.hyperparam.loc[param,'Value'])
             self.check_run_append(mod)
     
     def run_monte_carlo_across_base(self, n_scenarios):

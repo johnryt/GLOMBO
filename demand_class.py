@@ -29,11 +29,21 @@ class demandModel():
         self.load_demand_data()
         self.all_time = np.sort(np.union1d(self.volumes.index,self.simulation_time))
         self.commodity_price_series = pd.Series(5000,self.all_time)
+        if simulation_time[0]-1 not in self.commodity_price_series.index:
+            self.commodity_price_series.loc[simulation_time[0]-1] = self.commodity_price_series.loc[simulation_time[0]]
+            self.commodity_price_series = self.commodity_price_series.sort_index()
         self.regions = list(self.intensities.columns.get_level_values(0).unique())
         self.sectors = list(self.intensities.columns.get_level_values(1).unique())
         
         self.init_hyperparams()
         self.row = [i for i in self.volumes.columns.levels[0] if i!='China']
+        
+        self.collection_rate_price_response = True
+        self.scrap_spread = pd.DataFrame(0.1,np.arange(simulation_time[0]-1,simulation_time[-1]+1),['Global','China','RoW'])
+        self.scenario_type = ''
+        self.collection_rate_duration = 0
+        self.collection_rate_pct_change_tot = 1
+        self.collection_rate_pct_change_inc = 1
         
     def init_hyperparams(self):
         hyperparameters = pd.DataFrame()
@@ -44,8 +54,8 @@ class demandModel():
         hyperparameters.loc['intensity_response_to_gdp',['Value','Notes']] = 0.69,'float, should be positive, sets elasticity mean parameter for gdp in intensity_param/intensity_parameters'
         hyperparameters.loc['initial_demand',['Value','Notes']] = 1000,'float/int, demand in first year in kt'
         hyperparameters.loc['volume_growth_rate',['Value','Notes']] = 0.02546855,'float, default 0.02546855, annual growth rate'
-        hyperparameters.loc['recycling_input_rate_china',['Value','Notes']] = 0.1, 'float, fraction of demand in the initial year satisfied by recycled inputs; includes refined and direct melt'
-        hyperparameters.loc['recycling_input_rate_row',['Value','Notes']] = 0.1, 'float, fraction of demand in the initial year satisfied by recycled inputs; includes refined and direct melt'
+        hyperparameters.loc['recycling_input_rate_china',['Value','Notes']] = 0.3, 'float, fraction of demand in the initial year satisfied by recycled inputs; includes refined and direct melt'
+        hyperparameters.loc['recycling_input_rate_row',['Value','Notes']] = 0.3, 'float, fraction of demand in the initial year satisfied by recycled inputs; includes refined and direct melt'
         hyperparameters.loc['maximum_collection_rate',['Value','Notes']] = 0.95, 'float, maximum allowable collection rate for any one sector/region. For simplicity, collection rate refers to both collection rate and sorting efficiency here for simplicity'
         hyperparameters.loc['historical_growth_rate',['Value','Notes']] = 0.03, 'growth rate used for demand pre-simulation start date, set to -1 to use a scaled version of copper growth, which was ~3%'
         hyperparameters.loc['china_fraction_demand',['Value','Notes']] = 0.7, 'China fraction of demand, was 0.52645 for copper in 2019'
@@ -83,6 +93,8 @@ class demandModel():
         hyperparameters.loc['collection_rate_target_other',['Value','Notes']] = 0.2, 'anticipated collection rate, will be modified so numbers actually align with recycling input rates given'
         hyperparameters.loc['collection_rate_target_transport',['Value','Notes']] = 0.6, 'anticipated collection rate, will be modified so numbers actually align with recycling input rates given'
         
+        hyperparameters.loc['Use regions',:] = False,'whether to use regions in collection rate response to scrap price or to use the global value'
+        hyperparameters.loc['collection_elas_scrap_price',:] = 0.1,'Collection rate elasticity to scrap price'
         self.hyperparam = hyperparameters.copy()
         
     def load_demand_data(self):
@@ -276,11 +288,15 @@ class demandModel():
         cr = []
         regions = self.demand.columns.get_level_values(0).unique()
         for region in regions:
-            recycling_input_rate = h['recycling_input_rate_'+region.lower()] / self.hyperparam['Value']['scrap_to_cathode_eff']
+            recycling_input_rate = pd.DataFrame(np.nan,regions,self.init_demand.columns)
+            for reg in regions:
+                recycling_input_rate.loc[reg] = h['recycling_input_rate_'+reg.lower()] / self.hyperparam['Value']['scrap_to_cathode_eff']
             max_recycling_input_rate = (initial_eol.sum().sum()+init_new_scrap.sum().sum())/init_demand.sum().sum()*h['maximum_collection_rate']
-            if recycling_input_rate > max_recycling_input_rate:
-                print(region,'recycling input rate exceeds maximum given the existing sector lifetimes.\nRecycling input rate set to maximum ({:.1f}% collection) value: {:0.3f}'.format(100*h['maximum_collection_rate'],max_recycling_input_rate))
-                recycling_input_rate = max_recycling_input_rate
+            if recycling_input_rate.max().max() > max_recycling_input_rate:
+                if region==regions[0]:
+                    for reg in recycling_input_rate.idxmax().unique():
+                        print(reg,'recycling input rate exceeds maximum given the existing sector lifetimes.\nRecycling input rate set to maximum ({:.1f}% collection) value: {:0.3f}'.format(100*h['maximum_collection_rate'],max_recycling_input_rate.ax().max()))
+                recycling_input_rate[recycling_input_rate>max_recycling_input_rate] = max_recycling_input_rate
                 self.hyperparam.loc['recycling_input_rate_'+region.lower(),'Value']=max_recycling_input_rate * self.hyperparam['Value']['scrap_to_cathode_eff']
                 collection_rate.loc[:] = h['maximum_collection_rate']
             else:
@@ -292,7 +308,7 @@ class demandModel():
 
             target_collected = recycling_input_rate*init_demand - init_new_scrap
             flag = 0
-            if (target_collected<01e-10).any().any(): 
+            if (target_collected<1e-10).any().any(): 
                 flag = 1
                 prev_new_scrap_fraction = self.hyperparam['Value'].copy()['new_scrap_fraction']
                 ('new scrap rate is too high or recycling input rate is too low, getting a negative number for old scrap collection target.')
@@ -306,12 +322,12 @@ class demandModel():
         
             self.target_collected = target_collected
 
-            self.collection_rate = collection_rate.copy()
-            self.collection_rate = self.update_collection_rate(region)
-            while (self.collection_rate>h['maximum_collection_rate']+1e-10).any().any():
-                self.collection_rate[self.collection_rate>h['maximum_collection_rate']+1e-10] *= 0.99
-                self.collection_rate = self.update_collection_rate(region)
-            cr += [self.collection_rate]
+            self.cr = collection_rate.copy()
+            self.cr = self.update_collection_rate(region)
+            while (self.cr>h['maximum_collection_rate']+1e-10).any().any():
+                self.cr[self.cr>h['maximum_collection_rate']+1e-10] *= 0.99
+                self.cr = self.update_collection_rate(region)
+            cr += [self.cr]
         self.collection_rate = pd.concat(cr,keys=regions,axis=1).T
             
         self.old_scrap_collected = pd.concat([self.collection_rate * initial_eol],keys=[simulation_time[0]])
@@ -319,6 +335,27 @@ class demandModel():
         self.scrap_collected = self.new_scrap_collected.stack(0).loc[idx[self.simulation_time[0],:],:]+self.old_scrap_collected
         self.collection_rate = pd.concat([self.collection_rate for i in simulation_time],keys=simulation_time)
     
+    def initialize_collection_scenario(self):
+        self.additional_scrap = self.demand.copy().stack(0)
+        self.additional_scrap.loc[:] = 0
+        multiplier_array = np.append(
+            np.linspace(1,self.collection_rate_pct_change_tot,self.collection_rate_duration+1),
+            [self.collection_rate_pct_change_tot*self.collection_rate_pct_change_inc**j for j in np.arange(0,len(self.simulation_time)-self.collection_rate_duration-1)])
+        if self.scenario_type in ['scrap supply','both'] and self.collection_rate_duration>0:
+            if self.collection_rate_price_response==False:
+                for yr,mul in zip(self.simulation_time,multiplier_array):
+                    self.collection_rate.loc[idx[yr,:],:]*=mul
+            else:
+                multiplier_array-=1
+                start = self.simulation_time[0]
+                ph = self.eol.stack().unstack(1).unstack()
+                demand_adj = self.demand.apply(lambda x: x.sum()*ph.loc[start]/ph.loc[start].sum(),axis=1)
+        #         demand_adj = self.eol.stack().unstack(1).unstack() * self.demand.loc[start,:].sum().sum() / self.eol.loc[start].sum().sum()
+                self.additional_scrap = demand_adj.loc[self.simulation_time[0]:].apply(lambda x: demand_adj.loc[self.simulation_time[0]]*multiplier_array[x.name-self.simulation_time[0]],axis=1)
+                self.additional_scrap.loc[self.simulation_time[0]-1,:] = 0
+                self.additional_scrap = self.additional_scrap.sort_index()
+                self.additional_scrap = self.additional_scrap.stack(0)
+        
     def initialize_fabrication_efficiency(self):
         h = self.hyperparam['Value'].copy()
         simulation_time = self.simulation_time
@@ -334,21 +371,58 @@ class demandModel():
         self.new_scrap_fraction = (1-self.fabrication_efficiency)*self.hyperparam['Value']['new_scrap_fraction']
         
     def update_collection_rate(self,region):
-        w1 = self.target_collected.sum().sum()/(self.collection_rate/self.collection_rate['Construction']*self.initial_eol.sum()).sum()
-        new_collect_rate = w1*self.collection_rate/self.collection_rate['Construction']
+        w1 = self.target_collected.sum().sum()/(self.cr/self.cr['Construction']*self.initial_eol.sum()).sum()
+        new_collect_rate = w1*self.cr/self.cr['Construction']
         return new_collect_rate
     
     def scrap_generation_collection(self):
+        i = self.i
+        h = self.hyperparam['Value']
         self.demand_no_new = self.demand*(1-self.new_scrap_fraction)
         eol = reaching_end_of_life(self.i,self.demand_no_new,self.lifetimes).sum().unstack()
+
+        old_scrap_collected = self.collection_rate.loc[i] * eol
+        old_scrap_collected = pd.concat([old_scrap_collected],keys=[i])
         
-        
-        old_scrap_collected = self.collection_rate.loc[self.i] * eol
-        old_scrap_collected = pd.concat([old_scrap_collected],keys=[self.i])
-        
-        eol = pd.concat([eol],keys=[self.i])
+        eol = pd.concat([eol],keys=[i])
         self.eol = pd.concat([self.eol,eol])
         self.old_scrap_collected = pd.concat([self.old_scrap_collected,old_scrap_collected])
+        
+        if self.collection_rate_price_response and i>self.simulation_time[0]:
+            if not hasattr(self,'additional_scrap'):
+                print('WARNING: additional_scrap variable did not exist and is now being initialized and set to zero')
+                self.additional_scrap = pd.DataFrame(2, 
+                                                    pd.MultiIndex.from_product([self.simulation_time,['China','RoW']]),
+                                                    self.eol.columns)
+            temp_old_scrap = self.old_scrap_collected.copy()
+            temp_old_scrap.loc[idx[:i-1,:],:] -= self.additional_scrap.loc[idx[:i-1,:],:]
+            temp_collection_rate = temp_old_scrap/self.eol
+            self.old_scrap_collected.loc[idx[i-1,:],:] -= self.additional_scrap.loc[idx[i-1,:],:]
+            
+            scrap_price_l1 = self.commodity_price_series[i-1]-self.scrap_spread.loc[i-1]
+            scrap_price_l2 = self.commodity_price_series[i-2]-self.scrap_spread.loc[i-2]
+            scrap_price_l1[scrap_price_l1<0] = 1e-6
+            scrap_price_l2[scrap_price_l2<0] = 1e-6
+            if not hasattr(self,'scrap_price_l1'):
+                self.scrap_price_l1 = pd.Series(np.nan,self.simulation_time)
+                self.scrap_price_l2 = pd.Series(np.nan,self.simulation_time)
+            self.scrap_price_l1.loc[i] = scrap_price_l1['Global']
+            self.scrap_price_l2.loc[i] = scrap_price_l2['Global']
+            if h['Use regions']:
+                temp_collection_rate.loc[idx[i,'China'],:] = temp_collection_rate.loc[idx[i-1,'China'],:].rename({i-1:i})*(scrap_price_l1['China']/scrap_price_l2['China'])**h['collection_elas_scrap_price']
+                temp_collection_rate.loc[idx[i,'RoW'],:]   = temp_collection_rate.loc[idx[i-1,'RoW'],:].rename({i-1:i})*(scrap_price_l1['RoW']/scrap_price_l2['RoW'])**h['collection_elas_scrap_price']
+            else:
+                multiple = (scrap_price_l1['Global']/scrap_price_l2['Global'])**h['collection_elas_scrap_price']
+                temp_collection_rate.loc[idx[i,:],:] = temp_collection_rate.loc[idx[i-1,:],:].rename({i-1:i})*multiple
+            max_cr = h['maximum_collection_rate']
+            temp_collection_rate[temp_collection_rate>max_cr] = max_cr
+            self.temp_collection_rate = temp_collection_rate.copy()
+            self.old_scrap_collected.loc[idx[i,:],:] = self.eol.loc[idx[i,:],:]*temp_collection_rate.loc[idx[i,:],:].rename({i-1:i})
+            self.old_scrap_collected.loc[idx[i-1:i,:],:] += self.additional_scrap.loc[idx[i-1:i,:],:]
+            self.collection_rate.loc[idx[:i,:],:] = self.old_scrap_collected.loc[idx[:i,:],:]/self.eol.loc[idx[:i,:],:]         
+            if (self.collection_rate.loc[i]>max_cr).any().any():
+                print('WARNING {}: {}/10 sector-region collection rates (max. {:.3f}) exceed maximum allowable ({:.3f})'.format(i,(self.collection_rate.loc[i]>max_cr).sum().sum(),self.collection_rate.loc[i].max().max(), max_cr))
+        
         self.new_scrap_collected = self.demand*self.new_scrap_fraction
         self.new_scrap_collected = self.new_scrap_collected.loc[self.old_scrap_collected.index.get_level_values(0).unique()].stack(0)
         self.scrap_collected = self.new_scrap_collected+self.old_scrap_collected
@@ -367,9 +441,9 @@ class demandModel():
             self.initialize_fabrication_efficiency()
             self.initialize_new_scrap_fraction()
             self.initialize_collection()
+            self.initialize_collection_scenario()
         else:
             self.run_intensity_prediction()
             self.scrap_generation_collection()
         self.scrap_supply = self.scrap_collected.unstack().groupby(level=1,axis=1).sum()
         self.scrap_supply.loc[:,'Global'] = self.scrap_supply['China']+self.scrap_supply['RoW']
-        

@@ -26,6 +26,9 @@ def create_result_df(integ):
               'Old mine cost','New mine cost',
               'Old mine margin','New mine margin',
               'Reserves','Reserves ratio with production'],axis=1).fillna(0)
+    
+    addl_scrap = integ.additional_scrap.sum(axis=1).unstack()
+    addl_scrap.loc[:,'Global'] = addl_scrap.sum(axis=1)
     for reg in reg_results.index:
         results = pd.concat([integ.total_demand.loc[2018:,reg],integ.scrap_demand.loc[2018:,reg],integ.scrap_supply[reg],
                integ.concentrate_demand[reg],integ.concentrate_supply,
@@ -43,6 +46,7 @@ def create_result_df(integ):
                integ.refine.ref_stats[reg]['Secondary ratio'],
                integ.refine.ref_stats[reg]['Primary capacity'], integ.refine.ref_stats[reg]['Secondary capacity'],
                integ.refine.ref_stats[reg]['Primary production'], integ.refine.ref_stats[reg]['Secondary production'],
+               integ.additional_direct_melt[reg],addl_scrap[reg]
               ],axis=1,
               keys=['Total demand','Scrap demand','Scrap supply',
                     'Conc. demand','Conc. supply',
@@ -56,7 +60,8 @@ def create_result_df(integ):
                     'Spread','TCRC','Refined price',
                     'Refinery pri. CU','Refinery sec. CU','Refinery SR',
                     'Pri. ref. capacity','Sec. ref. capacity',
-                    'Pri. ref. prod.','Sec. ref. prod.'])
+                    'Pri. ref. prod.','Sec. ref. prod.',
+                    'Additional direct melt','Additional scrap'])
         if reg=='Global':
             collection = integ.demand.old_scrap_collected.groupby(level=0).sum()/integ.demand.eol.groupby(level=0).sum()
             old_scrap = integ.demand.old_scrap_collected.groupby(level=0).sum().sum(axis=1)
@@ -117,9 +122,31 @@ class Sensitivity():
                  simulation_time = np.arange(2019,2041),
                  byproduct=False,
                  verbosity=0,
-                 param_scale=0.5):
+                 param_scale=0.5,
+                 scenarios=[''],
+                 OVERWRITE=False):
         '''
+        scenario_name takes the form 00_11_22_33_44
+        where:
+        00: ss, sd, bo (scrap supply, scrap demand, both)
+        11: pr or no (price response included or no)
+        22: Xyr, where X is any integer and represents
+         the number of years the increase occurs
+        33: X%tot, where X is any float/int and is the
+         increase/decrease in scrap supply or demand
+         relative to the initial year total demand
+        44: X%inc, where X is any float/int and is the
+         increase/decrease in the %tot value per year
         
+        e.g. ss_pr_1yr_1%tot_0%inc
+        
+        for 22-44, an additional X should be placed at
+         the end when 00==both, describing the sd values
+         e.g. ss_pr_1yr1_1%tot1_0%inc0
+         
+        Can also have 11 as nono, prno, nopr, or prpr to
+         control the ss and sd price response individually
+         (in that order)
         '''
         self.simulation_time = simulation_time
         self.byproduct = byproduct
@@ -130,14 +157,18 @@ class Sensitivity():
         self.params_to_change = params_to_change
         self.n_per_param = n_per_param
         self.notes = notes
+        self.scenarios = scenarios
+        self.overwrite = OVERWRITE
+        if overwrite: print('WARNING, YOU ARE OVERWRITING AN EXISTING FILE')
         
     def initialize_big_df(self):
-        if os.path.exists(self.pkl_filename):
+        if os.path.exists(self.pkl_filename) and not self.overwrite:
             big_df = pd.read_pickle(self.pkl_filename)
         else:
-            mod = Integration(simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct)
-            for base in np.intersect1d(mod.hyperparam.index, self.changing_base_parameters_series.index):
+            mod = Integration(simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct,scenario_name='')
+            for base in self.changing_base_parameters_series.index:
                 mod.hyperparam.loc[base,'Value'] = self.changing_base_parameters_series[base]
+            self.mod = mod
             mod.run()
             big_df = pd.DataFrame(np.nan,index=[
                 'version','notes','hyperparam','mining.hyperparam','refine.hyperparam','demand.hyperparam','results'
@@ -165,7 +196,7 @@ class Sensitivity():
     def get_params_to_change(self):
         if type(self.params_to_change)==int:
             mod = Integration(simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct)
-            for base in np.intersect1d(mod.hyperparam.index, self.changing_base_parameters_series.index):
+            for base in self.changing_base_parameters_series.index:
                 mod.hyperparam.loc[base,'Value'] = self.changing_base_parameters_series[base]
             self.params_to_change = pd.concat([
                 mod.hyperparam.loc['price elasticities':'determining model structure'].dropna(),
@@ -222,28 +253,43 @@ class Sensitivity():
         self.update_changing_base_parameters_series()
         self.initialize_big_df()
         mod = Integration(simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct)
-        params_to_change = [i for i in mod.hyperparam.dropna().index if 'elas' in i]
+        scenario_params_dont_change = ['collection_rate_price_response','direct_melt_price_response']
+        params_to_change = [i for i in mod.hyperparam.dropna(how='all').index if ('elas' in i or 'response' in i or 'growth' in i or 'improvements' in i) and i not in scenario_params_dont_change]
         
         for n in np.arange(0,n_scenarios):
             if self.verbosity>-1: 
                 print(f'Scenario {n+1}/{n_scenarios}')
-            mod = Integration(simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct)
-            
-            ###### CHANGING BASE PARAMETERS ######
-            changing_base_parameters_series = self.changing_base_parameters_series.copy()
-            for base in changing_base_parameters_series.index:
-                mod.hyperparam.loc[base,'Value'] = changing_base_parameters_series[base]
-                if n==0 and self.verbosity>0:
-                    print(base,changing_base_parameters_series[base])
-            self.hyperparam_copy = mod.hyperparam.copy()
-            
-            ###### UPDATING MONTE CARLO PARAMETERS ######
-            rs = 220530+n
-            values = stats.uniform.rvs(loc=0,scale=1,size=len(params_to_change),random_state=rs)
-            new_param_series = pd.Series(values, params_to_change)
-            for param in params_to_change:
-                mod.hyperparam.loc[param,'Value'] = new_param_series[param]*np.sign(mod.hyperparam.loc[param,'Value'])
-            self.check_run_append(mod)
+            for enum,scenario_name in enumerate(self.scenarios):
+                if self.verbosity>-1:
+                    print(f'\tSub-scenario {enum+1}/{len(self.scenarios)}: {scenario_name} checking if exists...')
+                mod = Integration(simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct,scenario_name=scenario_name)
+                self.mod = mod
+                self.notes = scenario_name
+                
+                ###### CHANGING BASE PARAMETERS ######
+                changing_base_parameters_series = self.changing_base_parameters_series.copy()
+                for base in changing_base_parameters_series.index:
+                    mod.hyperparam.loc[base,'Value'] = changing_base_parameters_series[base]
+                    if n==0 and self.verbosity>0:
+                        print(base,changing_base_parameters_series[base])
+                self.hyperparam_copy = mod.hyperparam.copy()
+
+                ###### UPDATING MONTE CARLO PARAMETERS ######
+                rs = 220530+n
+                values = stats.uniform.rvs(loc=0,scale=1,size=len(params_to_change),random_state=rs)
+                new_param_series = pd.Series(values, params_to_change)
+                if self.verbosity>0:
+                    print(params_to_change)
+                new_param_series.loc['sector_specific_dematerialization_tech_growth'] *= 0.15
+                new_param_series.loc['sector_specific_price_response'] *= 0.15
+                new_param_series.loc['region_specific_price_response'] *= 0.15
+                # ^ these values should be small, since small changes make big changes
+                for param in params_to_change:
+                    if type(mod.hyperparam['Value'][param])!=bool:
+                        mod.hyperparam.loc[param,'Value'] = new_param_series[param]*np.sign(mod.hyperparam.loc[param,'Value'])
+                    else:
+                        mod.hyperparam.loc[param,'Value'] = new_param_series[param]
+                self.check_run_append(mod)
     
     def run_monte_carlo_across_base(self, n_scenarios):
         self.update_changing_base_parameters_series()
@@ -267,6 +313,7 @@ class Sensitivity():
             rs = 220530+n
             values = stats.uniform.rvs(loc=0,scale=1,size=len(params_to_change),random_state=rs)
             new_param_series = pd.Series(values, params_to_change)
+            new_param_series
             mod.hyperparam.loc[params_to_change,'Value'] = new_param_series*np.sign(mod.hyperparam.loc[params_to_change,'Value'])
             self.check_run_append(mod)
     
@@ -280,6 +327,7 @@ class Sensitivity():
         if check_equivalence(big_df, potential_append)[0]:
             if self.verbosity>-1:
                 print('\tScenario does not already exist, running...')
+            self.mod = mod
             mod.run()
 
             if hasattr(self,'val'):
@@ -302,8 +350,12 @@ class Sensitivity():
             big_df = pd.concat([big_df,potential_append],axis=1)
             big_df.to_pickle(self.pkl_filename)
             if self.verbosity>-1:
-                print('\tScenario successfully saved')
+                print('\tScenario successfully saved\n')
             self.mod = mod
         else:
             if self.verbosity>-1:
-                print('\tScenario already exists')
+                print('\tScenario already exists\n')
+            
+#         direct_melt_elas_scrap_spread
+#         collection_elas_scrap_price
+        

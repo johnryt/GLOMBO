@@ -5,15 +5,37 @@ import numpy as np
 
 class Integration():
     '''
-    
+    scenario_name takes the form 00_11_22_33_44
+        where:
+        00: ss, sd, bo (scrap supply, scrap demand, both)
+        11: pr or no (price response included or no)
+        22: Xyr, where X is any integer and represents
+         the number of years the increase occurs
+        33: X%tot, where X is any float/int and is the
+         increase/decrease in scrap supply or demand
+         relative to the initial year total demand
+        44: X%inc, where X is any float/int and is the
+         increase/decrease in the %tot value per year
+        
+        e.g. ss_pr_1yr_1%tot_0%inc
+        
+        for 22-44, an additional X should be placed at
+         the end when 00==both, describing the sd values
+         e.g. ss_pr_1yr1_1%tot1_0%inc0
+         
+        Can also have 11 as nono, prno, nopr, or prpr to
+         control the ss and sd price response individually
+         (in that order)
+        
     '''
-    def __init__(self,simulation_time=np.arange(2019,2041),verbosity=0,byproduct=False,input_hyperparam=0):
+    def __init__(self,simulation_time=np.arange(2019,2041),verbosity=0,byproduct=False,input_hyperparam=0, scenario_name=''):
         self.version = '2022-05-30 09:12:42' # str(datetime.now())[:19]
         self.i = simulation_time[0]
         self.simulation_time = simulation_time
         self.verbosity = verbosity
         self.byproduct = byproduct
         self.input_hyperparam = input_hyperparam
+        self.scenario_name = scenario_name
         
         self.demand = demandModel(simulation_time=simulation_time, verbosity=verbosity)
         self.refine = refiningModel(simulation_time=simulation_time, verbosity=verbosity)
@@ -34,6 +56,8 @@ class Integration():
         self.scrap_spread = self.concentrate_demand.copy()
         self.primary_commodity_price = self.concentrate_supply.copy()
         self.tcrc = self.concentrate_supply.copy()
+        
+        self.decode_scrap_scenario_name()
     
     def initialize_hyperparam(self):
         hyperparameters = pd.DataFrame(np.nan,index=[],columns=['Value','Notes'])
@@ -95,6 +119,15 @@ class Integration():
         hyperparameters.loc['ramp_up_cu','Value'] = 0.7
         hyperparameters.loc['ml_accelerate_initialize_years','Value'] = max(hyperparameters['Value'][['ml_accelerate_initialize_years','end_calibrate_years']])
         hyperparameters.loc['mine_cu_margin_elas','Value'] = 0.8
+        hyperparameters.loc['mine_cost_tech_improvements','Value'] = 0.05
+        hyperparameters.loc['resources_contained_elas_primary_price','Value'] = 0.5
+        
+        # demand
+        hyperparameters.loc['demand only',:] = np.nan
+        hyperparameters.loc['sector_specific_dematerialization_tech_growth','Value'] = -0.03
+        hyperparameters.loc['sector_specific_price_response','Value'] = -0.06
+        hyperparameters.loc['region_specific_price_response','Value'] = -0.1
+        hyperparameters.loc['intensity_response_to_gdp','Value'] = 0.69
         
         self.hyperparam = hyperparameters.copy()
         self.h = hyperparameters.copy()['Value']
@@ -114,6 +147,12 @@ class Integration():
         
     def hyperparam_agreement(self):
         dem = self.demand
+        dem.collection_rate_price_response = self.collection_rate_price_response
+        dem.scenario_type = self.scenario_type
+        dem.collection_rate_duration = self.collection_rate_duration
+        dem.collection_rate_pct_change_tot = self.collection_rate_pct_change_tot
+        dem.collection_rate_pct_change_inc = self.collection_rate_pct_change_inc
+        
         ref = self.refine
         h = self.h
         
@@ -150,11 +189,19 @@ class Integration():
             ref.ref_hyper_param.loc[param,:] = h[param]
             if self.verbosity>1:
                 print('   rhp',param)
+                
+        for param in np.intersect1d(dem.hyperparam.index, h.index):
+            dem.hyperparam.loc[param,'Value'] = h[param]
+            if self.verbosity>1:
+                print('   demand',param)
             
         self.demand = dem
         self.refine = ref
     
     def initialize_integration(self):
+        '''
+        Sets up the integration, also sets up the scenario corresponding with scenario_name
+        '''
         i = self.i
         self.conc_to_cathode_eff = self.refine.ref_param['Global']['conc to cathode eff']
         self.scrap_to_cathode_eff = self.refine.ref_param['Global']['scrap to cathode eff']
@@ -162,7 +209,10 @@ class Integration():
         # initializing demand
         self.hyperparam_agreement()
         self.demand.run()
+        
+        # initializing collection_rate (scenario modification is done in the demand class)
         self.collection_rate = self.demand.collection_rate.copy()
+        self.additional_scrap = self.demand.additional_scrap.copy()
         
         # initializing refining
         self.refine.run()
@@ -176,10 +226,28 @@ class Integration():
 
         # refined_demand, direct_melt_demand
         self.direct_melt_demand = self.total_demand.apply(lambda x: x*self.refine.hyperparam.loc['Direct melt fraction of production'],axis=1)
-        self.direct_melt_demand.loc[i+1:] = np.nan
+        self.direct_melt_fraction = self.direct_melt_demand/self.total_demand
+        self.direct_melt_fraction = self.direct_melt_fraction.apply(lambda x: self.direct_melt_fraction.loc[i],axis=1)
+#         self.direct_melt_demand.loc[i+1:] = np.nan
         self.refined_demand = self.total_demand - self.direct_melt_demand
         self.direct_melt_demand = self.direct_melt_demand.apply(lambda x: x/self.scrap_to_cathode_eff,axis=1)
-        
+        self.additional_direct_melt = self.direct_melt_demand.copy()
+        self.additional_direct_melt.loc[:] = 0
+        if self.scenario_type in ['scrap demand','both']:
+            multiplier_array = np.append(
+                np.linspace(1,self.direct_melt_pct_change_tot,self.direct_melt_duration+1),
+                [self.direct_melt_pct_change_tot*self.direct_melt_pct_change_inc**j for j in np.arange(0,len(self.simulation_time)-self.direct_melt_duration-1)])
+            if self.direct_melt_price_response==False:
+                for yr,mul in zip(self.simulation_time,multiplier_array):
+                    self.direct_melt_fraction.loc[yr,:]*=mul
+            else:
+                multiplier_array -= 1
+                self.additional_direct_melt = self.demand.demand.loc[self.simulation_time[0]:].apply(lambda x: self.demand.demand.loc[self.simulation_time[0]]*multiplier_array[x.name-self.simulation_time[0]],axis=1)
+                self.additional_direct_melt = self.additional_direct_melt.groupby(level=0,axis=1).sum()
+                self.additional_direct_melt.loc[:,'Global'] = self.additional_direct_melt.sum(axis=1)
+                self.additional_direct_melt.loc[self.simulation_time[0]-1,:] = 0
+                self.additional_direct_melt = self.additional_direct_melt.sort_index()
+
         # concentrate_demand, secondary_refined_demand, refined_supply
         self.concentrate_demand = self.refine.ref_stats.loc[:,idx[:,'Primary production']].droplevel(1,axis=1)
         self.concentrate_demand.loc[i+1:] = np.nan
@@ -248,22 +316,10 @@ class Integration():
             self.primary_commodity_price.loc[self.i-2] = self.primary_commodity_price[self.i-1]
         if self.i-2 not in self.scrap_spread.index:
             self.scrap_spread.loc[i-2] = self.scrap_spread.loc[i-1]
-        self.demand.commodity_price_series = self.primary_commodity_price.copy()
-        
-#                 hyperparameters.loc['collection_elas_scrap_price',:] = 0.6,'% increase in collection corresponding with a 1% increase in scrap price'
-        scrap_price_l1 = self.primary_commodity_price[i-1]-self.scrap_spread.loc[i-1]
-        scrap_price_l2 = self.primary_commodity_price[i-2]-self.scrap_spread.loc[i-2]
-        scrap_price_l1[scrap_price_l1<0] = 1e-6
-        scrap_price_l2[scrap_price_l2<0] = 1e-6
-        if h['Use regions']:
-            self.collection_rate.loc[idx[i,'China'],:] = self.collection_rate.loc[idx[i-1,'China'],:].rename({i-1:i})*(scrap_price_l1['China']/scrap_price_l2['China'])**h['collection_elas_scrap_price']
-            self.collection_rate.loc[idx[i,'RoW'],:]   = self.collection_rate.loc[idx[i-1,'RoW'],:].rename({i-1:i})*(scrap_price_l1['RoW']/scrap_price_l2['RoW'])**h['collection_elas_scrap_price']
-        else:
-            self.collection_rate.loc[idx[i,:],:] = self.collection_rate.loc[idx[i-1,:],:].rename({i-1:i})*(scrap_price_l1['Global']/scrap_price_l2['Global'])**h['collection_elas_scrap_price']
-        max_cr = self.demand.hyperparam['Value']['maximum_collection_rate']
-        self.collection_rate[self.collection_rate>max_cr] = max_cr
+        self.demand.commodity_price_series = self.primary_commodity_price.copy()        
         self.demand.collection_rate = self.collection_rate.copy()
         self.demand.run()
+        self.additional_scrap = self.demand.additional_scrap.copy()
         
     def run_refine(self):
         self.refine.i = self.i
@@ -344,20 +400,29 @@ class Integration():
                 
     def calculate_direct_melt_demand(self):
         i = self.i
-        self.direct_melt_fraction.loc[i-1] = self.direct_melt_demand.loc[i-1]/self.total_demand.loc[i-1]
-        if False:
+#         self.direct_melt_fraction.loc[i-1] = self.direct_melt_demand.loc[i-1]/self.total_demand.loc[i-1]
+        if False and self.direct_melt_price_response:
             self.direct_melt_demand.loc[i] = self.direct_melt_demand.loc[i-1]*self.scrap_supply.loc[i]/self.scrap_supply.loc[i-1]\
                 * (self.scrap_spread.loc[i]/self.scrap_spread.loc[i-1])**self.h['direct_melt_elas_scrap_spread']
-        elif False:
+        elif False and self.direct_melt_price_response:
             direct_melt_fraction = self.refine.hyperparam.loc['Direct melt fraction of production']\
                 * (self.scrap_spread.loc[i]/self.scrap_spread.loc[i-1])**self.h['direct_melt_elas_scrap_spread']
-        else:
-            direct_melt_fraction = self.direct_melt_fraction.loc[i-1]\
+        elif self.direct_melt_price_response:
+            temp_direct_melt_demand = self.direct_melt_demand.copy()
+            temp_direct_melt_demand.loc[:i,:] -= self.additional_direct_melt.loc[:i,:]
+            temp_direct_melt_fraction = temp_direct_melt_demand/self.total_demand
+            self.direct_melt_demand.loc[i-1,:] -= self.additional_direct_melt.loc[i-1,:]
+            direct_melt_fraction = temp_direct_melt_fraction.loc[i-1]\
                 * (self.scrap_spread.loc[i]/self.scrap_spread.loc[i-1])**self.h['direct_melt_elas_scrap_spread']
             if (direct_melt_fraction > 1).any(): direct_melt_fraction[direct_melt_fraction>1] = 1
             if (direct_melt_fraction < 0).any(): direct_melt_fraction[direct_melt_fraction<0] = 0
             self.direct_melt_demand.loc[i] = self.total_demand.loc[i]*direct_melt_fraction
-    
+            self.direct_melt_demand.loc[i-1:i,:] += self.additional_direct_melt.loc[i-1:i,:]
+            self.direct_melt_fraction.loc[i] = self.direct_melt_demand.loc[i]/self.total_demand.loc[i]
+            self.temp_direct_melt_fraction = temp_direct_melt_fraction.copy()
+        else:
+            self.direct_melt_demand.loc[i] = self.total_demand.loc[i]*self.direct_melt_fraction.loc[i]
+        
     def update_integration_variables(self):
         i = self.i
         
@@ -404,3 +469,113 @@ class Integration():
                 self.run_mining()
         self.concentrate_demand = pd.concat([self.mining.demand_series,self.concentrate_demand['China'],
                                             self.concentrate_demand['RoW']],axis=1,keys=['Global','China','RoW'])
+
+    def decode_scrap_scenario_name(self):
+        '''
+        takes the form 00_11_22_33_44
+        where:
+        00: ss, sd, bo (scrap supply, scrap demand, both)
+        11: pr or no (price response included or no)
+        22: Xyr, where X is any integer and represents
+         the number of years the increase occurs
+        33: X%tot, where X is any float/int and is the
+         increase/decrease in scrap supply or demand
+         relative to the initial year total demand
+        44: X%inc, where X is any float/int and is the
+         increase/decrease in the %tot value per year
+
+        for 22-44, an additional X should be placed at
+         the end when 00==both, describing the sd values
+        '''
+        scenario_name = self.scenario_name
+        error_string = 'improper format for scenario_name. Takes the form of 00_11_22_33_44 where:'+\
+                                 '\n\t00: ss, sd, bo (scrap supply, scrap demand, both)'+\
+                                 '\n\t11: pr or no (price response included or no)'+\
+                                 '\n\t22: Xyr, where X is any integer and represents the number of years the increase occurs'+\
+                                 '\n\t33: X%tot, where X is any float/int and is the increase/decrease in scrap supply or demand relative\n\t\tto the initial year total demand'+\
+                                 '\n\t44: X%inc, where X is any float/int and is the increase/decrease in the %tot value per year'+\
+                                 '\n\n\tfor 22-44, an additional X should be placed at the end when 00==bo, describing the sd values'+\
+                                 '\n\n\tscenario_name: '+scenario_name+\
+                                 '\n\tproper format: 00_11_Xyr_X%tot_X%inc or 00_11_XyrX_X%totX_X%incX if 00=bo'
+        collection_rate_price_response=True 
+        direct_melt_price_response=True
+        collection_rate_duration = 0
+        collection_rate_pct_change_tot = 0
+        collection_rate_pct_change_inc = 0
+        direct_melt_duration = 0
+        direct_melt_pct_change_tot = 0
+        direct_melt_pct_change_inc = 0
+        
+        if scenario_name=='':
+            scenario_type = scenario_name
+        else:
+            if '_' in scenario_name:
+                name = scenario_name.split('_')
+            else:
+                raise ValueError(error_string)
+            if np.any([j not in scenario_name for j in ['yr','%tot','%inc']])\
+               or len(name)!=5\
+               or not np.any([j in name[0] for j in ['ss','sd','bo']])\
+               or not np.any([j in name[1] for j in ['pr','no']])\
+               or 'yr' not in name[2] or '%tot' not in name[3] or '%inc' not in name[4]:
+                raise ValueError(error_string)
+            scenario_type = name[0].replace('ss','scrap supply').replace('sd','scrap demand').replace('bo','both')
+
+            if scenario_type in ['scrap supply','both']:
+                collection_rate_duration= int(name[2].split('yr')[0])
+                collection_rate_pct_change_tot = float(name[3].split('%tot')[0])
+                collection_rate_pct_change_inc = float(name[4].split('%inc')[0])
+                if name[1]=='pr':
+                    collection_rate_price_response=True
+                elif name[1]=='no':
+                    collection_rate_price_response=False
+
+            if scenario_type in ['scrap demand','both']:
+                if scenario_type=='both':
+                    integ = 1
+                    if name[2].split('yr')[1]=='' or name[3].split('%tot')[1]=='' or name[4].split('%inc')[1]=='':
+                        print('WARNING: scenario name does not fit BOTH format, using SCRAP SUPPLY value')
+                        integ=0
+                else:
+                    integ = 0
+                direct_melt_duration = int(name[2].split('yr')[integ])
+                direct_melt_pct_change_tot = float(name[3].split('%tot')[integ])
+                direct_melt_pct_change_inc = float(name[4].split('%inc')[integ])
+                if name[1]=='pr':
+                    direct_melt_price_response=True
+                elif name[1]=='no':
+                    direct_melt_price_response=False
+                    
+            if len(name[1])>2:
+                if name[1]=='nono':
+                    collection_rate_price_response=False
+                    direct_melt_price_response=False
+                elif name[1]=='prno':
+                    collection_rate_price_response=True
+                    direct_melt_price_response=False
+                elif name[1]=='nopr':
+                    collection_rate_price_response=False
+                    direct_melt_price_response=True
+                elif name[1]=='prpr':
+                    collection_rate_price_response=True
+                    direct_melt_price_response=True
+
+        self.scenario_type = scenario_type
+        self.collection_rate_price_response = collection_rate_price_response
+        self.direct_melt_price_response = direct_melt_price_response
+        self.collection_rate_duration = collection_rate_duration
+        self.collection_rate_pct_change_tot = 1+collection_rate_pct_change_tot/100
+        self.collection_rate_pct_change_inc = 1+collection_rate_pct_change_inc/100
+        self.direct_melt_duration = direct_melt_duration
+        self.direct_melt_pct_change_tot = 1+direct_melt_pct_change_tot/100
+        self.direct_melt_pct_change_inc = 1+direct_melt_pct_change_inc/100
+
+        self.hyperparam.loc['scenario_type',:] = scenario_type, 'empty string, scrap supply, scrap demand, or both'
+        self.hyperparam.loc['collection_rate_price_response',:] = collection_rate_price_response, 'whether or not there should be a price response for collection rate'
+        self.hyperparam.loc['direct_melt_price_response',:] = direct_melt_price_response, 'whether there should be a price response for direct melt fraction'
+        self.hyperparam.loc['collection_rate_duration',:] = collection_rate_duration, 'length of the increase in collection rate described by collection_rate_pct_change_tot'
+        self.hyperparam.loc['collection_rate_pct_change_tot',:] = collection_rate_pct_change_tot, 'without price response, describes the percent increase in collection rate attained at the end of the linear ramp with duration collection_rate_duration. Given as 1+%change/100'
+        self.hyperparam.loc['collection_rate_pct_change_inc',:] = collection_rate_pct_change_inc, 'once the collection_rate_pct_change_tot is reached, the collection rate will then increase by this value per year. Given as 1+%change/100'
+        self.hyperparam.loc['direct_melt_duration',:] = direct_melt_duration, 'length of the increase in direct melt fraction described by direct_melt_pct_change_tot'
+        self.hyperparam.loc['direct_melt_pct_change_tot',:] = direct_melt_pct_change_tot, 'without price response, describes the percent increase in collection rate attained at the end of the linear ramp with duration direct_melt_duration. Given as 1+%change/100'
+        self.hyperparam.loc['direct_melt_pct_change_inc',:] = direct_melt_pct_change_inc, 'once the direct_melt_pct_change_tot is reached, the direct melt fraction will then increase by this value per year. Given as 1+%change/100'

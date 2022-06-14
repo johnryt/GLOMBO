@@ -150,8 +150,18 @@ class refiningModel():
 #             self.ref_stats.drop('Global',axis=1,level=0,inplace=True)
             self.ref_stats = pd.concat([self.ref_stats,pd.concat([self.ref_stats['China'][self.need_correction]+self.ref_stats['RoW'][self.need_correction]],keys=['Global'],axis=1)],axis=1)
             self.ref_stats.loc[:,idx['Global','Primary CU']] = (self.ref_stats['China']['Primary CU']*self.ref_stats['China']['Primary capacity']+self.ref_stats['RoW']['Primary CU']*self.ref_stats['RoW']['Primary capacity'])/(self.ref_stats['China']['Primary capacity']+self.ref_stats['RoW']['Primary capacity'])
-            self.ref_stats.loc[:,idx['Global','Secondary CU']] = (self.ref_stats['China']['Secondary CU']*self.ref_stats['China']['Secondary capacity']+self.ref_stats['RoW']['Secondary CU']*self.ref_stats['RoW']['Secondary capacity'])/(self.ref_stats['China']['Secondary capacity']+self.ref_stats['RoW']['Secondary capacity'])
-            self.ref_stats.loc[:,idx['Global','Secondary ratio']] = self.ref_stats['Global']['Secondary production']/(self.ref_stats['Global']['Secondary capacity']*self.ref_stats['RoW']['Secondary CU'])
+            if (self.ref_stats['China']['Secondary capacity']+self.ref_stats['RoW']['Secondary capacity']==0).any():
+                self.ref_stats.loc[
+                    self.ref_stats['China']['Secondary capacity']+self.ref_stats['RoW']['Secondary capacity']==0,
+                                   idx['Global','Secondary CU']] = 0
+            else:
+                self.ref_stats.loc[:,idx['Global','Secondary CU']] = (self.ref_stats['China']['Secondary CU']*self.ref_stats['China']['Secondary capacity']+self.ref_stats['RoW']['Secondary CU']*self.ref_stats['RoW']['Secondary capacity'])/(self.ref_stats['China']['Secondary capacity']+self.ref_stats['RoW']['Secondary capacity'])
+            if (self.ref_stats['Global']['Secondary capacity']*self.ref_stats['RoW']['Secondary CU']==0).any():
+                self.ref_stats.loc[
+                    self.ref_stats['Global']['Secondary capacity']*self.ref_stats['RoW']['Secondary CU']==0,
+                                   idx['Global','Secondary ratio']] = 0
+            else:
+                self.ref_stats.loc[:,idx['Global','Secondary ratio']] = self.ref_stats['Global']['Secondary production']/(self.ref_stats['Global']['Secondary capacity']*self.ref_stats['RoW']['Secondary CU'])
     
     def simulate_refinery_one_year(self):
         rs = []
@@ -171,8 +181,14 @@ class refiningModel():
                 ref_stats.drop('Global',axis=1,level=0,inplace=True)
             ref_stats = pd.concat([ref_stats,pd.concat([ref_stats['China'][self.need_correction]+ref_stats['RoW'][self.need_correction]],keys=['Global'])])
             ref_stats.loc[:,idx['Global','Primary CU']] = (ref_stats['China']['Primary CU']*ref_stats['China']['Primary capacity']+ref_stats['RoW']['Primary CU']*ref_stats['RoW']['Primary capacity'])/(ref_stats['China']['Primary capacity']+ref_stats['RoW']['Primary capacity'])
-            ref_stats.loc[:,idx['Global','Secondary CU']] = (ref_stats['China']['Secondary CU']*ref_stats['China']['Secondary capacity']+ref_stats['RoW']['Secondary CU']*ref_stats['RoW']['Secondary capacity'])/(ref_stats['China']['Secondary capacity']+ref_stats['RoW']['Secondary capacity'])
-            ref_stats.loc[:,idx['Global','Secondary ratio']] = ref_stats['Global']['Secondary production']/(ref_stats['Global']['Secondary capacity']*ref_stats['RoW']['Secondary CU'])
+            if ref_stats['China']['Secondary capacity']+ref_stats['RoW']['Secondary capacity']==0:
+                ref_stats.loc[:,idx['Global','Secondary CU']] = 0
+            else:
+                ref_stats.loc[:,idx['Global','Secondary CU']] = (ref_stats['China']['Secondary CU']*ref_stats['China']['Secondary capacity']+ref_stats['RoW']['Secondary CU']*ref_stats['RoW']['Secondary capacity'])/(ref_stats['China']['Secondary capacity']+ref_stats['RoW']['Secondary capacity'])
+            if ref_stats['Global']['Secondary capacity']*ref_stats['RoW']['Secondary CU']==0:
+                ref_stats.loc[:,idx['Global','Secondary ratio']] = 0
+            else:
+                ref_stats.loc[:,idx['Global','Secondary ratio']] = ref_stats['Global']['Secondary production']/(ref_stats['Global']['Secondary capacity']*ref_stats['RoW']['Secondary CU'])
 #             (ref_stats['China']['Secondary CU']*ref_stats['China']['Secondary capacity']+ref_stats['RoW']['Secondary CU']*ref_stats['RoW']['Secondary capacity'])/(ref_stats['China']['Secondary capacity']+ref_stats['RoW']['Secondary capacity'])
         self.ref_stats.loc[self.i] = ref_stats
     
@@ -184,4 +200,3 @@ class refiningModel():
             self.initialize_ref_stats()
         else:
             self.simulate_refinery_one_year()
-    

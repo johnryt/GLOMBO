@@ -318,15 +318,24 @@ class demandModel():
                 init_new_scrap = init_demand*self.new_scrap_fraction.loc[simulation_time[0]].unstack()
                 self.init_new_scrap = init_new_scrap.copy()
                 target_collected = recycling_input_rate*init_demand - init_new_scrap
+                n+=1
+                if n>1e4:
+                    print('new scrap rate issue, could be a problem if target_collected<0',target_collected)
+                    break
             if flag!=0: print('New scrap rate reset to from {:.4f} to {:.4f}'.format(prev_new_scrap_fraction,self.hyperparam['Value']['new_scrap_fraction']))
         
             self.target_collected = target_collected
 
             self.cr = collection_rate.copy()
             self.cr = self.update_collection_rate(region)
+            n=0
             while (self.cr>h['maximum_collection_rate']+1e-10).any().any():
                 self.cr[self.cr>h['maximum_collection_rate']+1e-10] *= 0.99
                 self.cr = self.update_collection_rate(region)
+                n+=1
+                if n>1e4:
+                    print('collection rates exceeding maximum_collection_rate:',self.cr)
+                    break
             cr += [self.cr]
         self.collection_rate = pd.concat(cr,keys=regions,axis=1).T
             

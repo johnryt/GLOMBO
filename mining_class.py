@@ -991,11 +991,13 @@ class miningModel():
         
     def generate_oges(self):
         s, loc, scale = self.hyperparam.loc['primary_oge_s':'primary_oge_scale','Value']
-        self.mines.loc[:,'OGE'] = 1-stats.lognorm.rvs(s, loc, scale, size=self.mines.shape[0], random_state=self.rs)
+        self.mines.loc[:,'OGE'] = 0-stats.lognorm.rvs(s=s, loc=loc, scale=scale, size=self.mines.shape[0], random_state=self.rs)
         i = 0
+        if (self.mines['OGE']>0).all(): raise ValueError('All OGEs greater than zero, reassess primary_oge_scale/s inputs')
         while (self.mines['OGE']>0).any():
             self.mines.loc[self.mines['OGE']>0,'OGE'] = 1-stats.lognorm.rvs(s, loc, scale, size=(self.mines['OGE']>0).sum(), random_state=self.rs+i)
             i += 1
+            print('mines with OGE>0, this is a problem')
         if self.byproduct:
             self.mines.loc[:,'Primary OGE'] = self.mines['OGE']
     

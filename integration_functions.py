@@ -442,9 +442,9 @@ def generate_commodity_inputs(commodity_inputs, random_state):
             # 10% chance of having SX-EW production
             seed(rs)
             ci.loc[i] = sample(list(np.repeat([0],9))+[val],1)[0]
-        elif i in ['ramp_up_cu']:
-            seed(rs)
-            ci.loc[i] = sample([0,val],1)[0]
+#         elif i in ['ramp_up_cu']:
+#             seed(rs)
+#             ci.loc[i] = sample([0,val],1)[0]
     #     elif i in ['incentive_opening_probability']:
               # currently commented out because I want to keep these scenario sets separate
     #         # 10% chance of having the incentive_opening_probability==0

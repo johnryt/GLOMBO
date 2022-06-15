@@ -349,9 +349,10 @@ class demandModel():
                 multiplier_array-=1
                 start = self.simulation_time[0]
                 ph = self.eol.stack().unstack(1).unstack()
+                ph2 = self.scrap_collected.stack().unstack(1).unstack()
                 demand_adj = self.demand.apply(lambda x: x.sum()*ph.loc[start]/ph.loc[start].sum(),axis=1)
         #         demand_adj = self.eol.stack().unstack(1).unstack() * self.demand.loc[start,:].sum().sum() / self.eol.loc[start].sum().sum()
-                self.additional_scrap = demand_adj.loc[self.simulation_time[0]:].apply(lambda x: demand_adj.loc[self.simulation_time[0]]*multiplier_array[x.name-self.simulation_time[0]],axis=1)
+                self.additional_scrap = demand_adj.loc[self.simulation_time[0]:].apply(lambda x: ph2.loc[self.simulation_time[0]]*multiplier_array[x.name-self.simulation_time[0]],axis=1)
                 self.additional_scrap.loc[self.simulation_time[0]-1,:] = 0
                 self.additional_scrap = self.additional_scrap.sort_index()
                 self.additional_scrap = self.additional_scrap.stack(0)

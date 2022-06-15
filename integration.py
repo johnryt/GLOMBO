@@ -242,7 +242,8 @@ class Integration():
                     self.direct_melt_fraction.loc[yr,:]*=mul
             else:
                 multiplier_array -= 1
-                self.additional_direct_melt = self.demand.demand.loc[self.simulation_time[0]:].apply(lambda x: self.demand.demand.loc[self.simulation_time[0]]*multiplier_array[x.name-self.simulation_time[0]],axis=1)
+                ph2 = self.demand.scrap_collected.stack().unstack(1).unstack()
+                self.additional_direct_melt = self.demand.demand.loc[self.simulation_time[0]:].apply(lambda x: ph2.loc[self.simulation_time[0]]*multiplier_array[x.name-self.simulation_time[0]],axis=1)
                 self.additional_direct_melt = self.additional_direct_melt.groupby(level=0,axis=1).sum()
                 self.additional_direct_melt.loc[:,'Global'] = self.additional_direct_melt.sum(axis=1)
                 self.additional_direct_melt.loc[self.simulation_time[0]-1,:] = 0

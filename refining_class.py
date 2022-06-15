@@ -200,3 +200,4 @@ class refiningModel():
             self.initialize_ref_stats()
         else:
             self.simulate_refinery_one_year()
+    

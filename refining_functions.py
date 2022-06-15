@@ -23,8 +23,8 @@ def sec_cap_growth_cal(mine_growth, scrap_growth, sec_coef=0):
     return growth
 
 
-def simulate_refinery_production_oneyear(year_i, tcrc_series, sp2_series, 
-                                         pri_cap_growth_series, sec_cap_growth_series,
+def simulate_refinery_production_oneyear(year_i, tcrc_series_, sp2_series_, 
+                                         pri_cap_growth_series_, sec_cap_growth_series_,
                                          ref_stats, ref_hyper_param, 
                                          sec_coef=0, growth_lag=1, ref_bal = 0, 
                                          pri_CU_ref_bal_elas = 0, sec_CU_ref_bal_elas = 0,
@@ -36,6 +36,11 @@ def simulate_refinery_production_oneyear(year_i, tcrc_series, sp2_series,
     sec_CU_TCRC_elas=ref_hyper_param['sec CU TCRC elas']
     sec_ratio_TCRC_elas=ref_hyper_param['sec ratio TCRC elas']
     sec_ratio_SP2_elas=ref_hyper_param['sec ratio scrap spread elas']
+    
+    tcrc_series = tcrc_series_.copy().replace(0,1e-6)
+    sp2_series = sp2_series_.copy().replace(0,1e-6)
+    pri_cap_growth_series = pri_cap_growth_series_.copy().replace(0,1e-6)
+    sec_cap_growth_series = sec_cap_growth_series_.copy().replace(0,1e-6)
     
     t=year_i
     t_lag_1=year_i-1

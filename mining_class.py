@@ -815,15 +815,20 @@ class miningModel():
             rec_rates.loc[:] = 30
             if self.verbosity>1:
                 print('Generated recovery rates too low, using 30% for all')
-        elif rec_rates.min()>99:
+        if rec_rates.min()>99:
             rec_rates.loc[:] = 99
             if self.verbosity>1:
                 print('Generated recovery rates too high, using 99% for all')
-        elif (rec_rates>99).any():
-            rec_rates.loc[rec_rates>99] = rec_rates[rec_rates<99].sample(n=(rec_rates>99).sum(),replace=True)
-        elif (rec_rates<0).any():
-            rec_rates.loc[rec_rates<0] = rec_rates[rec_rates>0].sample(n=(rec_rates<0).sum(),replace=True)
+        if (rec_rates>99).any():
+            rr = rec_rates[rec_rates<99].sample(n=(rec_rates>99).sum(),replace=True)
+            rr = rr.rename(dict(zip(rr.index,rec_rates[rec_rates>99].index)))
+            rec_rates.loc[rec_rates>99] = rr
+        if (rec_rates<0).any():
+            rr = rec_rates[rec_rates>0].sample(n=(rec_rates<0).sum(),replace=True)
+            rr = rr.rename(dict(zip(rr.index,rec_rates[rec_rates<0].index)))
+            rec_rates.loc[rec_rates<0] = rr
         mines.loc[:,'Recovery rate (%)'] = rec_rates
+        
 #         if rec_rates.max()<30 or (rec_rates<0).any() or (rec_rates>100).any():
 #             rec_rates = 100 - self.values_from_dist('primary_rr_default')
 #             self.hyperparam.loc['primary_rr_negative','Value'] = True
@@ -1951,7 +1956,8 @@ class miningModel():
              (h['Value']['annual_reserves_ratio_with_initial_production']+
               h['Value']['annual_reserves_ratio_with_initial_production_slope']*(i-self.simulation_time[0]))
         if i>self.simulation_time[0]:
-            lag = h['Value']['reserves_ratio_price_lag']
+            lag = min([h['Value']['reserves_ratio_price_lag'],i-self.simulation_time[0]-1])
+            lag = lag if lag>0 else 0
             self.resources_contained_series.loc[i] *= (self.primary_price_series[i-lag]/self.primary_price_series[i-lag-1])**h['Value']['resources_contained_elas_primary_price']
             if self.byproduct:
                 self.resources_contained_series.loc[i] *= (self.byproduct_price_series[i-lag]/self.byproduct_price_series[i-lag-1])**h['Value']['resources_contained_elas_byproduct_price']

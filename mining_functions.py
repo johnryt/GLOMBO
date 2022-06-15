@@ -27,8 +27,9 @@ def run_mine_ml_model(model, all_inc_mines, to_predict, verbosity=0, accuracy=Fa
     input_df = all_inc_mines.copy().reset_index(drop=True)
     opening = input_df.copy()[['Production (kt)','Head grade (%)','Commodity price (USD/t)','TCRC (USD/t)',
                                  'Recovery rate (%)','OGE','Development CAPEX ($M)','Total cash margin (USD/t)',
-                                 'Mine type','Sustaining CAPEX ($M)','Payable percent (%)']]
+                                 'Mine type','Sustaining CAPEX ($M)','Payable percent (%)']].dropna()
     opening.loc[:,'1=should open'] = (input_df['NPV ($M)']>0).astype(int)
+    opening = opening
     exog = [i for i in opening.columns if i!='1=should open']
     X = opening[exog]
     Y = opening['1=should open']
@@ -47,7 +48,11 @@ def run_mine_ml_model(model, all_inc_mines, to_predict, verbosity=0, accuracy=Fa
         clf = model()
     
     x_train = X.values
-    y_train = Y.values
+    if (Y==1).all():
+        Y.loc[Y.idxmin()] = 0
+    elif (Y==0).all():
+        Y.loc[Y.idxmax()] = 1
+    y_train = Y.ravel()
     x_index = X_test.index
     x_test = X_test.values
     if accuracy:
@@ -190,4 +195,3 @@ def supply_curve_plot(df, x_col, stack_cols, ax=0, dividing_line_width=0.2,
         ax.step(ph1['x plot'],ph[price_col],label=price_col.split(' (')[0],linewidth=price_line_width)
     ax.set_ylim(ylim)
     return ph2
-

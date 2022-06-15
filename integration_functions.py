@@ -2,6 +2,9 @@ import numpy as np
 import pandas as pd
 idx = pd.IndexSlice
 from matplotlib import pyplot as plt
+from scipy import stats
+from integration import Integration
+from random import seed, sample, shuffle
 import os
 
 def create_result_df(integ):
@@ -126,27 +129,7 @@ class Sensitivity():
                  scenarios=[''],
                  OVERWRITE=False):
         '''
-        scenario_name takes the form 00_11_22_33_44
-        where:
-        00: ss, sd, bo (scrap supply, scrap demand, both)
-        11: pr or no (price response included or no)
-        22: Xyr, where X is any integer and represents
-         the number of years the increase occurs
-        33: X%tot, where X is any float/int and is the
-         increase/decrease in scrap supply or demand
-         relative to the initial year total demand
-        44: X%inc, where X is any float/int and is the
-         increase/decrease in the %tot value per year
         
-        e.g. ss_pr_1yr_1%tot_0%inc
-        
-        for 22-44, an additional X should be placed at
-         the end when 00==both, describing the sd values
-         e.g. ss_pr_1yr1_1%tot1_0%inc0
-         
-        Can also have 11 as nono, prno, nopr, or prpr to
-         control the ss and sd price response individually
-         (in that order)
         '''
         self.simulation_time = simulation_time
         self.byproduct = byproduct
@@ -159,7 +142,7 @@ class Sensitivity():
         self.notes = notes
         self.scenarios = scenarios
         self.overwrite = OVERWRITE
-        if overwrite: print('WARNING, YOU ARE OVERWRITING AN EXISTING FILE')
+        if self.overwrite: print('WARNING, YOU ARE OVERWRITING AN EXISTING FILE')
         
     def initialize_big_df(self):
         if os.path.exists(self.pkl_filename) and not self.overwrite:
@@ -249,7 +232,7 @@ class Sensitivity():
                 self.check_run_append(mod)
                 self.mod = mod
     
-    def run_monte_carlo(self, n_scenarios):
+    def run_monte_carlo(self, n_scenarios, random_state=220530):
         self.update_changing_base_parameters_series()
         self.initialize_big_df()
         mod = Integration(simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct)
@@ -275,7 +258,7 @@ class Sensitivity():
                 self.hyperparam_copy = mod.hyperparam.copy()
 
                 ###### UPDATING MONTE CARLO PARAMETERS ######
-                rs = 220530+n
+                rs = random_state+n
                 values = stats.uniform.rvs(loc=0,scale=1,size=len(params_to_change),random_state=rs)
                 new_param_series = pd.Series(values, params_to_change)
                 if self.verbosity>0:
@@ -336,7 +319,7 @@ class Sensitivity():
                 notes = self.notes+''
             ind = [j for j in self.hyperparam_copy.index if type(self.hyperparam_copy['Value'][j]) not in [np.ndarray,list]]
             z = self.hyperparam_copy['Value'][ind].dropna()!=mod.hyperparam['Value'][ind].dropna()
-            z = [j for j in z[z].index if j!=i]
+            z = [j for j in z[z].index]
             if len(z)>0:
                 for zz in z:
                     notes += ', {}={}'.format(zz,mod.hyperparam['Value'][zz])
@@ -359,3 +342,156 @@ class Sensitivity():
 #         direct_melt_elas_scrap_spread
 #         collection_elas_scrap_price
         
+def grade_predict(ci):
+    '''
+    see slide 116 in the file:
+    C:/Users/ryter/Dropbox (MIT)/
+    Group Research Folder_Olivetti/
+    Displacement/04 Presentations/
+    John/Weekly Updates/20210825 
+    Generalization.pptx
+    a + b*log(price),
+    a = 8.1748
+    b = -0.9477
+    R^2=0.944 for commodities in SNL
+    '''
+    price = ci['primary_commodity_price']
+    grade = 8.1748 -0.9477*np.log(price)
+    grade = np.exp(grade)
+    ci.loc['primary_ore_grade_mean'] = grade
+    return ci
+
+def generate_commodity_inputs(commodity_inputs, random_state):
+    ci = commodity_inputs.copy()
+    if 'Byproduct status' in ci.index:
+        ci = ci.drop('Byproduct status')
+    if 'mine_cu_margin_elas' in ci.index:
+        ci = ci.drop('mine_cu_margin_elas')
+        # this one already gets covered in the Sensitivity class
+    dists = pd.DataFrame(np.nan,ci.index,['dist','p1','p2'])
+    ci.loc[:] = np.nan
+    rs = random_state
+    if 'values in case_study_data.xlsx':
+        ci.loc['initial_demand'] = 10000
+        ci.loc['Regional production fraction of total production, Global'] = 1
+        dists.loc['historical_growth_rate'] = 'uniform',0.01,0.6
+        dists.loc['china_fraction_demand'] = 'uniform',0.05,0.7
+        sector_dists = [i for i in dists.index if 'sector_dist' in i]
+        dists.loc[sector_dists] = 'uniform',0,1
+        mine_types_main = [i for i in dists.index if i in ['minetype_prod_frac_underground','minetype_prod_frac_openpit']]
+        mine_types_alt  = [i for i in dists.index if 'minetype' in i and i not in mine_types_main]
+        mine_types  = [i for i in dists.index if 'minetype' in i]
+        dists.loc[mine_types_main] = 'uniform',0,1
+        dists.loc[mine_types_alt] = 'uniform',0,0.1
+        dists.loc['Recycling input rate, Global'] = 'uniform',0,0.5
+        dists.loc['Regional production fraction of total production, China'] = 'uniform',0.05,0.7
+        dists.loc['Secondary refinery fraction of recycled content, Global'] = 'uniform',0,1
+        dists.loc['SX-EW fraction of production, Global'] = 'uniform',0,0.5
+        dists.loc['primary_production_mean'] = 'uniform',1e-4,1e-2
+        dists.loc['primary_production_var'] = 'uniform',0.5,2
+        dists.loc['primary_ore_grade_mean'] = 'norm',1,0.2
+        dists.loc['primary_ore_grade_var'] = 'uniform',0.01,1.5
+        dists.loc['primary_commodity_price'] = 'uniform',100,1e8
+        dists.loc['initial_scrap_spread'] = 'uniform',0,0.4
+        dists.loc['lifetime_mean_construction'] = 'uniform',10,50
+        dists.loc['lifetime_mean_electrical'] = 'uniform',10,30
+        dists.loc['lifetime_mean_industrial'] = 'uniform',10,30
+        dists.loc['lifetime_mean_other'] = 'uniform',1,15
+        dists.loc['lifetime_mean_transport'] = 'uniform',5,20
+
+    if 'in integration hyperparam':
+        dists.loc['incentive_opening_probability'] = 'uniform',0.001,0.1
+        dists.loc['refinery_follows_concentrate_supply'] = 'bool',0,1
+        dists.loc['random_state'] = 'discrete',1,220609
+
+    if 'in mining':
+        dists.loc['ramp_up_years'] = 'discrete',2,5
+        dists.loc['ramp_up_cu'] = 'uniform',0.4,0.8
+        dists.loc['primary_oge_scale'] = 'uniform',0.1,0.5
+        dists.loc['discount_rate'] = 'uniform',0.05,0.15
+        dists.loc['ramp_down_cu'] = 'uniform',0.2,0.6
+        dists.loc['close_years_back'] = 'discrete',2,10
+        dists.loc['years_for_roi'] = 'discrete',10,20
+        dists.loc['close_price_method'] = 'close_price_method'
+        dists.loc['close_probability_split_max'] = 'uniform',0,1
+        dists.loc['close_probability_split_mean'] = 'uniform',0,1
+        dists.loc['close_probability_split_min'] = 'uniform',0,1
+        close_prob = [i for i in dists.index if 'close_probability_split' in i]
+        dists.loc['reserves_ratio_price_lag'] = 'discrete',1,10
+
+    unis = dists['dist']=='uniform'
+    dists.loc[unis,'p2'] = dists.loc[unis,'p2']-dists.loc[unis,'p1']
+    for i in dists.dropna().index:
+        if dists['dist'][i] in ['uniform']:
+            val = getattr(stats,dists['dist'][i]).rvs(dists['p1'][i],dists['p2'][i],random_state=rs)
+        elif dists['dist'][i] in ['discrete']:
+            seed(rs)
+            val = int(sample(list(np.arange(dists['p1'][i],dists['p2'][i]+1)),1)[0])
+        elif dists['dist'][i] in ['bool']:
+            seed(rs)
+            val = sample([False,True],1)[0]
+        elif i=='close_price_method':
+            val = 'probabilistic'
+    #     print(i, dists['p1'][i], dists['p2'][i], val)
+
+        
+        if i in ['Secondary fraction of recycled content, Global']:
+            seed(rs)
+            ci.loc[i] = sample([0,val,1],1)[0]
+        elif i in ['SX-EW fraction of production, Global']:
+            # 10% chance of having SX-EW production
+            seed(rs)
+            ci.loc[i] = sample(list(np.repeat([0],9))+[val],1)[0]
+        elif i in ['ramp_up_cu']:
+            seed(rs)
+            ci.loc[i] = sample([0,val],1)[0]
+    #     elif i in ['incentive_opening_probability']:
+              # currently commented out because I want to keep these scenario sets separate
+    #         # 10% chance of having the incentive_opening_probability==0
+    #         seed(rs)
+    #         ci.loc[i] = sample(list(np.repeat(val,9))+[0],1)[0]
+        else:
+            ci.loc[i] = val
+        rs += 1
+
+    if 'values in case_study_data.xlsx':
+        ci.loc[sector_dists] /= ci.loc[sector_dists].sum()
+        ci.loc[mine_types] /= ci.loc[mine_types].sum()
+        fab_and_life = [i for i in ci.index if 'fabrication_efficiency' in i]
+        ci.loc[fab_and_life] = commodity_inputs.loc[fab_and_life]
+        ci.loc['Recycling input rate, China'] = ci.loc['Recycling input rate, Global']
+        ci.loc['Secondary refinery fraction of recycled content, China'] = ci.loc['Secondary refinery fraction of recycled content, Global']
+        ci.loc['SX-EW fraction of production, China'] = ci.loc['SX-EW fraction of production, Global']
+        ci.loc['Total production, Global'] = ci.loc['initial_demand'] * stats.uniform.rvs(0.95,0.1, random_state=rs)
+        ci.loc['primary_production'] = ci['Total production, Global']*(1-ci['Recycling input rate, Global'])
+        ci.loc['primary_production_mean'] *= ci['primary_production']
+        grade_multiplier = abs(ci['primary_ore_grade_mean'])
+        ci = grade_predict(ci)
+        ci.loc['primary_ore_grade_mean'] *= grade_multiplier
+
+    if 'values in integration hyperparam':
+        ci.loc['presimulate_n_years'] = 10 if ci['ramp_up_cu']!=0 else 5*ci['ramp_up_years']
+        if ci['incentive_opening_probability']==0:
+            ci.loc['presimulate_n_years'] = 10*ci['ramp_up_years']
+            ci.loc['start_calibrate_years'] = 5
+            ci.loc['end_calibrate_years'] = 10 if 10<ci['presimulate_n_years'] else ci['presimulate_n_years']
+        else:
+            ci.loc['presimulate_n_years'] = 5*ci['ramp_up_years']
+            ci.loc['incentive_require_tune_years'] = ci['presimulate_n_years']
+
+    if 'values in mining param':
+        ci.loc[close_prob] /= ci[close_prob].sum()
+
+    if 'values in demand param':
+        n = 0
+        for i in ['construction','electrical','industrial','other','transport']:
+            ci.loc['lifetime_sigma_'+i] = stats.uniform.rvs(0.1,0.4,random_state=n+rs)*ci['lifetime_mean_'+i]
+            n += 1
+            
+    ci.loc['incentive_require_tune_years'] = 10
+    ci.loc['presimulate_n_years'] = 10
+    ci.loc['end_calibrate_years'] = 10
+    ci.loc['start_calibrate_years'] = 5
+    ci.loc['refinery_follows_concentrate_supply'] = False
+    ci.loc['incentive_opening_probability'] = 0
+    return ci

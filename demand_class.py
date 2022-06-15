@@ -295,7 +295,7 @@ class demandModel():
             if recycling_input_rate.max().max() > max_recycling_input_rate:
                 if region==regions[0]:
                     for reg in recycling_input_rate.idxmax().unique():
-                        print(reg,'recycling input rate exceeds maximum given the existing sector lifetimes.\nRecycling input rate set to maximum ({:.1f}% collection) value: {:0.3f}'.format(100*h['maximum_collection_rate'],max_recycling_input_rate.ax().max()))
+                        print(reg,'recycling input rate exceeds maximum given the existing sector lifetimes.\nRecycling input rate set to maximum ({:.1f}% collection) value: {:0.3f}'.format(100*h['maximum_collection_rate'],max_recycling_input_rate.max().max()))
                 recycling_input_rate[recycling_input_rate>max_recycling_input_rate] = max_recycling_input_rate
                 self.hyperparam.loc['recycling_input_rate_'+region.lower(),'Value']=max_recycling_input_rate * self.hyperparam['Value']['scrap_to_cathode_eff']
                 collection_rate.loc[:] = h['maximum_collection_rate']

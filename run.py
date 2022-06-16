@@ -33,10 +33,13 @@ scenarios = ['sd_nono_5yr_0%tot_0%inc']+\
 #                          'ss_pr_10yr_2%tot_']
 filename = 'data/big_sensitivity_sd_no.pkl'
 n_scen = 50
+OVERWRITE = True
+
 for i in np.arange(0,n_scen):
     print('Running outside scenario {}/{}, {:.1f}% complete'.format(i+1,n_scen,i/n_scen*100))
     ci = generate_commodity_inputs(commodity_inputs, i)
     with warnings.catch_warnings():
         warnings.simplefilter('error')
-        s = Sensitivity(filename,ci,OVERWRITE=False,notes='Big sensitivity, scrap supply shock, no collection rate price response',scenarios=scenarios)
+        OVERWRITE = OVERWRITE if i==0 else False
+        s = Sensitivity(filename,ci,OVERWRITE=OVERWRITE,notes='Big sensitivity, scrap demand shock, no collection rate price response',scenarios=scenarios,verbosity=0)
         s.run_monte_carlo(n_scenarios=2,random_state=220615+i)

@@ -820,11 +820,11 @@ class miningModel():
             if self.verbosity>1:
                 print('Generated recovery rates too high, using 99% for all')
         if (rec_rates>99).any():
-            rr = rec_rates[rec_rates<99].sample(n=(rec_rates>99).sum(),replace=True)
+            rr = rec_rates[rec_rates<99].sample(n=(rec_rates>99).sum(),replace=True).reset_index(drop=True)
             rr = rr.rename(dict(zip(rr.index,rec_rates[rec_rates>99].index)))
             rec_rates.loc[rec_rates>99] = rr
         if (rec_rates<0).any():
-            rr = rec_rates[rec_rates>0].sample(n=(rec_rates<0).sum(),replace=True)
+            rr = rec_rates[rec_rates>0].sample(n=(rec_rates<0).sum(),replace=True).reset_index(drop=True)
             rr = rr.rename(dict(zip(rr.index,rec_rates[rec_rates<0].index)))
             rec_rates.loc[rec_rates<0] = rr
         mines.loc[:,'Recovery rate (%)'] = rec_rates

@@ -238,6 +238,7 @@ class Sensitivity():
         mod = Integration(simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct)
         scenario_params_dont_change = ['collection_rate_price_response','direct_melt_price_response']
         params_to_change = [i for i in mod.hyperparam.dropna(how='all').index if ('elas' in i or 'response' in i or 'growth' in i or 'improvements' in i) and i not in scenario_params_dont_change]
+        # do something with incentive_opening_probability?
         
         for n in np.arange(0,n_scenarios):
             if self.verbosity>-1: 
@@ -263,9 +264,12 @@ class Sensitivity():
                 new_param_series = pd.Series(values, params_to_change)
                 if self.verbosity>0:
                     print(params_to_change)
-                new_param_series.loc['sector_specific_dematerialization_tech_growth'] *= 0.15
-                new_param_series.loc['sector_specific_price_response'] *= 0.15
-                new_param_series.loc['region_specific_price_response'] *= 0.15
+                if 'sector_specific_dematerialization_tech_growth' in params_to_change:
+                    new_param_series.loc['sector_specific_dematerialization_tech_growth'] *= 0.15
+                if 'sector_specific_price_response' in params_to_change:
+                    new_param_series.loc['sector_specific_price_response'] *= 0.15
+                if 'region_specific_price_response':
+                    new_param_series.loc['region_specific_price_response'] *= 0.15
                 # ^ these values should be small, since small changes make big changes
                 for param in params_to_change:
                     if type(mod.hyperparam['Value'][param])!=bool:

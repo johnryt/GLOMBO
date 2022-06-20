@@ -312,6 +312,7 @@ class demandModel():
                 flag = 1
                 prev_new_scrap_fraction = self.hyperparam['Value'].copy()['new_scrap_fraction']
                 ('new scrap rate is too high or recycling input rate is too low, getting a negative number for old scrap collection target.')
+            n=0
             while (target_collected<1e-10).any().any():
                 self.hyperparam.loc['new_scrap_fraction','Value']*=0.99
                 self.initialize_new_scrap_fraction()

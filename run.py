@@ -35,7 +35,7 @@ filename = 'data/big_sensitivity_sd_no.pkl'
 n_scen = 50
 OVERWRITE = True
 
-for i in np.arange(0,n_scen):
+for i in np.arange(7,n_scen):
     print('Running outside scenario {}/{}, {:.1f}% complete'.format(i+1,n_scen,i/n_scen*100))
     ci = generate_commodity_inputs(commodity_inputs, i)
     with warnings.catch_warnings():

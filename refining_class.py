@@ -14,17 +14,21 @@ class refiningModel():
         self.update_ref_param()
         
         sim_time2 = np.arange(simulation_time[0]-1,1+simulation_time[-1])
-        rate = 0.01
+        rate = 0.0
         self.tcrc_series = pd.Series([1*(1.0+rate)**(y-simulation_time[0]) for y in sim_time2], sim_time2)
-        rate = 0
+        rate = .01
         self.scrap_spread_series = pd.Series([1*(1.0+rate)**(y-simulation_time[0]) for y in sim_time2], sim_time2)
         self.scrap_spread_series = pd.concat([self.scrap_spread_series for i in [0,0,0]],axis=1,keys=['Global','China','RoW'])
-        rate = 0.02
+        rate = 0.0
         self.pri_cap_growth_series = pd.Series([1*(1.0+rate)**(y-simulation_time[0]) for y in sim_time2], sim_time2)
-        rate = 0.01
+        rate = 0.0
         self.sec_cap_growth_series = pd.Series([1*(1.0+rate)**(y-simulation_time[0]) for y in sim_time2], sim_time2)
         self.sec_cap_growth_series = pd.concat([self.sec_cap_growth_series for i in [0,0,0]],axis=1,keys=['Global','China','RoW'])
         
+        self.secondary_ratio = 0
+        self.additional_secondary_refined = 0
+        self.secondary_refined_price_response = True
+
     def init_input_parameters_ref_hyperparam(self):
         hyperparam = pd.DataFrame(0,['Recycling input rate','Secondary refinery fraction of recycled content','Regional production fraction of total production'],['Global','China','RoW'])
         hyperparam.loc['Recycling input rate','Global'] = 0.2
@@ -36,7 +40,7 @@ class refiningModel():
         hyperparam.loc['SX-EW fraction of production','Global'] = 0
         hyperparam.loc['SX-EW fraction of production','China'] = 0
         hyperparam.loc['Total production','Global'] = 4 # kt
-        hyperparam.loc['Use regions'] = True
+        hyperparam.loc['Use regions'] = False
         
         ref_hyper_param = pd.DataFrame(np.nan,['pri cap','pri CU','pri CU TCRC elas','sec cap','sec CU','sec CU TCRC elas','sec ratio','sec ratio TCRC elas','sec ratio scrap spread elas','conc to cathode eff','scrap to cathode eff'],['Value','Notes'])
         ref_hyper_param.loc['pri CU',:] = 0.85, 'Capacity at primary-only refineries'
@@ -154,6 +158,9 @@ class refiningModel():
                 self.ref_stats.loc[
                     self.ref_stats['China']['Secondary capacity']+self.ref_stats['RoW']['Secondary capacity']==0,
                                    idx['Global','Secondary CU']] = 0
+                self.ref_stats.loc[
+                    self.ref_stats['China']['Secondary capacity']+self.ref_stats['RoW']['Secondary capacity']!=0,
+                                   idx['Global','Secondary CU']] = (self.ref_stats['China']['Secondary CU']*self.ref_stats['China']['Secondary capacity']+self.ref_stats['RoW']['Secondary CU']*self.ref_stats['RoW']['Secondary capacity'])/(self.ref_stats['China']['Secondary capacity']+self.ref_stats['RoW']['Secondary capacity'])
             else:
                 self.ref_stats.loc[:,idx['Global','Secondary CU']] = (self.ref_stats['China']['Secondary CU']*self.ref_stats['China']['Secondary capacity']+self.ref_stats['RoW']['Secondary CU']*self.ref_stats['RoW']['Secondary capacity'])/(self.ref_stats['China']['Secondary capacity']+self.ref_stats['RoW']['Secondary capacity'])
             if (self.ref_stats['Global']['Secondary capacity']*self.ref_stats['RoW']['Secondary CU']==0).any():
@@ -168,13 +175,18 @@ class refiningModel():
         for region in self.regions:
             ref_stats = self.ref_stats.copy()[region]
             ref_hp = self.ref_param[region]
-            ref_stats = simulate_refinery_production_oneyear(self.i, self.tcrc_series, self.scrap_spread_series[region], 
+            addl_scrap = 0 if type(self.additional_secondary_refined)==int else self.additional_secondary_refined[region]
+            sec_ratio_ph = 0 if type(self.secondary_ratio)==int else self.secondary_ratio[region]
+            ref_stats, addl_scrap = simulate_refinery_production_oneyear(self.i, self.tcrc_series, self.scrap_spread_series[region], 
                                          self.pri_cap_growth_series, self.sec_cap_growth_series[region],
                                          ref_stats, ref_hp, 
                                          sec_coef=0, growth_lag=1, ref_bal = 0, 
                                          pri_CU_ref_bal_elas = 0, sec_CU_ref_bal_elas = 0,
-                                         ref_cu_pct_change = 0, ref_sr_pct_change = 0)
+                                         ref_cu_pct_change = 0, ref_sr_pct_change = 0,
+                                         simulation_time = self.simulation_time, additional_secondary_refined=addl_scrap,
+                                         secondary_refined_price_response=self.secondary_refined_price_response,secondary_ratio=sec_ratio_ph)
             rs += [ref_stats]
+            if type(addl_scrap)!=int: self.additional_secondary_refined.loc[:,region] = addl_scrap
         ref_stats = pd.concat(rs, keys=self.regions)
         if self.hyperparam['Global']['Use regions']:
             if 'Global' in ref_stats.index.get_level_values(0).unique():

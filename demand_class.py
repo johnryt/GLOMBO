@@ -175,7 +175,7 @@ class demandModel():
 
     def setup_intensity_baseline(self):
         intensities = self.intensities.copy()
-        for year_i in [i for i in self.volumes.index if i not in intensities.dropna().index and i>min(intensities.index)]:
+        for year_i in [i for i in self.volumes.index if i not in intensities.dropna().index and i>min(intensities.index) and i<=self.simulation_time[-1]]:
             #predict the aluminium intensity for each sector based on commodity price and gdp growth
             intensities.loc[year_i] = intensity_prediction(year_i, self.commodity_price_series, self.gdp_growth, 
                                                                 intensities.loc[year_i-1], self.volumes, 

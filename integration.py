@@ -44,6 +44,7 @@ class Integration():
         self.update_hyperparam()
         
         self.concentrate_supply = pd.Series(np.nan,simulation_time)
+        self.sxew_supply = pd.Series(np.nan,simulation_time)
         self.concentrate_demand = pd.DataFrame(np.nan,simulation_time,['Global','China','RoW'])
         self.refined_supply = self.concentrate_demand.copy()
         self.refined_demand = self.concentrate_demand.copy()
@@ -52,6 +53,10 @@ class Integration():
         self.direct_melt_demand = self.concentrate_demand.copy()
         self.direct_melt_fraction = self.concentrate_demand.copy()
         self.total_demand = self.concentrate_demand.copy()
+        self.primary_supply = self.concentrate_demand.copy()
+        self.primary_demand = self.concentrate_demand.copy()
+        self.secondary_supply = self.concentrate_demand.copy()
+        self.secondary_demand = self.concentrate_demand.copy()
         
         self.scrap_spread = self.concentrate_demand.copy()
         self.primary_commodity_price = self.concentrate_supply.copy()
@@ -67,6 +72,7 @@ class Integration():
         hyperparameters.loc['initial_demand',:] = 1,'initial overall demand'
         hyperparameters.loc['Recycling input rate, Global',['Value','Notes']] = 0.4, 'float, fraction of demand in the initial year satisfied by recycled inputs; includes refined and direct melt'
         hyperparameters.loc['Recycling input rate, China',['Value','Notes']] = 0.4, 'float, fraction of demand in the initial year satisfied by recycled inputs; includes refined and direct melt'
+        hyperparameters.loc['Secondary refinery fraction of recycled content, Global',:] = 0.6,'float, fraction of recycled content demanded by refineries, remainder is direct melt'
         hyperparameters.loc['china_fraction_demand',['Value','Notes']] = 0.7, 'China fraction of demand, was 0.52645 for copper in 2019'
         hyperparameters.loc['scrap_to_cathode_eff',:] = 0.99,'Efficiency of remelting and refining scrap'
 
@@ -96,10 +102,12 @@ class Integration():
         # determining model structure
         hyperparameters.loc['determining model structure',:] = np.nan
         hyperparameters.loc['scrap_trade_simplistic',:] = True,'if True, sets scrap supply in each region equal to the demand scaled by the global supply/demand ratio. If False, we should set up a price-informed trade algorithm, but have not done that yet so this should stay True for now'
-        hyperparameters.loc['refinery_follows_concentrate_supply',:] = False, 'True causes refinery capacity evolution to follow concentrate supply; False causes refinery capacity evolution to follow refined demand'
         hyperparameters.loc['presimulate_mining',:] = True, 'True means we simulate mining production for presimulate_n_years before the simulation starts, theoretically to force alignment with simulation start time mine production'
         hyperparameters.loc['presimulate_n_years',:] = 10, 'int, number of years in the past to simulate mining to establish baseline'
-        
+        hyperparameters.loc['collection_rate_price_response',:] = True,'bool, whether or not this parameter responds to price'
+        hyperparameters.loc['direct_melt_price_response',:] = True,'bool, whether or not this parameter responds to price'
+        hyperparameters.loc['refinery_capacity_fraction_increase_mining'] = 0.5,'0 means refinery capacity growth is determined by demand growth alone; 1 means refinery capacity growth is determined by mining production growth alone. Values in between allow for a weighted mixture.'
+
         # mining only
         hyperparameters.loc['mining only',:] = np.nan
         hyperparameters.loc['primary_ore_grade_mean',:] = 0.1,'Ore grade mean for lognormal distribution'
@@ -112,10 +120,10 @@ class Integration():
         hyperparameters.loc['primary_production_var','Value'] = 0.5
         hyperparameters.loc['primary_ore_grade_var','Value'] = 1
         hyperparameters.loc['incentive_opening_probability','Value'] = 0.05
-        hyperparameters.loc['incentive_require_tune_years',:] = 5,'requires incentive tuning for however many years such that supply=demand, with no requirements on incentive_opening_probability and allowing the given incentive_opening_probability to be used'
+        hyperparameters.loc['incentive_require_tune_years',:] = 10,'requires incentive tuning for however many years such that supply=demand, with no requirements on incentive_opening_probability and allowing the given incentive_opening_probability to be used'
         hyperparameters.loc['demand_series_method','Value'] = 'none'
-        hyperparameters.loc['end_calibrate_years','Value'] = 20
-        hyperparameters.loc['start_calibrate_years','Value'] = 10
+        hyperparameters.loc['end_calibrate_years','Value'] = 10
+        hyperparameters.loc['start_calibrate_years','Value'] = 5
         hyperparameters.loc['ramp_up_cu','Value'] = 0.7
         hyperparameters.loc['ml_accelerate_initialize_years','Value'] = max(hyperparameters['Value'][['ml_accelerate_initialize_years','end_calibrate_years']])
         hyperparameters.loc['mine_cu_margin_elas','Value'] = 0.8
@@ -154,6 +162,10 @@ class Integration():
         dem.collection_rate_pct_change_inc = self.collection_rate_pct_change_inc
         
         ref = self.refine
+        ref.scenario_type = self.scenario_type
+        ref.secondary_refine_duration = self.secondary_refined_duration
+        ref.secondary_refine_pct_change_tot = self.secondary_refined_pct_change_tot
+        ref.secondary_refine_pct_change_inc = self.secondary_refined_pct_change_inc
         h = self.h
         
         dem.hyperparam.loc['initial_demand','Value'] = h['initial_demand']
@@ -242,8 +254,8 @@ class Integration():
                     self.direct_melt_fraction.loc[yr,:]*=mul
             else:
                 multiplier_array -= 1
-                ph2 = self.demand.scrap_collected.stack().unstack(1).unstack()
-                self.additional_direct_melt = self.demand.demand.loc[self.simulation_time[0]:].apply(lambda x: ph2.loc[self.simulation_time[0]]*multiplier_array[x.name-self.simulation_time[0]],axis=1)
+#                 ph2 = self.demand.scrap_collected.stack().unstack(1).unstack()
+                self.additional_direct_melt = self.demand.demand.loc[self.simulation_time[0]:].apply(lambda x: self.demand.demand.loc[self.simulation_time[0]]*multiplier_array[x.name-self.simulation_time[0]],axis=1)
                 self.additional_direct_melt = self.additional_direct_melt.groupby(level=0,axis=1).sum()
                 self.additional_direct_melt.loc[:,'Global'] = self.additional_direct_melt.sum(axis=1)
                 self.additional_direct_melt.loc[self.simulation_time[0]-1,:] = 0
@@ -254,9 +266,33 @@ class Integration():
         self.concentrate_demand.loc[i+1:] = np.nan
         self.secondary_refined_demand = self.refine.ref_stats.loc[:,idx[:,'Secondary production']].droplevel(1,axis=1)
         self.secondary_refined_demand.loc[i+1:] = np.nan
+        self.secondary_ratio = self.refine.ref_stats.loc[:,idx[:,'Secondary ratio']].droplevel(1,axis=1)
         self.refined_supply = self.concentrate_demand + self.secondary_refined_demand
+        self.primary_supply = self.concentrate_demand
+        self.primary_demand = self.refined_demand - self.secondary_refined_demand
+        
         self.concentrate_demand = self.concentrate_demand.apply(lambda x: x/self.conc_to_cathode_eff,axis=1)
         self.secondary_refined_demand = self.secondary_refined_demand.apply(lambda x: x/self.scrap_to_cathode_eff,axis=1)
+        self.additional_secondary_refined = self.direct_melt_demand.copy()
+        self.additional_secondary_refined.loc[:] = 0
+        if self.scenario_type in ['scrap demand','both']:
+            multiplier_array = np.append(
+                np.linspace(1,self.secondary_refined_pct_change_tot,self.secondary_refined_duration+1),
+                [self.secondary_refined_pct_change_tot*self.secondary_refined_pct_change_inc**j for j in np.arange(0,len(self.simulation_time)-self.secondary_refined_duration-1)])
+            if self.secondary_refined_price_response==False:
+                for yr,mul in zip(self.simulation_time,multiplier_array):
+                    self.secondary_ratio.loc[yr,:]*=mul
+                self.refine.secondary_ratio = self.secondary_ratio.copy()
+            else:
+                multiplier_array -= 1
+#                 ph2 = self.demand.scrap_collected.stack().unstack(1).unstack()
+#                 self.additional_secondary_refined = self.demand.demand.loc[self.simulation_time[0]:].apply(lambda x: ph2.loc[self.simulation_time[0]]*multiplier_array[x.name-self.simulation_time[0]],axis=1)
+                self.additional_secondary_refined = self.demand.demand.loc[self.simulation_time[0]:].apply(lambda x: self.demand.demand.loc[self.simulation_time[0]]*multiplier_array[x.name-self.simulation_time[0]],axis=1)
+                self.additional_secondary_refined = self.additional_secondary_refined.groupby(level=0,axis=1).sum()
+                self.additional_secondary_refined.loc[:,'Global'] = self.additional_secondary_refined.sum(axis=1)
+                self.additional_secondary_refined.loc[self.simulation_time[0]-1,:] = 0
+                self.additional_secondary_refined = self.additional_secondary_refined.sort_index()
+                self.refine.additional_secondary_refined = self.additional_secondary_refined.copy()
 
         # concentrate_supply,    initializing mining
         if self.h['presimulate_mining']:
@@ -270,7 +306,8 @@ class Integration():
                 if self.verbosity>1:
                     print('  ',param)
             self.mining.run()
-        self.concentrate_supply = self.mining.supply_series.copy()
+        self.concentrate_supply = self.mining.concentrate_supply_series.copy()
+        self.sxew_supply = self.mining.sxew_supply_series.copy()
         
         # scrap_supply, scrap_demand
         self.scrap_supply = self.demand.scrap_supply.copy()
@@ -330,10 +367,12 @@ class Integration():
             self.concentrate_supply.loc[self.i-2] = self.concentrate_supply[self.i-1]*self.refined_demand['Global'][self.i-2]/self.refined_demand['Global'][self.i-1]
         if self.i-2 not in self.scrap_supply.index:
             self.scrap_supply.loc[self.i-2] = self.scrap_supply.loc[self.i-1]*self.refined_demand.loc[self.i-2]/self.refined_demand.loc[self.i-1]
-        if self.h['refinery_follows_concentrate_supply']:
-            self.refine.pri_cap_growth_series = self.concentrate_supply.copy()
-        else:
-            self.refine.pri_cap_growth_series = self.refined_demand['Global'].copy()
+
+        conc_supply = self.concentrate_supply.copy()/self.concentrate_supply[self.simulation_time[0]]
+        ref_demand = self.refined_demand['Global'].copy()/self.refined_demand['Global'][self.simulation_time[0]]
+        pri_growth_series = conc_supply*self.h['refinery_capacity_fraction_increase_mining'] + ref_demand*(1-self.h['refinery_capacity_fraction_increase_mining'])
+        self.refine.pri_cap_growth_series = pri_growth_series
+        
         self.refine.sec_cap_growth_series = self.scrap_supply.copy()
         self.refine.run()
         
@@ -344,8 +383,12 @@ class Integration():
         self.mining.demand_series.loc[self.i] = self.concentrate_demand['Global'][self.i]
         self.mining.run()
         # concentrate_supply
-        self.concentrate_supply.loc[self.i] = self.mining.supply_series[self.i]
-    
+        self.concentrate_supply.loc[self.i] = self.mining.concentrate_supply_series[self.i]
+        self.sxew_supply.loc[self.i] = self.mining.sxew_supply_series[self.i]
+        
+        self.primary_supply.loc[self.i,'Global'] += self.sxew_supply.loc[self.i]
+        self.primary_supply.loc[self.i,'RoW'] += self.sxew_supply.loc[self.i]
+            
     def presimulate_mining(self):
         h = self.h.copy()
         end_yr = self.simulation_time[0]
@@ -448,9 +491,15 @@ class Integration():
         self.secondary_refined_demand.loc[i] = self.refine.ref_stats.loc[i,idx[:,'Secondary production']].droplevel(1)
         self.secondary_refined_demand[self.secondary_refined_demand<0] = 0
         self.refined_supply.loc[i] = self.concentrate_demand.loc[i] + self.secondary_refined_demand.loc[i]
+        
+        # primary supply and demand, assuming all sxew is done in RoW (this update is done in the mining module, and here we do primary supply as primary refined supply)
+        self.primary_supply.loc[i] = self.concentrate_demand.copy().loc[i]
+        self.primary_demand.loc[i] = self.refined_demand.loc[i] - self.secondary_refined_demand.loc[i]
+        
+        # correcting concentrate demand and secondary refined demand for efficiency loss
         self.concentrate_demand.loc[i] /= self.conc_to_cathode_eff
-        self.secondary_refined_demand.loc[i] /= self.scrap_to_cathode_eff
-
+        self.secondary_refined_demand.loc[i] /= self.scrap_to_cathode_eff 
+        
         # scrap_demand
         self.scrap_demand.loc[i] = self.secondary_refined_demand.loc[i]+self.direct_melt_demand.loc[i]
         
@@ -498,14 +547,17 @@ class Integration():
                                  '\n\n\tfor 22-44, an additional X should be placed at the end when 00==bo, describing the sd values'+\
                                  '\n\n\tscenario_name: '+scenario_name+\
                                  '\n\tproper format: 00_11_Xyr_X%tot_X%inc or 00_11_XyrX_X%totX_X%incX if 00=bo'
-        collection_rate_price_response=True 
-        direct_melt_price_response=True
+        collection_rate_price_response=self.hyperparam['Value']['collection_rate_price_response']
+        direct_melt_price_response=self.hyperparam['Value']['direct_melt_price_response']
         collection_rate_duration = 0
         collection_rate_pct_change_tot = 0
         collection_rate_pct_change_inc = 0
         direct_melt_duration = 0
         direct_melt_pct_change_tot = 0
         direct_melt_pct_change_inc = 0
+        secondary_refined_duration = 0
+        secondary_refined_pct_change_tot = 0
+        secondary_refined_pct_change_inc = 0
         
         if scenario_name=='':
             scenario_type = scenario_name
@@ -564,19 +616,27 @@ class Integration():
         self.scenario_type = scenario_type
         self.collection_rate_price_response = collection_rate_price_response
         self.direct_melt_price_response = direct_melt_price_response
+        self.secondary_refined_price_response = direct_melt_price_response
         self.collection_rate_duration = collection_rate_duration
         self.collection_rate_pct_change_tot = 1+collection_rate_pct_change_tot/100
         self.collection_rate_pct_change_inc = 1+collection_rate_pct_change_inc/100
         self.direct_melt_duration = direct_melt_duration
-        self.direct_melt_pct_change_tot = 1+direct_melt_pct_change_tot/100
+        self.direct_melt_pct_change_tot = 1+direct_melt_pct_change_tot*(1-self.h['Secondary refinery fraction of recycled content, Global'])/100
         self.direct_melt_pct_change_inc = 1+direct_melt_pct_change_inc/100
+        self.secondary_refined_duration = direct_melt_duration
+        self.secondary_refined_pct_change_tot = 1+direct_melt_pct_change_tot*self.h['Secondary refinery fraction of recycled content, Global']/100
+        self.secondary_refined_pct_change_inc = 1+direct_melt_pct_change_inc/100
 
         self.hyperparam.loc['scenario_type',:] = self.scenario_type, 'empty string, scrap supply, scrap demand, or both'
         self.hyperparam.loc['collection_rate_price_response',:] = self.collection_rate_price_response, 'whether or not there should be a price response for collection rate'
         self.hyperparam.loc['direct_melt_price_response',:] = self.direct_melt_price_response, 'whether there should be a price response for direct melt fraction'
+        self.hyperparam.loc['secondary_refined_price_response',:] = self.direct_melt_price_response, 'whether there should be a price response for direct melt fraction'
         self.hyperparam.loc['collection_rate_duration',:] = self.collection_rate_duration, 'length of the increase in collection rate described by collection_rate_pct_change_tot'
         self.hyperparam.loc['collection_rate_pct_change_tot',:] = self.collection_rate_pct_change_tot, 'without price response, describes the percent increase in collection rate attained at the end of the linear ramp with duration collection_rate_duration. Given as 1+%change/100'
         self.hyperparam.loc['collection_rate_pct_change_inc',:] = self.collection_rate_pct_change_inc, 'once the collection_rate_pct_change_tot is reached, the collection rate will then increase by this value per year. Given as 1+%change/100'
         self.hyperparam.loc['direct_melt_duration',:] = self.direct_melt_duration, 'length of the increase in direct melt fraction described by direct_melt_pct_change_tot'
         self.hyperparam.loc['direct_melt_pct_change_tot',:] = self.direct_melt_pct_change_tot, 'without price response, describes the percent increase in collection rate attained at the end of the linear ramp with duration direct_melt_duration. Given as 1+%change/100'
         self.hyperparam.loc['direct_melt_pct_change_inc',:] = self.direct_melt_pct_change_inc, 'once the direct_melt_pct_change_tot is reached, the direct melt fraction will then increase by this value per year. Given as 1+%change/100'
+        self.hyperparam.loc['secondary_refined_duration',:] = self.secondary_refined_duration, 'length of the increase in direct melt fraction described by direct_melt_pct_change_tot'
+        self.hyperparam.loc['secondary_refined_pct_change_tot',:] = self.secondary_refined_pct_change_tot, 'without price response, describes the percent increase in collection rate attained at the end of the linear ramp with duration direct_melt_duration. Given as 1+%change/100'
+        self.hyperparam.loc['secondary_refined_pct_change_inc',:] = self.secondary_refined_pct_change_inc, 'once the direct_melt_pct_change_tot is reached, the direct melt fraction will then increase by this value per year. Given as 1+%change/100'

@@ -28,7 +28,9 @@ def simulate_refinery_production_oneyear(year_i, tcrc_series_, sp2_series_,
                                          ref_stats, ref_hyper_param, 
                                          sec_coef=0, growth_lag=1, ref_bal = 0, 
                                          pri_CU_ref_bal_elas = 0, sec_CU_ref_bal_elas = 0,
-                                         ref_cu_pct_change = 0, ref_sr_pct_change = 0):
+                                         ref_cu_pct_change = 0, ref_sr_pct_change = 0,
+                                         simulation_time = np.arange(2019,2041), additional_secondary_refined=0,
+                                         secondary_refined_price_response=True,secondary_ratio=0):
     
     ref_stats_next=pd.Series(0, index=ref_stats.columns)
     
@@ -72,19 +74,48 @@ def simulate_refinery_production_oneyear(year_i, tcrc_series_, sp2_series_,
     pri_cap_growth=pri_cap_growth_cal(pri_growth)
     sec_cap_growth=sec_cap_growth_cal(pri_growth, sec_growth, sec_coef)
 
+    if type(additional_secondary_refined)!=int and type(secondary_ratio)!=int:
+        raise ValueError('SYSTEM NOT DESIGNED TO HANDLE additional_secondary_refined AND secondary_ratio inputs INPUTS SIMULTANEOUSLY')
+    if year_i>simulation_time[0] and type(additional_secondary_refined)!=int:
+        sec_ratio_last = (ref_stats['Secondary production'][t_lag_1]-additional_secondary_refined[t_lag_1]) / (ref_stats['Secondary capacity'][t_lag_1]*ref_stats['Secondary CU'][t_lag_1])
+    else:
+        sec_ratio_last = ref_stats['Secondary ratio'][t_lag_1]
     ref_stats_next.loc['Primary CU']=ref_stats.loc[t_lag_1, 'Primary CU']*pri_cu_growth
     ref_stats_next.loc['Secondary CU']=ref_stats.loc[t_lag_1, 'Secondary CU']*sec_cu_growth
-    ref_stats_next.loc['Secondary ratio']=ref_stats.loc[t_lag_1, 'Secondary ratio']*ratio_growth
-    ref_stats_next[ref_stats_next<0] = 0
-    ref_stats_next[ref_stats_next>1] = 1
     ref_stats_next.loc['Primary capacity']=ref_stats.loc[t_lag_1, 'Primary capacity']*pri_cap_growth
     ref_stats_next.loc['Secondary capacity']=ref_stats.loc[t_lag_1, 'Secondary capacity']*sec_cap_growth
-    ref_stats_next.loc['Primary production']=ref_stats_next.loc['Primary capacity']*ref_stats_next.loc['Primary CU']\
-    +ref_stats_next.loc['Secondary capacity']*ref_stats_next.loc['Secondary CU']*(1-ref_stats_next.loc['Secondary ratio'])
+    if secondary_refined_price_response:
+        ref_stats_next.loc['Secondary ratio']=sec_ratio_last*ratio_growth
+    elif type(secondary_ratio)!=int:
+        ref_stats_next.loc['Secondary ratio'] = secondary_ratio[year_i]
+    else:
+        raise ValueError('either secondary_refined_price_response must be True or secondary_ratio must be a series/dataframe.')
+        
+    if ref_stats_next['Primary CU']>1: ref_stats_next.loc['Primary CU']=1
+    if ref_stats_next['Secondary CU']>1: ref_stats_next.loc['Secondary CU']=1
+    if ref_stats_next['Secondary ratio']>1: ref_stats_next.loc['Secondary ratio']=1
+    if ref_stats_next['Primary CU']<0: ref_stats_next.loc['Primary CU']=0
+    if ref_stats_next['Secondary CU']<0: ref_stats_next.loc['Secondary CU']=0
+    if ref_stats_next['Secondary ratio']<0: ref_stats_next.loc['Secondary ratio']=0
+
     ref_stats_next.loc['Secondary production']=\
-    ref_stats_next.loc['Secondary capacity']*ref_stats_next.loc['Secondary CU']*ref_stats_next.loc['Secondary ratio']
+       ref_stats_next.loc['Secondary capacity']*ref_stats_next.loc['Secondary CU']*ref_stats_next.loc['Secondary ratio']
+    sec_prod_intermediate = ref_stats_next.copy()['Secondary production']
+    if year_i>simulation_time[0] and type(additional_secondary_refined)!=int:
+        ref_stats_next.loc['Secondary production'] += additional_secondary_refined[t]
+    if (ref_stats_next[['Secondary CU','Secondary capacity']]==0).any():
+        ref_stats_next.loc['Secondary ratio'] = 0
+    else:
+        ref_stats_next.loc['Secondary ratio'] = ref_stats_next['Secondary production']/ref_stats_next['Secondary CU']/ref_stats_next['Secondary capacity']
+    if ref_stats_next['Secondary ratio']>1:
+        ref_stats_next.loc['Secondary ratio'] = 1
+        if type(additional_secondary_refined)!=int:
+            ref_stats_next.loc['Secondary production'] = ref_stats_next['Secondary CU']*ref_stats_next['Secondary capacity']
+            additional_secondary_refined.loc[year_i] = ref_stats_next['Secondary production'] - sec_prod_intermediate
+    ref_stats_next.loc['Primary production']=ref_stats_next.loc['Primary capacity']*ref_stats_next.loc['Primary CU']\
+       +ref_stats_next.loc['Secondary capacity']*ref_stats_next.loc['Secondary CU']*(1-ref_stats_next.loc['Secondary ratio'])
     
-    return ref_stats_next
+    return ref_stats_next, additional_secondary_refined
 
 
 def ref_stats_init(simulation_time, ref_hyper_param):

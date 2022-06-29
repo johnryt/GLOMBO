@@ -5,7 +5,20 @@ from matplotlib import pyplot as plt
 from scipy import stats
 from integration import Integration
 from random import seed, sample, shuffle
+from demand_class import demandModel
 import os
+
+from copy import deepcopy
+
+from ax.service.ax_client import AxClient
+from ax.service.utils.instantiation import ObjectiveProperties
+
+import torch
+from botorch.test_functions.multi_objective import BraninCurrin
+branin_currin = BraninCurrin(negate=True).to(
+    dtype=torch.double, 
+    device= torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+)
 
 def create_result_df(integ):
     '''
@@ -33,7 +46,7 @@ def create_result_df(integ):
     addl_scrap = integ.additional_scrap.sum(axis=1).unstack()
     addl_scrap.loc[:,'Global'] = addl_scrap.sum(axis=1)
     for reg in reg_results.index:
-        results = pd.concat([integ.total_demand.loc[2018:,reg],integ.scrap_demand.loc[2018:,reg],integ.scrap_supply[reg],
+        results = pd.concat([integ.total_demand.loc[:,reg],integ.scrap_demand.loc[:,reg],integ.scrap_supply[reg],
                integ.concentrate_demand[reg],integ.concentrate_supply,
                integ.mining.ml.loc[:,['Production (kt)','Head grade (%)']].product(axis=1).groupby(level=0).sum()/integ.mining.ml.loc[:,'Production (kt)'].groupby(level=0).sum(),
                integ.mining.ml.loc[:,['Production (kt)','Minesite cost (USD/t)']].product(axis=1).groupby(level=0).sum()/integ.mining.ml.loc[:,'Production (kt)'].groupby(level=0).sum(),
@@ -42,14 +55,15 @@ def create_result_df(integ):
                old_new_mines['Old mine grade'],old_new_mines['New mine grade'],
                old_new_mines['Old mine cost'],old_new_mines['New mine cost'],
                old_new_mines['Old mine margin'],old_new_mines['New mine margin'],
-               integ.refined_demand.loc[2018:,reg],integ.refined_supply[reg],
-               integ.secondary_refined_demand.loc[:,reg],integ.direct_melt_demand.loc[2018:,reg],
+               integ.refined_demand.loc[:,reg],integ.refined_supply[reg],
+               integ.secondary_refined_demand.loc[:,reg],integ.direct_melt_demand.loc[:,reg],
                integ.scrap_spread[reg],integ.tcrc,integ.primary_commodity_price,
                integ.refine.ref_stats[reg]['Primary CU'], integ.refine.ref_stats[reg]['Secondary CU'],
                integ.refine.ref_stats[reg]['Secondary ratio'],
                integ.refine.ref_stats[reg]['Primary capacity'], integ.refine.ref_stats[reg]['Secondary capacity'],
                integ.refine.ref_stats[reg]['Primary production'], integ.refine.ref_stats[reg]['Secondary production'],
-               integ.additional_direct_melt[reg],addl_scrap[reg]
+               integ.additional_direct_melt[reg],addl_scrap[reg],
+               integ.sxew_supply,integ.primary_supply[reg],integ.primary_demand[reg]
               ],axis=1,
               keys=['Total demand','Scrap demand','Scrap supply',
                     'Conc. demand','Conc. supply',
@@ -64,7 +78,8 @@ def create_result_df(integ):
                     'Refinery pri. CU','Refinery sec. CU','Refinery SR',
                     'Pri. ref. capacity','Sec. ref. capacity',
                     'Pri. ref. prod.','Sec. ref. prod.',
-                    'Additional direct melt','Additional scrap'])
+                    'Additional direct melt','Additional scrap',
+                    'SX-EW supply','Primary supply','Primary demand'])
         if reg=='Global':
             collection = integ.demand.old_scrap_collected.groupby(level=0).sum()/integ.demand.eol.groupby(level=0).sum()
             old_scrap = integ.demand.old_scrap_collected.groupby(level=0).sum().sum(axis=1)
@@ -114,10 +129,62 @@ def check_equivalence(big_df, potential_append):
 
 class Sensitivity():
     '''
+    changing_base_parameters_series: can be a string referring to a 
+      commodity in case_study_data, or a series with hyperparameter
+      inputs in the same format
     
+    Methods/functions (those not listed here are utility functions):
+    - run: runs a sensitivity changing only one variable at a time,
+        using the variables in the params_to_change variable from 
+        Sensitivity initialization. Also from initialization: n_per_param
+        gives the number of scenarios to run per parameter, and param_scale
+        (from 1-param_scale to 1+param_scale) gives the multiplier for
+        the parameters included
+    - run_monte_carlo: takes in a list of sensitivity_parameters, where
+        if any of the strings in that list are in any of the hyperparameters,
+        that hyperparameter will be subject to random generation, with values
+        between 0 and 1. The demand parameters sector_specific_dematerialization_tech_growth,
+        sector_specific_price_response, region_specific_price_response, and
+        incentive_opening_probability are multiplied by smaller factors to
+        be between 0 and 0.15.
+    - historical_sim_check_demand: uses a Bayesian optimization algorithm 
+        to find the best values for the demand parameters 
+        sector_specific_dematerialization_tech_growth,
+        sector_specific_price_response, region_specific_price_response, and
+        intensity_response_to_gdp, simulating only demand using the demand
+        module. **Requires** that case_study_data.xlsx have a sheet named after
+        the commodity being input via changing_base_parameters_series (should
+        use changing_base_parameters_series=commodity string here too). This
+        sheet must also have columns [Total demand] and [Primary commodity price].
+    - check_hist_demand_convergence: plots the total demand results from
+        historical_sim_check_demand to ensure our algorithm converged correctly,
+        plotting the simulated demands, the best simulated demand, and historical
+        demand. Also plots the RMSE vs the demand parameters.
+        
+    The update_changing_base_parameters_series function could be a source of error, 
+        as it updates the model start values with historical values within
+        the Sensitivity class
+        
+    If you add more than the columns Total demand, Primary production, Primary
+        commodity price, Primary demand, and Scrap demand for the material-
+        specific sheets in case study data.xlsx, you will need to:
+        
+        1. update the param_variable_map in the complete_bayesian_trial function
+        within the Sensitivity class. You put the columns name, then the
+        string of the variable name you want to tune it to. All the variable
+        names you could want would be in the Integration class, and you can
+        see them in the functions __init__, initialize_integration, run_mining,
+        or update_integration_variables. Looking in __init__ is the closest
+        to a direct list, but it's more clear their meaning looking in the
+        other functions.
+        2. update the update_changing_base_parameters_series function within
+        the Sensitivity class with any necessary additions such that there
+        is agreement across variables and time.
+
     '''
     def __init__(self,
                  pkl_filename='integration_big_df.pkl', 
+                 case_study_data_file_path='C:/Users/ryter/Dropbox (MIT)/Group Research Folder_Olivetti/Displacement/08 Generalization/_Python/Data/case study data.xlsx',
                  changing_base_parameters_series=0, 
                  params_to_change=0, 
                  n_per_param=5, 
@@ -127,21 +194,31 @@ class Sensitivity():
                  verbosity=0,
                  param_scale=0.5,
                  scenarios=[''],
-                 OVERWRITE=False):
+                 OVERWRITE=False,
+                 random_state=220620,
+                 incentive_opening_probability_fraction_zero=0.1,
+                 dpi=50):
         '''
         
         '''
+        self.changing_base_parameters_series = changing_base_parameters_series
+        self.case_study_data_file_path = case_study_data_file_path
+        self.update_changing_base_parameters_series()
+        
         self.simulation_time = simulation_time
         self.byproduct = byproduct
         self.verbosity = verbosity
         self.param_scale = param_scale
         self.pkl_filename = pkl_filename
-        self.changing_base_parameters_series = changing_base_parameters_series
         self.params_to_change = params_to_change
         self.n_per_param = n_per_param
         self.notes = notes
         self.scenarios = scenarios
         self.overwrite = OVERWRITE
+        self.random_state = random_state
+        self.incentive_opening_probability_fraction_zero = incentive_opening_probability_fraction_zero
+        self.dpi = dpi
+        
         if self.overwrite: print('WARNING, YOU ARE OVERWRITING AN EXISTING FILE')
         
     def initialize_big_df(self):
@@ -164,6 +241,50 @@ class Sensitivity():
         self.big_df = big_df.copy()
 
     def update_changing_base_parameters_series(self):
+        changing_base_parameters_series = self.changing_base_parameters_series
+        if type(changing_base_parameters_series)==str:
+            self.material = changing_base_parameters_series
+            input_file = pd.read_excel(self.case_study_data_file_path,index_col=0)
+            commodity_inputs = input_file[changing_base_parameters_series].dropna()
+            commodity_inputs.loc['incentive_require_tune_years'] = 10
+            commodity_inputs.loc['presimulate_n_years'] = 10
+            commodity_inputs.loc['end_calibrate_years'] = 10
+            commodity_inputs.loc['start_calibrate_years'] = 5
+
+            history_file = pd.read_excel(self.case_study_data_file_path,index_col=0,sheet_name=changing_base_parameters_series)
+            historical_data = history_file.loc[2001:]
+            original_demand = commodity_inputs['initial_demand']
+            original_primary_production = commodity_inputs['primary_production']
+            if 'Total demand' in historical_data.columns:
+                commodity_inputs.loc['initial_demand'] = historical_data['Total demand'][2001]
+            elif 'Primary production' in historical_data.columns:
+                commodity_inputs.loc['initial_demand'] = historical_data['Primary production'][2001]*original_demand/original_primary_production
+                historical_data.loc[:,'Total demand'] = historical_data['Primary production']*original_demand/historical_data['Primary production'][2019]
+            else:
+                raise ValueError('Need either [Total demand] or [Primary production] in historical data columns (ignore the brackets, but case sensitive)')
+                
+            if 'Scrap demand' in historical_data.columns:
+                commodity_inputs.loc['Recycling input rate, Global'] = historical_data['Scrap demand'][2001]/historical_data['Total demand'][2001]
+                commodity_inputs.loc['Recycling input rate, China'] = historical_data['Scrap demand'][2001]/historical_data['Total demand'][2001]
+            
+            if 'Primary production' in historical_data.columns:
+                commodity_inputs.loc['primary_production'] = historical_data['Primary production'][2001]
+            else:
+                commodity_inputs.loc['primary_production'] *= commodity_inputs['initial_demand']/original_demand
+                
+            if 'Primary commodity price' in historical_data.columns:
+                commodity_inputs.loc['primary_commodity_price'] = historical_data['Primary commodity price'][2001]            
+            if 'Scrap demand' in historical_data.columns and 'Primary production' in historical_data.columns:
+                commodity_inputs.loc['Total production, Global'] = historical_data['Primary production'][2001]+historical_data['Scrap demand'][2001]
+            elif 'Primary production' in historical_data.columns:
+                commodity_inputs.loc['Total production, Global'] = historical_data['Primary production'][2001]*original_demand/original_primary_production
+            else:
+                commodity_inputs.loc['Total production, Global'] = commodity_inputs['initial_demand']*original_demand/commodity_inputs['Total production, Global']
+            self.historical_data = historical_data.copy()
+            self.changing_base_parameters_series = commodity_inputs.copy()
+        elif not hasattr(self,'material'):
+            self.material = ''
+            print('265 what')
         cbps = self.changing_base_parameters_series
         if type(cbps)==pd.core.frame.DataFrame:
             cbps = self.changing_base_parameters_series.copy()
@@ -232,15 +353,42 @@ class Sensitivity():
                 self.check_run_append(mod)
                 self.mod = mod
     
-    def run_monte_carlo(self, n_scenarios, random_state=220530):
+    def run_monte_carlo(self, n_scenarios, random_state=220530,
+                        sensitivity_parameters=['elas','response','growth','improvements','refinery_capacity_fraction_increase_mining','incentive_opening_probability'],
+                        bayesian_tune=False,n_params=1):
+        '''
+        n_scenarios: int, number of scenarios to run in total
+        random_state: int, hold constant to keep same set of generated values
+          each time this function is run
+        senstivity_parameters: list, includes ['elas','response','growth','improvements']
+          by default to capture the different elasticity values, mine improvements, and
+          demand responses to price. The parameters you are targeting must already be in
+          the main mod.hyperparam dataframe, which must be updated within that function;
+          cannot be accessed here. collection_rate_price_response, direct_melt_price_response,
+          and secondary_refined_price_response are excluded from the parameters to change
+          regardless of the inputs here, since they are True/False values and are determined
+          by the scenario input given when the Senstivity class is initialized. 
+        bayesian_tune: bool, whether to use the Bayesian optimization over historical data
+          to try to select the next sentivitity parameter values
+        n_params: int, number of columns from self.historical_data to use in the objective
+          function for tuning. >1 means multi-objective optimization, and depends on the
+          order of the columns, since it grabs the leftmost n_params columns.
+        '''
         self.update_changing_base_parameters_series()
         self.initialize_big_df()
         mod = Integration(simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct)
-        scenario_params_dont_change = ['collection_rate_price_response','direct_melt_price_response']
-        params_to_change = [i for i in mod.hyperparam.dropna(how='all').index if ('elas' in i or 'response' in i or 'growth' in i or 'improvements' in i) and i not in scenario_params_dont_change]
+        scenario_params_dont_change = ['collection_rate_price_response','direct_melt_price_response','secondary_refined_price_response']
+#         params_to_change = [i for i in mod.hyperparam.dropna(how='all').index if ('elas' in i or 'response' in i or 'growth' in i or 'improvements' in i) and i not in scenario_params_dont_change]
+        params_to_change = [i for i in mod.hyperparam.dropna(how='all').index if np.any([j in i for j in sensitivity_parameters]) and i not in scenario_params_dont_change]
+        self.sensitivity_param = params_to_change
+        if self.verbosity>-1:
+            print(params_to_change)
         # do something with incentive_opening_probability?
         
-        for n in np.arange(0,n_scenarios):
+        if bayesian_tune:
+            self.setup_bayesian_tune(n_params=n_params)
+            
+        for n in np.arange(1,n_scenarios):
             if self.verbosity>-1: 
                 print(f'Scenario {n+1}/{n_scenarios}')
             for enum,scenario_name in enumerate(self.scenarios):
@@ -262,60 +410,337 @@ class Sensitivity():
                 rs = random_state+n
                 values = stats.uniform.rvs(loc=0,scale=1,size=len(params_to_change),random_state=rs)
                 new_param_series = pd.Series(values, params_to_change)
+                if bayesian_tune:
+                    parameters, trial_index = self.ax_client.get_next_trial()
+#                     trial_index = n+enum
+                    new_param_series = pd.Series(parameters,params_to_change)
                 if self.verbosity>0:
                     print(params_to_change)
                 if 'sector_specific_dematerialization_tech_growth' in params_to_change:
                     new_param_series.loc['sector_specific_dematerialization_tech_growth'] *= 0.15
                 if 'sector_specific_price_response' in params_to_change:
                     new_param_series.loc['sector_specific_price_response'] *= 0.15
-                if 'region_specific_price_response':
+                if 'region_specific_price_response' in params_to_change:
                     new_param_series.loc['region_specific_price_response'] *= 0.15
+                if 'incentive_opening_probability' in params_to_change:
+                    new_param_series.loc['incentive_opening_probability']*=0.1/(1-self.incentive_opening_probability_fraction_zero)
+                    if new_param_series['incentive_opening_probability']>0.1:
+                        new_param_series.loc['incentive_opening_probability'] = 0 
                 # ^ these values should be small, since small changes make big changes
+                
                 for param in params_to_change:
                     if type(mod.hyperparam['Value'][param])!=bool:
                         mod.hyperparam.loc[param,'Value'] = new_param_series[param]*np.sign(mod.hyperparam.loc[param,'Value'])
                     else:
                         mod.hyperparam.loc[param,'Value'] = new_param_series[param]
                 self.check_run_append(mod)
+                if bayesian_tune:
+                    self.complete_bayesian_trial(mod=mod, trial_index=trial_index, n_params=n_params,
+                                                new_param_series=new_param_series, scenario_number=n+enum)
+            
+        if bayesian_tune:
+            self.save_bayesian_results(n_params=n_params)
+            
+    def setup_bayesian_tune(self, n_params=1):
+        if n_params==1:
+            self.ax_client = AxClient(random_seed=self.random_state)
+            experiment_param=[{'name':i,'type':'range','bounds':[0.001,1],'value_type':'float'} for i in self.sensitivity_param]
+            self.ax_client.create_experiment(
+                name="minimize_RMSE_with_real",
+                parameters=experiment_param,
+                objective_name="RMSE",
+                minimize=True, # default False
+            )
+        elif n_params>1:
+            self.ax_client = AxClient(random_seed=self.random_state)
+            experiment_param=[{'name':i,'type':'range','bounds':[0.001,1],'value_type':'float'} for i in self.sensitivity_param]
+            n_params = min([self.historical_data.shape[1],n_params])
+            objective_parameters = self.historical_data.columns[:n_params]
+            self.objective_parameters = objective_parameters
+#             objective_param = dict([[c, ObjectiveProperties(minimize=True, threshold=branin_currin.ref_point[i])] for i,c in enumerate(objective_parameters)])
+            objective_param = dict([[c, ObjectiveProperties(minimize=True)] for i,c in enumerate(objective_parameters)])
+            self.ax_client.create_experiment(
+                name="minimize_RMSE_with_real",
+                parameters=experiment_param,
+                objectives=objective_param
+            )
+        self.rmse_df = pd.DataFrame()
+        
+    def complete_bayesian_trial(self, mod, trial_index, n_params=1, new_param_series=pd.Series(dtype=float), scenario_number=0):
+        if n_params==1:
+            rmse = ((mod.total_demand['Global']-self.historical_data['Total demand'])**2).loc[self.simulation_time].astype(float).sum()**0.5
+            new_param_series.loc['RMSE'] = rmse
+            rmse_dict=(rmse,0)
+        elif n_params>1:
+            param_variable_map = {'Total demand':'total_demand','Primary demand':'primary_demand',
+             'Primary commodity price':'primary_commodity_price','Primary supply':'primary_supply',
+             'Scrap demand':'scrap_demand'}
+            rmse_list = []
+            for param in self.objective_parameters:
+                historical = self.historical_data[param]
+                simulated = getattr(mod,param_variable_map[param])
+                if hasattr(simulated,'columns') and 'Global' in simulated.columns:
+                    simulated = simulated['Global']
+                rmse = ((simulated-historical)**2).loc[self.simulation_time].astype(float).sum()**0.5
+                rmse_list += [(rmse,0)]
+                new_param_series.loc[param+' RMSE'] = rmse
+            rmse_dict = dict(zip(self.objective_parameters,rmse_list))
+        
+        new_param_series = pd.concat([new_param_series],keys=[scenario_number])
+        self.rmse_df = pd.concat([self.rmse_df,new_param_series])
+        self.ax_client.complete_trial(trial_index=trial_index, raw_data=rmse_dict)
     
-    def run_monte_carlo_across_base(self, n_scenarios):
+    def save_bayesian_results(self,n_params=1):
+        rmse_df = self.rmse_df.copy()
+        rmse_df.index = pd.MultiIndex.from_tuples(rmse_df.index)
+        rmse_df = rmse_df[0]
+        rmse_df = rmse_df.unstack()
+        self.rmse_df = rmse_df.copy()
+            
+        if n_params==1:
+            best_params = pd.DataFrame(rmse_df.loc[rmse_df['RMSE'].idxmin()].drop('RMSE'))
+            best_params = best_params.rename(columns={best_params.columns[0]:self.material})
+#             best_parameters, values = self.ax_client.get_best_parameters()
+        elif n_params>1:
+            best_params = self.ax_client.get_pareto_optimal_parameters()
+            best_params = pd.DataFrame(best_params)
+            
+        path=''
+        if os.path.exists('data/updated_commodity_inputs.pkl'):
+            path = 'data/updated_commodity_inputs.pkl'
+        elif os.path.exists('updated_commodity_inputs.pkl'):
+            path = 'updated_commodity_inputs.pkl'
+            
+        if path!='':
+            self.updated_commodity_inputs = pd.read_pickle(path)
+            if n_params==1:
+                for i in best_params.index:
+                    self.updated_commodity_inputs.loc[i,self.material] = best_params[self.material][i]
+            elif n_params>1:
+                self.updated_commodity_inputs.loc['pareto_'+str(n_params)+'p',self.material] = [best_params]
+            self.updated_commodity_inputs.to_pickle(path)
+                
+        else:
+            self.updated_commodity_inputs = best_params.copy()
+            if os.path.exists('data'):
+                self.updated_commodity_inputs.to_pickle('data/updated_commodity_inputs_all.pkl')
+            else:
+                self.updated_commodity_inputs.to_pickle('updated_commodity_inputs_all.pkl')
+
+    def historical_sim_check_demand(self, n_scenarios):
+        '''
+        Varies the parameters for demand (sector_specific_dematerialization_tech_growth,
+        sector_specific_price_response, region_specific_price_response, and
+        intensity_response_to_gdp) to minimize the RMSE between simulated
+        demand and historical. 
+        
+        Uses Ax Adaptive Experimentation Platform Bayesian Optimization to find these
+        parameters: https://ax.dev/tutorials/gpei_hartmann_service.html,
+        install: https://ax.dev/, pip3 install ax-platform
+        
+        Adds/updates a dataframe self.updated_commodity_inputs that contains all demand
+        updates for all commodities, which is saved in updated_commodity_inputs.pkl
+        '''      
+        self.pkl_filename = self.pkl_filename.split('.pkl')[0]+'_DEM.pkl'
+        self.notes += ' check demand'
+        if os.path.exists(self.pkl_filename) and not self.overwrite:
+            big_df = pd.read_pickle(self.pkl_filename)
+        else:
+            big_df = pd.DataFrame([],['version','notes','hyperparam','results'],[])
+            big_df.to_pickle(self.pkl_filename)
+        if 'Primary commodity price' not in self.historical_data.columns:
+            raise ValueError('require a price input in primary commodity price for historical_sim_check_demand to work properly')
         self.update_changing_base_parameters_series()
-        self.initialize_big_df()
-        mod = Integration(simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct)
-        params_to_change = [i for i in mod.hyperparam.dropna().index if 'elas' in i]
+
+        mod = demandModel(verbosity=0,simulation_time=self.simulation_time)
+        params_to_change = ['sector_specific_dematerialization_tech_growth','sector_specific_price_response','region_specific_price_response','intensity_response_to_gdp']
+        print(params_to_change)
+        
+        ax_client = AxClient(random_seed=self.random_state)
+        ax_client.create_experiment(
+            name="minimize_RMSE_with_real",
+            parameters=[
+                {
+                    "name": "sector_specific_dematerialization_tech_growth",
+                    "type": "range",
+                    "bounds": [0.001, 0.08],
+                    "value_type": "float",  # Optional, defaults to inference from type of "bounds".
+                    "log_scale": False,  # Optional, defaults to False.
+                },
+                {
+                    "name": "sector_specific_price_response",
+                    "type": "range",
+                    "value_type": "float", 
+                    "bounds": [0.001, 0.3],
+                },
+                {
+                    "name": "region_specific_price_response",
+                    "type": "range",
+                    "value_type": "float", 
+                    "bounds": [0.001, 0.3],
+                },
+                {
+                    "name": "intensity_response_to_gdp",
+                    "type": "range",
+                    "value_type": "float",
+                    "bounds": [0.001, 1.5],
+                },
+            ],
+            objective_name="RMSE",
+            minimize=True, # default False
+        )
+        self.rmse_df = pd.DataFrame()
         for n in np.arange(0,n_scenarios):
             if self.verbosity>-1: 
                 print(f'Scenario {n+1}/{n_scenarios}')
-            mod = Integration(simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct)
+            mod = demandModel(verbosity=0,simulation_time=self.simulation_time)
+            mod.commodity_price_series = self.historical_data['Primary commodity price']
+            mod.commodity_price_series = pd.concat([pd.Series(mod.commodity_price_series.iloc[0],np.arange(1900,self.simulation_time[0])),
+                                                    mod.commodity_price_series])
+            mod.version = '220620'
             
             ###### CHANGING BASE PARAMETERS ######
             changing_base_parameters_series = self.changing_base_parameters_series.copy()
             for base in np.intersect1d(mod.hyperparam.index, changing_base_parameters_series.index):
                 mod.hyperparam.loc[base,'Value'] = changing_base_parameters_series[base]
-                if n==0 and self.verbosity>0:
+                if n==0 and self.verbosity>-1:
                     print(base,changing_base_parameters_series[base])
             self.hyperparam_copy = mod.hyperparam.copy()
             
-            ###### UPDATING MONTE CARLO PARAMETERS ######
-            rs = 220530+n
-            values = stats.uniform.rvs(loc=0,scale=1,size=len(params_to_change),random_state=rs)
-            new_param_series = pd.Series(values, params_to_change)
-            new_param_series
+            ###### UPDATING PARAMETERS ######
+            parameters, trial_index = ax_client.get_next_trial()
+            new_param_series = pd.Series(parameters,params_to_change)
             mod.hyperparam.loc[params_to_change,'Value'] = new_param_series*np.sign(mod.hyperparam.loc[params_to_change,'Value'])
             self.check_run_append(mod)
+            rmse = ((mod.demand.sum(axis=1)-self.historical_data['Total demand'])**2).loc[self.simulation_time].astype(float).sum()**0.5
+            new_param_series.loc['RMSE'] = rmse
+            new_param_series = pd.concat([new_param_series],keys=[n])
+            self.rmse_df = pd.concat([self.rmse_df,new_param_series])
+            
+            ax_client.complete_trial(trial_index=trial_index, raw_data=rmse)
+        
+        rmse_df = self.rmse_df.copy()
+        rmse_df.index = pd.MultiIndex.from_tuples(rmse_df.index)
+        rmse_df = rmse_df[0]
+        rmse_df = rmse_df.unstack()
+        self.rmse_df = rmse_df.copy()
+        best_params = pd.DataFrame(rmse_df.loc[rmse_df.where(rmse_df!=0).dropna()['RMSE'].idxmin()].drop('RMSE'))
+        best_params = best_params.rename(columns={best_params.columns[0]:self.material})
+        if os.path.exists('data/updated_commodity_inputs.pkl'):
+            self.updated_commodity_inputs = pd.read_pickle('data/updated_commodity_inputs.pkl')
+            self.updated_commodity_inputs.loc[:,self.material] = best_params[self.material]
+            self.updated_commodity_inputs.to_pickle('data/updated_commodity_inputs.pkl')
+        elif os.path.exists('updated_commodity_inputs.pkl'):
+            self.updated_commodity_inputs = pd.read_pickle('updated_commodity_inputs.pkl')
+            self.updated_commodity_inputs.loc[:,self.material] = best_params[self.material]
+            self.updated_commodity_inputs.to_pickle('updated_commodity_inputs.pkl')
+        else:
+            self.updated_commodity_inputs = best_params.copy()
+            if os.path.exists('data'):
+                self.updated_commodity_inputs.to_pickle('data/updated_commodity_inputs.pkl')
+            else:
+                self.updated_commodity_inputs.to_pickle('updated_commodity_inputs.pkl')
+        for i in best_params.index:
+            self.changing_base_parameters_series.loc[i] = best_params[self.material][i]
+        self.notes = self.notes.split(' check demand')[0]
+        self.pkl_filename = self.pkl_filename.split('_DEM')[0]+'.pkl'
+    
+    def check_hist_demand_convergence(self):
+        historical_data = self.historical_data.copy()
+        big_df = pd.read_pickle(self.pkl_filename.split('.pkl')[0]+'_DEM.pkl')
+        ind = big_df.loc['results'].dropna().index
+        res = pd.concat([big_df.loc['results',i] for i in ind],keys=ind)
+        tot_demand = res['Total demand'].unstack(0).loc[2001:2019]
+        # below: calculates RMSE (root mean squared error) for each column and idxmin gets the index corresponding to the minimum RMSE
+        best_demand = tot_demand[(tot_demand.astype(float).apply(lambda x: x-historical_data['Total demand'])**2).sum().astype(float).idxmin()]
+        fig,ax = easy_subplots(3,dpi=self.dpi)
+        for i,a in enumerate(ax[:2]):
+            if i==0:
+                tot_demand.plot(linewidth=1,alpha=0.3,legend=False,ax=a)
+            historical_data['Total demand'].plot(ax=a,label='Historical',color='k',linewidth=4)
+            best_demand.plot(ax=a,label='Best simulated',color='blue',linewidth=4)
+            if i==1:
+                a.legend()
+            a.set(title='Total demand over time',xlabel='Year',ylabel='Total demand (kt)')
+        do_a_regress(best_demand.astype(float),historical_data['Total demand'].astype(float),ax=ax[2],xlabel='Simulated',ylabel='Historical')
+        ax[-1].set(title='Historical regressed on simulated')
+        plt.suptitle('Total demand, varying demand parameters (sensitivity historical_sim_check_demand result)',fontweight='bold')
+        fig.tight_layout()
+        
+        hyps=['sector_specific_dematerialization_tech_growth','sector_specific_price_response','region_specific_price_response','intensity_response_to_gdp']
+        hyper = pd.concat([big_df.loc['hyperparam'].dropna().loc[i].loc[hyps,'Value'] for i in ind],keys=ind,axis=1)
+        hyper.loc['RMSE'] = (tot_demand.astype(float).apply(lambda x: x-historical_data['Total demand'])**2).sum().astype(float)**0.5
+        fig,ax=easy_subplots(4,dpi=self.dpi)
+        for i,a in zip([i for i in hyper.index if i!='RMSE'],ax):
+            a.scatter(hyper.loc[i],hyper.loc['RMSE'])
+            a.set(title=i,ylabel='RMSE (kt)',xlabel='Elasticity value')
+        plt.suptitle('Checking correlation betwen RMSE and parameter value (sensitivity historical_sim_check_demand_result)',fontweight='bold')
+        
+    def run_historical_monte_carlo(self, n_scenarios, random_state=220621,
+                                   sensitivity_parameters=['elas','incentive_opening_probability','improvements','refinery_capacity_fraction_increase_mining'],
+                                   bayesian_tune=False,n_params=2):
+        if os.path.exists('data/updated_commodity_inputs.pkl'):
+            self.updated_commodity_inputs = pd.read_pickle('data/updated_commodity_inputs.pkl')
+            if self.verbosity>-1: print('updated_commodity_inputs source: data/updated_commodity_inputs.pkl')
+        elif os.path.exists('updated_commodity_inputs.pkl'):
+            self.updated_commodity_inputs = pd.read_pickle('updated_commodity_inputs.pkl')
+            if self.verbosity>-1: print('updated_commodity_inputs source: updated_commodity_inputs.pkl')
+        elif hasattr(self,'updated_commodity_inputs'):
+            pass
+        else:
+            raise ValueError('updated_commodity_inputs.pkl does not exist in the expected locations (in this directory, in data folder, as attribute of Sensitivity)')
+        
+        if hasattr(self,'material') and self.material!='':
+            best_params = self.updated_commodity_inputs[self.material].copy()    
+        else:
+            raise ValueError('need to use a string input to changing_base_parameter_series in Sensitivity initialization to run this method')
+        
+        demand_params = ['sector_specific_dematerialization_tech_growth','sector_specific_price_response','region_specific_price_response','intensity_response_to_gdp']
+        for i in demand_params:
+            self.changing_base_parameters_series.loc[i] = best_params[i]
+        
+        self.run_monte_carlo(n_scenarios=n_scenarios,
+                             random_state=random_state,
+                             sensitivity_parameters=sensitivity_parameters,
+                             bayesian_tune=bayesian_tune,
+                             n_params=n_params)
+        
+    def create_potential_append(self,mod,big_df,notes,reg_results,initialize=False):            
+        new_col_name=0 if len(big_df.columns)==0 else max(big_df.columns)+1
+        if type(mod)==Integration:
+            if initialize:
+                mining = pd.DataFrame([],[],['hyperparam'])
+                refine = pd.DataFrame([],[],['hyperparam'])
+                demand = pd.DataFrame([],[],['hyperparam'])
+            else:
+                mining = deepcopy([mod.mining])[0]
+                refine = deepcopy([mod.refine])[0]
+                demand = deepcopy([mod.demand])[0]
+            potential_append = pd.DataFrame(np.array([mod.version, notes, mod.hyperparam, mining.hyperparam, 
+                                refine.hyperparam, demand.hyperparam, reg_results],dtype=object)
+                                             ,index=[
+                                    'version','notes','hyperparam','mining.hyperparam','refine.hyperparam','demand.hyperparam','results'
+                                ],columns=[new_col_name])
+        elif type(mod)==demandModel:
+            potential_append = pd.DataFrame(np.array([mod.version, notes, mod.hyperparam, reg_results],dtype=object)
+                                         ,index=[
+                                'version','notes','hyperparam','results'
+                            ],columns=[new_col_name])
+        return potential_append
     
     def check_run_append(self, mod):
         big_df = pd.read_pickle(self.pkl_filename)
-        potential_append = pd.DataFrame(np.array([mod.version, self.notes, mod.hyperparam, [], 
-                            [], [], []],dtype=object)
-                                         ,index=[
-                                'version','notes','hyperparam','mining.hyperparam','refine.hyperparam','demand.hyperparam','results'
-                            ],columns=[max(big_df.columns)+1])
-        if check_equivalence(big_df, potential_append)[0]:
+        potential_append = self.create_potential_append(mod=mod,big_df=big_df,notes=self.notes,reg_results=[],initialize=True)
+        if type(mod)==demandModel or check_equivalence(big_df, potential_append)[0]:
             if self.verbosity>-1:
                 print('\tScenario does not already exist, running...')
             self.mod = mod
-            mod.run()
+            if type(mod)==Integration:
+                mod.run()
+            elif type(mod)==demandModel:
+                for i in mod.simulation_time:
+                    mod.i = i
+                    mod.run()
 
             if hasattr(self,'val'):
                 notes = self.notes+ f', {i}={self.val}'
@@ -328,12 +753,10 @@ class Sensitivity():
                 for zz in z:
                     notes += ', {}={}'.format(zz,mod.hyperparam['Value'][zz])
 
-            reg_results = create_result_df(mod)
-            potential_append = pd.DataFrame(np.array([mod.version, notes, mod.hyperparam, mod.mining.hyperparam, 
-                                mod.refine.hyperparam, mod.demand.hyperparam, reg_results],dtype=object)
-                                             ,index=[
-                                    'version','notes','hyperparam','mining.hyperparam','refine.hyperparam','demand.hyperparam','results'
-                                ],columns=[max(big_df.columns)+1])
+            if type(mod)==Integration: reg_results = create_result_df(mod)
+            elif type(mod) == demandModel: reg_results = pd.concat([mod.demand.sum(axis=1),mod.commodity_price_series],axis=1,keys=['Total demand','Primary commodity price'])
+            potential_append = self.create_potential_append(mod=mod,big_df=big_df,notes=notes,reg_results=reg_results,initialize=False)
+            
             big_df = pd.concat([big_df,potential_append],axis=1)
             big_df.to_pickle(self.pkl_filename)
             if self.verbosity>-1:

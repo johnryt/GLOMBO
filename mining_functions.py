@@ -4,6 +4,12 @@ import numpy as np
 import pandas as pd
 idx = pd.IndexSlice
 
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.neighbors import KNeighborsClassifier
+
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.neighbors import KNeighborsClassifier
+
 def run_mine_ml_model(model, all_inc_mines, to_predict, verbosity=0, accuracy=False):
     '''
     takes model function name in, e.g. KNeightborsClassifier

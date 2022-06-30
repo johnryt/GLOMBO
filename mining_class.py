@@ -1477,7 +1477,9 @@ class miningModel():
             closing_mines = [i for i in closing_mines if i not in govt_mines or ml_last.loc[i,'Reserves (kt)']<ml_last.loc[i,'Ore treated (kt)']]
 
             if i>simulation_time[0]:
-                ml_yr.loc[~ml_yr.index.isin(closing_mines+opening_mines+list(end_ramp_up)),'Capacity utilization'] = self.calculate_cu(ml_last['Capacity utilization'],ml_last['Total cash margin (USD/t)'])
+                unio = np.union1d(closing_mines,opening_mines)
+                unio = np.union1d(unio,list(end_ramp_up))
+                ml_yr.loc[~ml_yr.index.isin(unio),'Capacity utilization'] = self.calculate_cu(ml_last['Capacity utilization'],ml_last['Total cash margin (USD/t)'])
             ml_yr.loc[closing_mines,'Capacity utilization'] = h['Value']['ramp_down_cu']
             ml_yr.loc[:,'Ore treated (kt)'] = ml_yr['Capacity utilization']*ml_yr['Capacity (kt)']
             ml_yr.loc[ml_yr['Initial ore treated (kt)']==0,'Initial ore treated (kt)'] = ml_yr['Ore treated (kt)']
@@ -2000,7 +2002,7 @@ class miningModel():
             sxew_fraction = self.sxew_fraction_series[i]
             if self.sxew_fraction_series[self.simulation_time[0]]<=0.1 and (self.sxew_fraction_series>self.sxew_fraction_series[self.simulation_time[0]]).any():
                 print('WARNING: small SX-EW fraction coupled with increasing SX-EW fraction may lead to drawing from a very small incentive pool. If SX-EW starts at zero and increases, it will produce an error.')
-            n = int(resources_contained/incentive_mines['Production (kt)'].sum()*incentive_mines.shape[0]*10)
+            n = int(resources_contained/incentive_mines['Production (kt)'].sum()*incentive_mines.shape[0]*2)
             n = 1 if n<1 else n
             incentive_mines = incentive_mines.sample(n=n,replace=True,random_state=self.rs).reset_index(drop=True)
             sxew = incentive_mines.loc[incentive_mines['Payable percent (%)']==100]
@@ -2074,10 +2076,11 @@ class miningModel():
         mines_to_open = self.inc.mines_to_open.copy().reset_index(drop=True)
         mines_to_open = pd.concat([mines_to_open],keys=[self.i])
 #         mines_to_open = self.inc.opening_sim.loc[idx[self.i,mines_to_open.index],:]
-        mines_to_open = mines_to_open.rename(
-                    dict(zip(mines_to_open.index.get_level_values(1),
-                             np.arange(self.i*1e4,
-                                       self.i*1e4+mines_to_open.shape[0]))),level=1)
+        if mines_to_open.shape[0]>0:
+            mines_to_open = mines_to_open.rename(
+                        dict(zip(mines_to_open.index.get_level_values(1),
+                                np.arange(int(self.ml.index.get_level_values(1).max())+1,
+                                          int(self.ml.index.get_level_values(1).max())+1+mines_to_open.shape[0]))),level=1)
 #         mines_to_open = mines_to_open.rename(
 #                     dict(zip(mines_to_open.index.get_level_values(1),
 #                              np.arange(self.ml.index.get_level_values(1).max()+self.i*1e4,

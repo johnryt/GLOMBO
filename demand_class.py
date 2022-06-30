@@ -98,14 +98,14 @@ class demandModel():
         self.hyperparam = hyperparameters.copy()
         
     def load_demand_data(self):
-        file = 'data/Demand prediction data-copper.xlsx'
+        file = 'generalization/data/Demand prediction data-copper.xlsx'
         with pd.ExcelFile(file) as xl:
             self.volumes = pd.read_excel(xl, sheet_name='All sectors', header=[0,1], index_col=0).sort_index().sort_index(axis=1).stack(0).unstack()
             self.gdp_growth = pd.read_excel(xl, sheet_name='GDP growth', header=[0], index_col=0, usecols='A:F').sort_index().sort_index(axis=1).dropna()
             self.intensities = pd.read_excel(xl, sheet_name='Intensity', header=[0,1], index_col=0).sort_index().sort_index(axis=1).stack(0).unstack()
-        self.alt_demand = pd.read_excel('data/End use combined data-copper.xlsx',sheet_name='Combined',index_col=0)
-        intensity_parameters_cu = pd.read_excel('data/elasticity estimates-copper.xlsx', sheet_name='S+R S intercept only', header=[0], index_col=0).sort_index(axis=1)
-        self.intensity_parameters_al = pd.read_excel('data/baseline_scenario_aluminum.xlsx', sheet_name='intensity_parameters', header=[0,1], index_col=0).sort_index().sort_index(axis=1)
+        self.alt_demand = pd.read_excel('generalization/data/End use combined data-copper.xlsx',sheet_name='Combined',index_col=0)
+        intensity_parameters_cu = pd.read_excel('generalization/data/elasticity estimates-copper.xlsx', sheet_name='S+R S intercept only', header=[0], index_col=0).sort_index(axis=1)
+        self.intensity_parameters_al = pd.read_excel('generalization/data/baseline_scenario_aluminum.xlsx', sheet_name='intensity_parameters', header=[0,1], index_col=0).sort_index().sort_index(axis=1)
         intensity_parameters_cu_original = intensity_parameters_cu.copy()
         self.intensity_parameters = intensity_parameters_cu.copy()
 

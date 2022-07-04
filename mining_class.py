@@ -1729,7 +1729,7 @@ class miningModel():
         capacity = ml_yr['Capacity (kt)']
         initial_grade = ml_yr['Initial head grade (%)']
         initial_ore_treated = ml_yr['Initial ore treated (kt)']
-        initial_price = price_df.apply(lambda x: x[x.notna().idxmax()])
+        initial_price = price_df.astype(float).apply(lambda x: x[x.notna().idxmax()])
         self.initial_price = initial_price.copy() # can remove
         oge = ml_yr['OGE']
         
@@ -1988,6 +1988,8 @@ class miningModel():
             self.resources_contained_series.loc[i] *= (self.primary_price_series[i-lag]/self.primary_price_series[i-lag-1])**h['Value']['resources_contained_elas_primary_price']
             if self.byproduct:
                 self.resources_contained_series.loc[i] *= (self.byproduct_price_series[i-lag]/self.byproduct_price_series[i-lag-1])**h['Value']['resources_contained_elas_byproduct_price']
+        max_res = self.demand_series[self.simulation_time[0]]*h['Value']['annual_reserves_ratio_with_initial_production']*100
+        self.resources_contained_series.loc[self.resources_contained_series>max_res] = max_res
         self.reserves_ratio_with_demand_series = self.resources_contained_series/self.demand_series
         self.inc = inc
 
@@ -2194,6 +2196,8 @@ class miningModel():
                         frac = (self.subsample_series/self.initial_subsample_series).loc[self.start_frac:self.end_calibrate].mean()
                         if frac==0 and self.start_frac==simulation_time[0]:
                             raise ValueError('frac==0, mines are not sufficiently viable to run this scenario. Try changing ore grade distribution?')
+                        elif self.start_frac<2000:
+                            raise ValueError('fraction is not working correctly')
                 else:
                     frac = h['Value']['incentive_opening_probability']
                 self.frac = frac

@@ -63,7 +63,7 @@ def create_result_df(integ):
                integ.refine.ref_stats[reg]['Secondary ratio'],
                integ.refine.ref_stats[reg]['Primary capacity'], integ.refine.ref_stats[reg]['Secondary capacity'],
                integ.refine.ref_stats[reg]['Primary production'], integ.refine.ref_stats[reg]['Secondary production'],
-               integ.additional_direct_melt[reg],addl_scrap[reg],
+               integ.additional_direct_melt[reg],integ.additional_secondary_refined[reg],addl_scrap[reg],
                integ.sxew_supply,integ.primary_supply[reg],integ.primary_demand[reg]
               ],axis=1,
               keys=['Total demand','Scrap demand','Scrap supply',
@@ -79,7 +79,7 @@ def create_result_df(integ):
                     'Refinery pri. CU','Refinery sec. CU','Refinery SR',
                     'Pri. ref. capacity','Sec. ref. capacity',
                     'Pri. ref. prod.','Sec. ref. prod.',
-                    'Additional direct melt','Additional scrap',
+                    'Additional direct melt','Additional secondary refined','Additional scrap',
                     'SX-EW supply','Primary supply','Primary demand'])
         if reg=='Global':
             collection = integ.demand.old_scrap_collected.groupby(level=0).sum()/integ.demand.eol.groupby(level=0).sum()
@@ -182,7 +182,13 @@ class Sensitivity():
         2. update the update_changing_base_parameters_series function within
         the Sensitivity class with any necessary additions such that there
         is agreement across variables and time.
-
+    
+    In the case of MemoryError, try running the following code (can go up
+    module levels):
+        var = vars(s.mod.mining.inc) # or s.mod, s.mod.mining, etc.
+        for v in var.keys():
+            print(v, getsizeof(var[v]))
+     Finding the largest variables can help identify the location of the problem
     '''
     def __init__(self,
                  pkl_filename='integration_big_df.pkl', 
@@ -481,6 +487,7 @@ class Sensitivity():
                 
                 ###### CHANGING BASE PARAMETERS ######
                 changing_base_parameters_series = self.changing_base_parameters_series.copy()
+                if self.verbosity>0: print('parameters getting updated from outside using changing_base_parameters_series input:\n',changing_base_parameters_series.index)
                 for base in changing_base_parameters_series.index:
                     mod.hyperparam.loc[base,'Value'] = changing_base_parameters_series[base]
                     if n==0 and self.verbosity>0:
@@ -488,32 +495,33 @@ class Sensitivity():
                 self.hyperparam_copy = mod.hyperparam.copy()
 
                 ###### UPDATING MONTE CARLO PARAMETERS ######
-                rs = random_state+n
-                values = stats.uniform.rvs(loc=0,scale=1,size=len(params_to_change),random_state=rs)
-                new_param_series = pd.Series(values, params_to_change)
-                if bayesian_tune:
-                    parameters, trial_index = self.ax_client.get_next_trial()
-#                     trial_index = n+enum
-                    new_param_series = pd.Series(parameters,params_to_change)
-                if self.verbosity>0:
-                    print(params_to_change)
-                if 'sector_specific_dematerialization_tech_growth' in params_to_change:
-                    new_param_series.loc['sector_specific_dematerialization_tech_growth'] *= 0.15
-                if 'sector_specific_price_response' in params_to_change:
-                    new_param_series.loc['sector_specific_price_response'] *= 0.15
-                if 'region_specific_price_response' in params_to_change:
-                    new_param_series.loc['region_specific_price_response'] *= 0.15
-                if 'incentive_opening_probability' in params_to_change:
-                    new_param_series.loc['incentive_opening_probability']*=0.1/(1-self.incentive_opening_probability_fraction_zero)
-                    if new_param_series['incentive_opening_probability']>0.1:
-                        new_param_series.loc['incentive_opening_probability'] = 0 
-                # ^ these values should be small, since small changes make big changes
-                
-                for param in params_to_change:
-                    if type(mod.hyperparam['Value'][param])!=bool:
-                        mod.hyperparam.loc[param,'Value'] = new_param_series[param]*np.sign(mod.hyperparam.loc[param,'Value'])
-                    else:
-                        mod.hyperparam.loc[param,'Value'] = new_param_series[param]
+                if len(params_to_change)>0:
+                    rs = random_state+n
+                    values = stats.uniform.rvs(loc=0,scale=1,size=len(params_to_change),random_state=rs)
+                    new_param_series = pd.Series(values, params_to_change)
+                    if bayesian_tune:
+                        parameters, trial_index = self.ax_client.get_next_trial()
+#                         trial_index = n+enum
+                        new_param_series = pd.Series(parameters,params_to_change)
+                    if self.verbosity>0:
+                        print('Parameters getting changed via Monte Carlo random selection:\n',params_to_change)
+                    if 'sector_specific_dematerialization_tech_growth' in params_to_change:
+                        new_param_series.loc['sector_specific_dematerialization_tech_growth'] *= 0.15
+                    if 'sector_specific_price_response' in params_to_change:
+                        new_param_series.loc['sector_specific_price_response'] *= 0.15
+                    if 'region_specific_price_response' in params_to_change:
+                        new_param_series.loc['region_specific_price_response'] *= 0.15
+                    if 'incentive_opening_probability' in params_to_change:
+                        new_param_series.loc['incentive_opening_probability']*=0.1/(1-self.incentive_opening_probability_fraction_zero)
+                        if new_param_series['incentive_opening_probability']>0.1:
+                            new_param_series.loc['incentive_opening_probability'] = 0 
+                    # ^ these values should be small, since small changes make big changes
+                    
+                    for param in params_to_change:
+                        if type(mod.hyperparam['Value'][param])!=bool:
+                            mod.hyperparam.loc[param,'Value'] = new_param_series[param]*np.sign(mod.hyperparam.loc[param,'Value'])
+                        else:
+                            mod.hyperparam.loc[param,'Value'] = new_param_series[param]
                 self.check_run_append(mod)
                 if bayesian_tune:
                     self.complete_bayesian_trial(mod=mod, trial_index=trial_index, n_params=n_params,
@@ -527,7 +535,7 @@ class Sensitivity():
         Initializes the things needed to run the Bayesian optimization
         '''
         if n_params==1:
-            self.ax_client = AxClient(random_seed=self.random_state)
+            self.ax_client = AxClient(random_seed=self.random_state,verbose_logging=self.verbosity>-1)
             experiment_param=[{'name':i,'type':'range','bounds':[0,1],'value_type':'float'} for i in self.sensitivity_param]
             self.ax_client.create_experiment(
                 name="minimize_RMSE_with_real",
@@ -536,7 +544,7 @@ class Sensitivity():
                 minimize=True, # default False
             )
         elif n_params>1:
-            self.ax_client = AxClient(random_seed=self.random_state)
+            self.ax_client = AxClient(random_seed=self.random_state,verbose_logging=self.verbosity>-1)
             experiment_param=[{'name':i,'type':'range','bounds':[0,1],'value_type':'float'} for i in self.sensitivity_param]
             n_params = min([self.historical_data.shape[1],n_params])
             objective_parameters = self.historical_data.columns[:n_params]
@@ -848,12 +856,27 @@ class Sensitivity():
         '''
         big_df = pd.read_pickle(self.pkl_filename)
         potential_append = self.create_potential_append(mod=mod,big_df=big_df,notes=self.notes,reg_results=[],initialize=True)
-        if type(mod)==demandModel or check_equivalence(big_df, potential_append)[0]:
+        if type(mod)==demandModel or self.overwrite or check_equivalence(big_df, potential_append)[0]:
             if self.verbosity>-1:
                 print('\tScenario does not already exist, running...')
             self.mod = mod
             if type(mod)==Integration:
-                mod.run()
+                try:
+                    mod.run()
+                except MemoryError:
+                    if self.verbosity>-1:
+                        print('************************MemoryError, no clue what to do about this************************')
+                    param_variable_map = {'Total demand':'total_demand','Primary demand':'primary_demand',
+                        'Primary commodity price':'primary_commodity_price','Primary supply':'primary_supply',
+                        'Scrap demand':'scrap_demand'}
+                    for param in self.objective_parameters:
+                        historical = self.historical_data[param]
+                        simulated = getattr(mod,param_variable_map[param])
+                        if hasattr(simulated,'columns') and 'Global' in simulated.columns:
+                            getattr(mod,param_variable_map[param]).loc[:,'Global'] = historical*5
+                        else:
+                            getattr(mod,param_variable_map[param]).loc[:] = historical*5
+                    raise MemoryError
             elif type(mod)==demandModel:
                 for i in mod.simulation_time:
                     mod.i = i

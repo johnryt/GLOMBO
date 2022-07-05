@@ -205,6 +205,7 @@ class Sensitivity():
                  OVERWRITE=False,
                  random_state=220620,
                  incentive_opening_probability_fraction_zero=0.1,
+                 include_sd_objectives=False,
                  dpi=50):
         '''
         Initializing Sensitivity class.
@@ -276,6 +277,7 @@ class Sensitivity():
         self.scenarios = scenarios
         self.overwrite = OVERWRITE
         self.random_state = random_state
+        self.include_sd_objectives = include_sd_objectives
         self.incentive_opening_probability_fraction_zero = incentive_opening_probability_fraction_zero
         self.dpi = dpi
         
@@ -330,6 +332,7 @@ class Sensitivity():
             commodity_inputs.loc['presimulate_n_years'] = 10
             commodity_inputs.loc['end_calibrate_years'] = 10
             commodity_inputs.loc['start_calibrate_years'] = 5
+            commodity_inputs.loc['close_price_method'] = 'probabilistic'
 
             history_file = pd.read_excel(self.case_study_data_file_path,index_col=0,sheet_name=changing_base_parameters_series)
             historical_data = history_file.loc[2001:]
@@ -443,6 +446,9 @@ class Sensitivity():
         '''
         Runs a Monte Carlo based approach to the sensitivity, where all the sensitivity_parameters
         given are then given values randomly selected from between zero and one.
+        
+        Always runs an initial scenario with default parameters, so remember to skip that one
+        when looking at the resulting pickle file
         ----------------------
         n_scenarios: int, number of scenarios to run in total
         random_state: int, hold constant to keep same set of generated values
@@ -516,6 +522,20 @@ class Sensitivity():
                         if new_param_series['incentive_opening_probability']>0.1:
                             new_param_series.loc['incentive_opening_probability'] = 0 
                     # ^ these values should be small, since small changes make big changes
+                    all_three_here = np.all([q in params_to_change for q in ['close_probability_split_max','close_probability_split_mean','close_probability_split_min']])
+                    if 'close_probability_split_max' in params_to_change and not all_three_here:
+                        new_param_series.loc['close_probability_split_max'] *= 0.8
+                    if 'close_probability_split_mean' in params_to_change and not all_three_here:
+                        new_param_series.loc['close_probability_split_mean'] *= 0.8
+                    if 'close_probability_split_max' in params_to_change and 'close_probability_split_mean' in params_to_change and not all_three_here:
+                        sum_mean_max = new_param_series.loc[['close_probability_split_max','close_probability_split_mean']].sum()
+                        if sum_mean_max>0.95:
+                            new_param_series.loc[['close_probability_split_max','close_probability_split_mean']] *= 0.95/sum_mean_max
+                        new_param_series.loc['close_probability_split_mean'] = 1-new_param_series.loc[['close_probability_split_max','close_probability_split_mean']].sum()
+                    if 'close_years_back' in params_to_change:
+                        new_param_series.loc['close_years_back'] = int(10*new_param_series.loc['close_years_back']+3)
+                    if all_three_here:
+                        new_param_series.loc[['close_probability_split_mean','close_probability_split_min','close_probability_split_max']] /=  new_param_series.loc[['close_probability_split_mean','close_probability_split_min','close_probability_split_max']].sum()
                     
                     for param in params_to_change:
                         if type(mod.hyperparam['Value'][param])!=bool:
@@ -536,7 +556,7 @@ class Sensitivity():
         '''
         if n_params==1:
             self.ax_client = AxClient(random_seed=self.random_state,verbose_logging=self.verbosity>-1)
-            experiment_param=[{'name':i,'type':'range','bounds':[0,1],'value_type':'float'} for i in self.sensitivity_param]
+            experiment_param=[{'name':i,'type':'range','bounds':[0.001,1],'value_type':'float'} for i in self.sensitivity_param]
             self.ax_client.create_experiment(
                 name="minimize_RMSE_with_real",
                 parameters=experiment_param,
@@ -545,17 +565,28 @@ class Sensitivity():
             )
         elif n_params>1:
             self.ax_client = AxClient(random_seed=self.random_state,verbose_logging=self.verbosity>-1)
-            experiment_param=[{'name':i,'type':'range','bounds':[0,1],'value_type':'float'} for i in self.sensitivity_param]
+            experiment_param=[{'name':i,'type':'range','bounds':[0.001,1],'value_type':'float'} for i in self.sensitivity_param]
             n_params = min([self.historical_data.shape[1],n_params])
             objective_parameters = self.historical_data.columns[:n_params]
+            if self.include_sd_objectives:
+                objective_parameters = np.append(objective_parameters,['Scrap SD','Conc. SD','Ref. SD'])
             self.objective_parameters = objective_parameters
 #             objective_param = dict([[c, ObjectiveProperties(minimize=True, threshold=branin_currin.ref_point[i])] for i,c in enumerate(objective_parameters)])
             objective_param = dict([[c, ObjectiveProperties(minimize=True)] for i,c in enumerate(objective_parameters)])
-            self.ax_client.create_experiment(
-                name="minimize_RMSE_with_real",
-                parameters=experiment_param,
-                objectives=objective_param
-            )
+            all_three_here = np.all([q in self.sensitivity_param for q in ['close_probability_split_max','close_probability_split_mean','close_probability_split_min']])
+            if not all_three_here:
+                self.ax_client.create_experiment(
+                    name="minimize_RMSE_with_real",
+                    parameters=experiment_param,
+                    objectives=objective_param
+                )
+            else:
+                self.ax_client.create_experiment(
+                    name="minimize_RMSE_with_real",
+                    parameters=experiment_param,
+                    objectives=objective_param,
+                    parameter_constraints=['close_probability_split_max + close_probability_split_mean + close_probability_split_min <= 1']
+                )
         self.rmse_df = pd.DataFrame()
         
     def complete_bayesian_trial(self, mod, trial_index, n_params=1, new_param_series=pd.Series(dtype=float), scenario_number=0):
@@ -573,11 +604,21 @@ class Sensitivity():
              'Scrap demand':'scrap_demand'}
             rmse_list = []
             for param in self.objective_parameters:
-                historical = self.historical_data[param]
-                simulated = getattr(mod,param_variable_map[param])
-                if hasattr(simulated,'columns') and 'Global' in simulated.columns:
-                    simulated = simulated['Global']
-                rmse = ((simulated-historical)**2).loc[self.simulation_time].astype(float).sum()**0.5
+                if 'SD' not in param:
+                    historical = self.historical_data[param]
+                    simulated = getattr(mod,param_variable_map[param])
+                    if hasattr(simulated,'columns') and 'Global' in simulated.columns:
+                        simulated = simulated['Global']
+                    rmse = ((simulated-historical)**2).loc[self.simulation_time].astype(float).sum()**0.5
+                else:
+                    if 'Conc' in param:
+                        rmse = ((mod.primary_supply-mod.primary_demand)**2).loc[self.simulation_time].astype(float).sum()**0.5
+                    elif 'Scrap' in param:
+                        rmse = ((mod.scrap_supply-mod.scrap_demand)**2).loc[self.simulation_time].astype(float).sum()**0.5
+                    elif 'Ref' in param:
+                        rmse = ((mod.refined_supply-mod.refined_demand)**2).loc[self.simulation_time].astype(float).sum()**0.5
+                    if hasattr(rmse,'index') and 'Global' in rmse.index:
+                        rmse = rmse['Global']
                 rmse_list += [(rmse,0)]
                 new_param_series.loc[param+' RMSE'] = rmse
             rmse_dict = dict(zip(self.objective_parameters,rmse_list))
@@ -663,7 +704,7 @@ class Sensitivity():
                 {
                     "name": "sector_specific_dematerialization_tech_growth",
                     "type": "range",
-                    "bounds": [0, 0.08],
+                    "bounds": [0.001, 0.08],
                     "value_type": "float",  # Optional, defaults to inference from type of "bounds".
                     "log_scale": False,  # Optional, defaults to False.
                 },
@@ -671,19 +712,19 @@ class Sensitivity():
                     "name": "sector_specific_price_response",
                     "type": "range",
                     "value_type": "float", 
-                    "bounds": [0, 0.3],
+                    "bounds": [0.001, 0.3],
                 },
                 {
                     "name": "region_specific_price_response",
                     "type": "range",
                     "value_type": "float", 
-                    "bounds": [0, 0.3],
+                    "bounds": [0.001, 0.3],
                 },
                 {
                     "name": "intensity_response_to_gdp",
                     "type": "range",
                     "value_type": "float",
-                    "bounds": [0, 1.5],
+                    "bounds": [0.001, 1.5],
                 },
             ],
             objective_name="RMSE",
@@ -785,6 +826,9 @@ class Sensitivity():
                                    bayesian_tune=False,n_params=2):
         '''
         Wrapper to run the run_monte_carlo() method on historical data
+        
+        Always runs an initial scenario with default parameters, so remember to skip that one
+        when looking at the resulting pickle file
         --------------
         n_scenarios: int, typically use 200, but unsure yet whether we could improve
             performance by using more.
@@ -898,6 +942,7 @@ class Sensitivity():
             potential_append = self.create_potential_append(mod=mod,big_df=big_df,notes=notes,reg_results=reg_results,initialize=False)
             
             big_df = pd.concat([big_df,potential_append],axis=1)
+            self.big_df = pd.concat([self.big_df,potential_append],axis=1)
             big_df.to_pickle(self.pkl_filename)
             if self.verbosity>-1:
                 print('\tScenario successfully saved\n')

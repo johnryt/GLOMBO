@@ -43,9 +43,10 @@ class Integration():
         self.hyperparam.loc['simulation_time',:] = np.array([simulation_time,'simulation time from model initialization'],dtype=object)
         self.update_hyperparam()
         
-        self.concentrate_supply = pd.Series(np.nan,simulation_time)
-        self.sxew_supply = pd.Series(np.nan,simulation_time)
-        self.concentrate_demand = pd.DataFrame(np.nan,simulation_time,['Global','China','RoW'])
+        price_simulation_time = np.arange(simulation_time[0]-15,simulation_time[-1]+1)
+        self.concentrate_supply = pd.Series(np.nan,price_simulation_time)
+        self.sxew_supply = pd.Series(np.nan,price_simulation_time)
+        self.concentrate_demand = pd.DataFrame(np.nan,price_simulation_time,['Global','China','RoW'])
         self.refined_supply = self.concentrate_demand.copy()
         self.refined_demand = self.concentrate_demand.copy()
         self.scrap_supply = self.concentrate_demand.copy()
@@ -127,9 +128,16 @@ class Integration():
         hyperparameters.loc['ramp_up_cu','Value'] = 0.7
         hyperparameters.loc['ml_accelerate_initialize_years','Value'] = max(hyperparameters['Value'][['ml_accelerate_initialize_years','end_calibrate_years']])
         hyperparameters.loc['mine_cu_margin_elas','Value'] = 0.8
+        hyperparameters.loc['mine_cost_price_elas','Value'] = 0.125
+        hyperparameters.loc['mine_cost_og_elas','Value'] = -0.113
         hyperparameters.loc['mine_cost_tech_improvements','Value'] = 0.05
         hyperparameters.loc['resources_contained_elas_primary_price','Value'] = 0.5
-        
+        hyperparameters.loc['close_price_method','Value']='mean'
+        hyperparameters.loc['close_years_back','Value']=3
+        hyperparameters.loc['close_probability_split_max','Value']=0.3
+        hyperparameters.loc['close_probability_split_mean','Value']=0.5
+        hyperparameters.loc['close_probability_split_min','Value']=0.2
+
         # demand
         hyperparameters.loc['demand only',:] = np.nan
         hyperparameters.loc['sector_specific_dematerialization_tech_growth','Value'] = -0.03
@@ -316,9 +324,9 @@ class Integration():
     def initialize_price(self):
         i = self.i
         h = self.h
-        self.scrap_spread.loc[i] = h['initial_scrap_spread']
-        self.primary_commodity_price.loc[i] = h['primary_commodity_price']
-        self.tcrc.loc[i] = self.mining.primary_tcrc_series[i]
+        self.scrap_spread.loc[:i] = h['initial_scrap_spread']
+        self.primary_commodity_price.loc[:i] = h['primary_commodity_price']
+        self.tcrc.loc[:i] = self.mining.primary_tcrc_series[i]
         
     def price_evolution(self):
         i = self.i

@@ -1678,7 +1678,7 @@ class miningModel():
     def calculate_price_expect(self, ml, i):
         '''i is year index'''
         close_price_method = self.hyperparam['Value']['close_price_method']
-        close_years_back = self.hyperparam['Value']['close_years_back']
+        close_years_back = int(self.hyperparam['Value']['close_years_back'])
         close_probability_split_max = self.hyperparam['Value']['close_probability_split_max']
         close_probability_split_mean = self.hyperparam['Value']['close_probability_split_mean']
         close_probability_split_min = self.hyperparam['Value']['close_probability_split_min']

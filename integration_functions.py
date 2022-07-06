@@ -192,7 +192,7 @@ class Sensitivity():
     '''
     def __init__(self,
                  pkl_filename='integration_big_df.pkl', 
-                 case_study_data_file_path='C:/Users/ryter/Dropbox (MIT)/Group Research Folder_Olivetti/Displacement/08 Generalization/_Python/Data/case study data.xlsx',
+                 case_study_data_file_path='/Users/fernaag/Dropbox/Group Research Folder_Olivetti/Displacement/08 Generalization/_Python/Data/case study data.xlsx',
                  changing_base_parameters_series=0, 
                  params_to_change=0, 
                  n_per_param=5, 

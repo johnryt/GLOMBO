@@ -942,7 +942,7 @@ class Sensitivity():
             potential_append = self.create_potential_append(mod=mod,big_df=big_df,notes=notes,reg_results=reg_results,initialize=False)
             
             big_df = pd.concat([big_df,potential_append],axis=1)
-            self.big_df = pd.concat([self.big_df,potential_append],axis=1)
+            # self.big_df = pd.concat([self.big_df,potential_append],axis=1)
             big_df.to_pickle(self.pkl_filename)
             if self.verbosity>-1:
                 print('\tScenario successfully saved\n')

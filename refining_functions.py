@@ -77,7 +77,10 @@ def simulate_refinery_production_oneyear(year_i, tcrc_series_, sp2_series_,
     if type(additional_secondary_refined)!=int and type(secondary_ratio)!=int:
         raise ValueError('SYSTEM NOT DESIGNED TO HANDLE additional_secondary_refined AND secondary_ratio inputs INPUTS SIMULTANEOUSLY')
     if year_i>simulation_time[0] and type(additional_secondary_refined)!=int:
-        sec_ratio_last = (ref_stats['Secondary production'][t_lag_1]-additional_secondary_refined[t_lag_1]) / (ref_stats['Secondary capacity'][t_lag_1]*ref_stats['Secondary CU'][t_lag_1])
+        if (ref_stats['Secondary capacity'][t_lag_1]*ref_stats['Secondary CU'][t_lag_1])!=0:
+            sec_ratio_last = (ref_stats['Secondary production'][t_lag_1]-additional_secondary_refined[t_lag_1]) / (ref_stats['Secondary capacity'][t_lag_1]*ref_stats['Secondary CU'][t_lag_1])
+        else:
+            sec_ratio_last = 0
     else:
         sec_ratio_last = ref_stats['Secondary ratio'][t_lag_1]
     ref_stats_next.loc['Primary CU']=ref_stats.loc[t_lag_1, 'Primary CU']*pri_cu_growth

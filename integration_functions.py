@@ -367,7 +367,6 @@ class Sensitivity():
             self.changing_base_parameters_series = commodity_inputs.copy()
         elif not hasattr(self,'material'):
             self.material = ''
-            print('265 what')
         cbps = self.changing_base_parameters_series
         if type(cbps)==pd.core.frame.DataFrame:
             cbps = self.changing_base_parameters_series.copy()

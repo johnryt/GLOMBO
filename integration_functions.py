@@ -333,9 +333,11 @@ class Sensitivity():
             commodity_inputs.loc['end_calibrate_years'] = 10
             commodity_inputs.loc['start_calibrate_years'] = 5
             commodity_inputs.loc['close_price_method'] = 'probabilistic'
-
+            commodity_inputs = commodity_inputs.dropna()
+            
             history_file = pd.read_excel(self.case_study_data_file_path,index_col=0,sheet_name=changing_base_parameters_series)
-            historical_data = history_file.loc[2001:]
+            historical_data = history_file.loc[2001:].dropna(axis=1)
+            
             original_demand = commodity_inputs['initial_demand']
             original_primary_production = commodity_inputs['primary_production']
             if 'Total demand' in historical_data.columns:

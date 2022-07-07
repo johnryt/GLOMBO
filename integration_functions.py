@@ -7,6 +7,7 @@ from integration import Integration
 from random import seed, sample, shuffle
 from demand_class import demandModel
 import os
+from useful_functions import easy_subplots
 
 from copy import deepcopy
 

@@ -68,23 +68,33 @@ class refiningModel():
         global_sec_ref_fraction_of_recycled,china_sec_ref_fraction_of_recycled=input_param.loc['Secondary refinery fraction of recycled content',['Global','China']] 
         china_fraction_of_total_production = input_param.loc['Regional production fraction of total production','China']
         sxew_fraction, sxew_fraction_cn = input_param.loc['SX-EW fraction of production',['Global','China']]
+        
+        if china_fraction_of_total_production==1:
+            row_rir = 0
+            sxew_fraction_rw = 0
+        else:
+            row_rir = (global_rir - china_rir*china_fraction_of_total_production) / (1-china_fraction_of_total_production)
+            sxew_fraction_rw = (sxew_fraction - sxew_fraction_cn*china_fraction_of_total_production) / (1-china_fraction_of_total_production)
 
-        row_rir = (global_rir - china_rir*china_fraction_of_total_production) / (1-china_fraction_of_total_production)
-        sxew_fraction_rw = (sxew_fraction - sxew_fraction_cn*china_fraction_of_total_production) / (1-china_fraction_of_total_production)
-
-        china_fraction_recycled = china_rir*china_fraction_of_total_production/global_rir
-
-        row_sec_ref_fraction_of_recycled = \
-         (global_sec_ref_fraction_of_recycled - china_sec_ref_fraction_of_recycled*china_fraction_recycled) / \
-         (1-china_fraction_recycled)
+        if global_rir==0:
+            china_fraction_recycled = 0
+        else:
+            china_fraction_recycled = china_rir*china_fraction_of_total_production/global_rir
+        
+        if china_fraction_recycled==0:
+            row_sec_ref_fraction_of_recycled = global_sec_ref_fraction_of_recycled
+        else:
+            row_sec_ref_fraction_of_recycled = \
+             (global_sec_ref_fraction_of_recycled - china_sec_ref_fraction_of_recycled*china_fraction_recycled) / \
+             (1-china_fraction_recycled)
 
         if global_sec_ref_fraction_of_recycled!=0:
             sec_frac_of_refined = 1/ (1+(1-global_rir-sxew_fraction)/global_sec_ref_fraction_of_recycled/global_rir)
         else: sec_frac_of_refined=0
-        if china_sec_ref_fraction_of_recycled!=0:
+        if china_sec_ref_fraction_of_recycled!=0 and china_rir!=0:
             sec_frac_of_refined_cn = 1/ (1+(1-china_rir-sxew_fraction_cn)/china_sec_ref_fraction_of_recycled/china_rir)
         else: sec_frac_of_refined_cn=0
-        if row_sec_ref_fraction_of_recycled!=0:
+        if row_sec_ref_fraction_of_recycled!=0 and row_rir!=0:
             sec_frac_of_refined_rw = 1/ (1+(1-row_rir-sxew_fraction_rw)/row_sec_ref_fraction_of_recycled/row_rir)
         else: sec_frac_of_refined_rw=0
 
@@ -122,11 +132,17 @@ class refiningModel():
             pcu = rhp['Value']['pri CU']
             new_sec_prod = total_ref_production * secondary_fraction_of_refined_production
             new_pri_prod = total_ref_production - new_sec_prod
-            new_sec_capacity = new_sec_prod/sr/scu
-            new_pri_capacity = (new_pri_prod - \
-             new_sec_capacity*scu*(1-sr))/pcu
+            if sr==0 or scu==0:
+                new_sec_capacity = 0
+            else:
+                new_sec_capacity = new_sec_prod/sr/scu
+            if pcu==0:
+                new_pri_capacity=0
+            else:
+                new_pri_capacity = (new_pri_prod - \
+                 new_sec_capacity*scu*(1-sr))/pcu
             pri_frac_at_pri_refineries = new_pri_capacity*pcu/(new_pri_capacity*pcu+new_sec_capacity*scu*(1-sr))
-
+            
             new_ref_hyper_param = rhp.copy()
             new_ref_hyper_param.loc['sec ratio','Value'] = sr
             new_ref_hyper_param.loc['pri cap','Value'] = new_pri_capacity

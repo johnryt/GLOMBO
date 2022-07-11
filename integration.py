@@ -517,6 +517,8 @@ class Integration():
             if self.verbosity>0: print(year)
             self.i = year
             if self.i==self.simulation_time[0]:
+                self.decode_scrap_scenario_name()
+                self.h = self.hyperparam['Value'].copy()
                 self.initialize_integration()
                 self.initialize_price()
             else:
@@ -595,7 +597,7 @@ class Integration():
                 if scenario_type=='both':
                     integ = 1
                     if name[2].split('yr')[1]=='' or name[3].split('%tot')[1]=='' or name[4].split('%inc')[1]=='':
-                        print('WARNING: scenario name does not fit BOTH format, using SCRAP SUPPLY value')
+                        print('WARNING: scenario name does not fit BOTH format, using SCRAP SUPPLY value for SCRAP DEMAND')
                         integ=0
                 else:
                     integ = 0
@@ -629,22 +631,35 @@ class Integration():
         self.collection_rate_pct_change_tot = 1+collection_rate_pct_change_tot/100
         self.collection_rate_pct_change_inc = 1+collection_rate_pct_change_inc/100
         self.direct_melt_duration = direct_melt_duration
-        self.direct_melt_pct_change_tot = 1+direct_melt_pct_change_tot*(1-self.h['Secondary refinery fraction of recycled content, Global'])/100
+        self.direct_melt_pct_change_tot = 1+direct_melt_pct_change_tot*(1-self.hyperparam['Value']['Secondary refinery fraction of recycled content, Global'])/100
         self.direct_melt_pct_change_inc = 1+direct_melt_pct_change_inc/100
         self.secondary_refined_duration = direct_melt_duration
-        self.secondary_refined_pct_change_tot = 1+direct_melt_pct_change_tot*self.h['Secondary refinery fraction of recycled content, Global']/100
+        self.secondary_refined_pct_change_tot = 1+direct_melt_pct_change_tot*self.hyperparam['Value']['Secondary refinery fraction of recycled content, Global']/100
         self.secondary_refined_pct_change_inc = 1+direct_melt_pct_change_inc/100
 
-        self.hyperparam.loc['scenario_type',:] = self.scenario_type, 'empty string, scrap supply, scrap demand, or both'
-        self.hyperparam.loc['collection_rate_price_response',:] = self.collection_rate_price_response, 'whether or not there should be a price response for collection rate'
-        self.hyperparam.loc['direct_melt_price_response',:] = self.direct_melt_price_response, 'whether there should be a price response for direct melt fraction'
-        self.hyperparam.loc['secondary_refined_price_response',:] = self.direct_melt_price_response, 'whether there should be a price response for direct melt fraction'
-        self.hyperparam.loc['collection_rate_duration',:] = self.collection_rate_duration, 'length of the increase in collection rate described by collection_rate_pct_change_tot'
-        self.hyperparam.loc['collection_rate_pct_change_tot',:] = self.collection_rate_pct_change_tot, 'without price response, describes the percent increase in collection rate attained at the end of the linear ramp with duration collection_rate_duration. Given as 1+%change/100'
-        self.hyperparam.loc['collection_rate_pct_change_inc',:] = self.collection_rate_pct_change_inc, 'once the collection_rate_pct_change_tot is reached, the collection rate will then increase by this value per year. Given as 1+%change/100'
-        self.hyperparam.loc['direct_melt_duration',:] = self.direct_melt_duration, 'length of the increase in direct melt fraction described by direct_melt_pct_change_tot'
-        self.hyperparam.loc['direct_melt_pct_change_tot',:] = self.direct_melt_pct_change_tot, 'without price response, describes the percent increase in collection rate attained at the end of the linear ramp with duration direct_melt_duration. Given as 1+%change/100'
-        self.hyperparam.loc['direct_melt_pct_change_inc',:] = self.direct_melt_pct_change_inc, 'once the direct_melt_pct_change_tot is reached, the direct melt fraction will then increase by this value per year. Given as 1+%change/100'
-        self.hyperparam.loc['secondary_refined_duration',:] = self.secondary_refined_duration, 'length of the increase in direct melt fraction described by direct_melt_pct_change_tot'
-        self.hyperparam.loc['secondary_refined_pct_change_tot',:] = self.secondary_refined_pct_change_tot, 'without price response, describes the percent increase in collection rate attained at the end of the linear ramp with duration direct_melt_duration. Given as 1+%change/100'
-        self.hyperparam.loc['secondary_refined_pct_change_inc',:] = self.secondary_refined_pct_change_inc, 'once the direct_melt_pct_change_tot is reached, the direct melt fraction will then increase by this value per year. Given as 1+%change/100'
+        self.hyperparam.loc['scenario_type','Value'] = self.scenario_type
+        self.hyperparam.loc['scenario_type','Notes'] = 'empty string, scrap supply, scrap demand, or both'
+        self.hyperparam.loc['collection_rate_price_response','Value'] = self.collection_rate_price_response
+        self.hyperparam.loc['collection_rate_price_response','Notes'] = 'whether or not there should be a price response for collection rate'
+        self.hyperparam.loc['direct_melt_price_response','Value'] = self.direct_melt_price_response
+        self.hyperparam.loc['direct_melt_price_response','Notes'] = 'whether there should be a price response for direct melt fraction'
+        self.hyperparam.loc['secondary_refined_price_response','Value'] = self.direct_melt_price_response
+        self.hyperparam.loc['secondary_refined_price_response','Notes'] = 'whether there should be a price response for direct melt fraction'
+        self.hyperparam.loc['collection_rate_duration','Value'] = self.collection_rate_duration
+        self.hyperparam.loc['collection_rate_duration','Notes'] = 'length of the increase in collection rate described by collection_rate_pct_change_tot'
+        self.hyperparam.loc['collection_rate_pct_change_tot','Value'] = self.collection_rate_pct_change_tot
+        self.hyperparam.loc['collection_rate_pct_change_tot','Notes'] = 'without price response, describes the percent increase in collection rate attained at the end of the linear ramp with duration collection_rate_duration. Given as 1+%change/100'
+        self.hyperparam.loc['collection_rate_pct_change_inc','Value'] = self.collection_rate_pct_change_inc
+        self.hyperparam.loc['collection_rate_pct_change_inc','Notes'] = 'once the collection_rate_pct_change_tot is reached, the collection rate will then increase by this value per year. Given as 1+%change/100'
+        self.hyperparam.loc['direct_melt_duration','Value'] = self.direct_melt_duration
+        self.hyperparam.loc['direct_melt_duration','Notes'] = 'length of the increase in direct melt fraction described by direct_melt_pct_change_tot'
+        self.hyperparam.loc['direct_melt_pct_change_tot','Value'] = self.direct_melt_pct_change_tot
+        self.hyperparam.loc['direct_melt_pct_change_tot','Notes'] = 'without price response, describes the percent increase in collection rate attained at the end of the linear ramp with duration direct_melt_duration. Given as 1+%change/100'
+        self.hyperparam.loc['direct_melt_pct_change_inc','Value'] = self.direct_melt_pct_change_inc
+        self.hyperparam.loc['direct_melt_pct_change_inc','Notes'] = 'once the direct_melt_pct_change_tot is reached, the direct melt fraction will then increase by this value per year. Given as 1+%change/100'
+        self.hyperparam.loc['secondary_refined_duration','Value'] = self.secondary_refined_duration
+        self.hyperparam.loc['secondary_refined_duration','Notes'] = 'length of the increase in direct melt fraction described by direct_melt_pct_change_tot'
+        self.hyperparam.loc['secondary_refined_pct_change_tot','Value'] = self.secondary_refined_pct_change_tot
+        self.hyperparam.loc['secondary_refined_pct_change_tot','Notes'] = 'without price response, describes the percent increase in collection rate attained at the end of the linear ramp with duration direct_melt_duration. Given as 1+%change/100'
+        self.hyperparam.loc['secondary_refined_pct_change_inc','Value'] = self.secondary_refined_pct_change_inc
+        self.hyperparam.loc['secondary_refined_pct_change_inc','Notes'] = 'once the direct_melt_pct_change_tot is reached, the direct melt fraction will then increase by this value per year. Given as 1+%change/100'

@@ -17,7 +17,7 @@ from ax.service.utils.instantiation import ObjectiveProperties
 import torch
 from botorch.test_functions.multi_objective import BraninCurrin
 branin_currin = BraninCurrin(negate=True).to(
-    dtype=torch.double, 
+    dtype=torch.double,
     device= torch.device("cuda" if torch.cuda.is_available() else "cpu"),
 )
 
@@ -44,7 +44,7 @@ def create_result_df(integ):
               'Old mine cost','New mine cost',
               'Old mine margin','New mine margin',
               'Reserves','Reserves ratio with production'],axis=1).fillna(0)
-    
+
     addl_scrap = integ.additional_scrap.sum(axis=1).unstack()
     addl_scrap.loc[:,'Global'] = addl_scrap.sum(axis=1)
     for reg in reg_results.index:
@@ -94,7 +94,7 @@ def create_result_df(integ):
         scraps = pd.concat([old_scrap,new_scrap],axis=1,keys=['Old scrap collection','New scrap collection'])
         results = pd.concat([results,collection,scraps],axis=1)
         reg_results.loc[reg] = [results]
-    return reg_results
+    return old_new_mines, reg_results
 
 def check_equivalence(big_df, potential_append):
     '''
@@ -110,8 +110,8 @@ def check_equivalence(big_df, potential_append):
             col = 'Global' if i=='refine.hyperparam' else 'Value'
             j = v.loc[i].iloc[0]
             c_ind = [i for i in c.index if i!='simulation_time']
-            if not np.any([len(c.dropna(how='all').index)==len(j.dropna(how='all').index) and 
-             len(np.intersect1d(c.dropna(how='all').index,j.dropna(how='all').index))==len(c.dropna(how='all').index) and 
+            if not np.any([len(c.dropna(how='all').index)==len(j.dropna(how='all').index) and
+             len(np.intersect1d(c.dropna(how='all').index,j.dropna(how='all').index))==len(c.dropna(how='all').index) and
              len(np.intersect1d(c.dropna(how='all').index,j.dropna(how='all').index))==len(j.dropna(how='all').index) and
              np.all([q in c.dropna(how='all').index for q in j.dropna(how='all').index]) and
              np.all([q in j.dropna(how='all').index for q in c.dropna(how='all').index]) and
@@ -132,13 +132,13 @@ def check_equivalence(big_df, potential_append):
 
 class Sensitivity():
     '''
-    changing_base_parameters_series: can be a string referring to a 
+    changing_base_parameters_series: can be a string referring to a
       commodity in case_study_data, or a series with hyperparameter
       inputs in the same format
-    
+
     Methods/functions (those not listed here are utility functions):
     - run: runs a sensitivity changing only one variable at a time,
-        using the variables in the params_to_change variable from 
+        using the variables in the params_to_change variable from
         Sensitivity initialization. Also from initialization: n_per_param
         gives the number of scenarios to run per parameter, and param_scale
         (from 1-param_scale to 1+param_scale) gives the multiplier for
@@ -150,8 +150,8 @@ class Sensitivity():
         sector_specific_price_response, region_specific_price_response, and
         incentive_opening_probability are multiplied by smaller factors to
         be between 0 and 0.15.
-    - historical_sim_check_demand: uses a Bayesian optimization algorithm 
-        to find the best values for the demand parameters 
+    - historical_sim_check_demand: uses a Bayesian optimization algorithm
+        to find the best values for the demand parameters
         sector_specific_dematerialization_tech_growth,
         sector_specific_price_response, region_specific_price_response, and
         intensity_response_to_gdp, simulating only demand using the demand
@@ -163,15 +163,15 @@ class Sensitivity():
         historical_sim_check_demand to ensure our algorithm converged correctly,
         plotting the simulated demands, the best simulated demand, and historical
         demand. Also plots the RMSE vs the demand parameters.
-        
-    The update_changing_base_parameters_series function could be a source of error, 
+
+    The update_changing_base_parameters_series function could be a source of error,
         as it updates the model start values with historical values within
         the Sensitivity class
-        
+
     If you add more than the columns Total demand, Primary production, Primary
         commodity price, Primary demand, and Scrap demand for the material-
         specific sheets in case study data.xlsx, you will need to:
-        
+
         1. update the param_variable_map in the complete_bayesian_trial function
         within the Sensitivity class. You put the columns name, then the
         string of the variable name you want to tune it to. All the variable
@@ -183,7 +183,7 @@ class Sensitivity():
         2. update the update_changing_base_parameters_series function within
         the Sensitivity class with any necessary additions such that there
         is agreement across variables and time.
-    
+
     In the case of MemoryError, try running the following code (can go up
     module levels):
         var = vars(s.mod.mining.inc) # or s.mod, s.mod.mining, etc.
@@ -192,11 +192,11 @@ class Sensitivity():
      Finding the largest variables can help identify the location of the problem
     '''
     def __init__(self,
-                 pkl_filename='integration_big_df.pkl', 
-                 case_study_data_file_path='C:/Users/ryter/Dropbox (MIT)/Group Research Folder_Olivetti/Displacement/08 Generalization/_Python/Data/case study data.xlsx',
-                 changing_base_parameters_series=0, 
-                 params_to_change=0, 
-                 n_per_param=5, 
+                 pkl_filename='integration_big_df.pkl',
+                 case_study_data_file_path='generalization/data/case study data.xlsx',
+                 changing_base_parameters_series=0,
+                 params_to_change=0,
+                 n_per_param=5,
                  notes='Initial run',
                  simulation_time = np.arange(2019,2041),
                  byproduct=False,
@@ -210,7 +210,7 @@ class Sensitivity():
                  dpi=50):
         '''
         Initializing Sensitivity class.
-        
+
         ---------------
         pkl_filename: str, path/filename ending in pkl for where you want to save the results of the
             sensitivity you are about to run
@@ -236,7 +236,7 @@ class Sensitivity():
             sensitivity function, where whichever parameter is selected will be scaled by +/- param_scale
         scenarios: list or array, including only strings. The contents of each string determine the scrap
             supply or demand changes that will be implemented. See the decode_scrap_scenario_name() function
-            in integration.py (Integration class) for more detail, but some are given here: 
+            in integration.py (Integration class) for more detail, but some are given here:
                 takes the form 00_11_22_33_44
                 where:
                 00: ss, sd, bo (scrap supply, scrap demand, both)
@@ -248,7 +248,7 @@ class Sensitivity():
                  relative to the initial year total demand
                 44: X%inc, where X is any float/int and is the
                  increase/decrease in the %tot value per year
-                
+
                 for 22-44, an additional X should be placed at
                  the end when 00==both, describing the sd values
         OVERWRITE: bool, whether or not the pkl_filename given should overwrite the existing file or not.
@@ -266,7 +266,7 @@ class Sensitivity():
         self.changing_base_parameters_series = changing_base_parameters_series
         self.case_study_data_file_path = case_study_data_file_path
         self.update_changing_base_parameters_series()
-        
+
         self.simulation_time = simulation_time
         self.byproduct = byproduct
         self.verbosity = verbosity
@@ -281,9 +281,9 @@ class Sensitivity():
         self.include_sd_objectives = include_sd_objectives
         self.incentive_opening_probability_fraction_zero = incentive_opening_probability_fraction_zero
         self.dpi = dpi
-        
+
         if self.overwrite: print('WARNING, YOU ARE OVERWRITING AN EXISTING FILE')
-        
+
     def initialize_big_df(self):
         '''
         Initializes the big dataframe used to save all the results
@@ -300,7 +300,7 @@ class Sensitivity():
                 'version','notes','hyperparam','mining.hyperparam','refine.hyperparam','demand.hyperparam','results'
             ],columns=[])
             reg_results = create_result_df(mod)
-            big_df.loc[:,0] = np.array([mod.version, self.notes, mod.hyperparam, mod.mining.hyperparam, 
+            big_df.loc[:,0] = np.array([mod.version, self.notes, mod.hyperparam, mod.mining.hyperparam,
                                         mod.refine.hyperparam, mod.demand.hyperparam, reg_results],dtype=object)
             big_df.to_pickle(self.pkl_filename)
             self.mod = mod
@@ -308,16 +308,16 @@ class Sensitivity():
 
     def update_changing_base_parameters_series(self):
         '''
-        This function is called within the __init__() method and updates the hyperparameters 
+        This function is called within the __init__() method and updates the hyperparameters
         using default changes (setting incentive_require_tune_years, presimulate_n_years,
         and end_calibrate_years hyperparameter values to 10, and start_calibrate_years to 5.
         This means that for all scenarios we run, we have it run on an additional 10 years of
         data before the simulation_time variable start, where it is required to tune the
         incentive pool such that concentrate supply=demand in each of those years. The
         start and end calibrate years give the time after the additional early simulation
-        start that we take the mean opening probability and use it for the case where 
+        start that we take the mean opening probability and use it for the case where
         incentive_opening_probability==0.
-        
+
         Otherwise, this function uses the value of changing_base_parameters_series from
         initialization to update the self.changing_base_parameters_series variable. The input
         to initialization can be a string or pandas series of hyperparameters and their values.
@@ -335,10 +335,10 @@ class Sensitivity():
             commodity_inputs.loc['start_calibrate_years'] = 5
             commodity_inputs.loc['close_price_method'] = 'probabilistic'
             commodity_inputs = commodity_inputs.dropna()
-            
+
             history_file = pd.read_excel(self.case_study_data_file_path,index_col=0,sheet_name=changing_base_parameters_series)
             historical_data = history_file.loc[2001:].dropna(axis=1)
-            
+
             original_demand = commodity_inputs['initial_demand']
             original_primary_production = commodity_inputs['primary_production']
             if 'Total demand' in historical_data.columns:
@@ -348,18 +348,18 @@ class Sensitivity():
                 historical_data.loc[:,'Total demand'] = historical_data['Primary production']*original_demand/historical_data['Primary production'][2019]
             else:
                 raise ValueError('Need either [Total demand] or [Primary production] in historical data columns (ignore the brackets, but case sensitive)')
-                
+
             if 'Scrap demand' in historical_data.columns:
                 commodity_inputs.loc['Recycling input rate, Global'] = historical_data['Scrap demand'][2001]/historical_data['Total demand'][2001]
                 commodity_inputs.loc['Recycling input rate, China'] = historical_data['Scrap demand'][2001]/historical_data['Total demand'][2001]
-            
+
             if 'Primary production' in historical_data.columns:
                 commodity_inputs.loc['primary_production'] = historical_data['Primary production'][2001]
             else:
                 commodity_inputs.loc['primary_production'] *= commodity_inputs['initial_demand']/original_demand
-                
+
             if 'Primary commodity price' in historical_data.columns:
-                commodity_inputs.loc['primary_commodity_price'] = historical_data['Primary commodity price'][2001]            
+                commodity_inputs.loc['primary_commodity_price'] = historical_data['Primary commodity price'][2001]
             if 'Scrap demand' in historical_data.columns and 'Primary production' in historical_data.columns:
                 commodity_inputs.loc['Total production, Global'] = historical_data['Primary production'][2001]+historical_data['Scrap demand'][2001]
             elif 'Primary production' in historical_data.columns:
@@ -394,7 +394,7 @@ class Sensitivity():
             self.params_to_change = pd.concat([
                 mod.hyperparam.loc['price elasticities':'determining model structure'].dropna(),
                 mod.hyperparam.loc['mining only':].dropna(how='all')])
-        
+
     def run(self):
         '''
         Runs a simplistic sensitivity, where only one parameter is
@@ -409,13 +409,13 @@ class Sensitivity():
         params_to_change = self.params_to_change.copy()
         params_to_change_ind = [i for i in params_to_change.index if type(params_to_change['Value'][i]) not in [bool,str,np.ndarray] and 'years' not in i]
         big_df = self.big_df.copy()
-        
+
         n = self.n_per_param + 1
         n_sig_dig = 3
 
         total_num_scenarios = len(params_to_change_ind)*(n-1)
         count = 0
-        
+
         for i in params_to_change_ind:
             init_val = params_to_change['Value'][i]
             vals = np.append(np.linspace(init_val*(1-self.param_scale),init_val,int(n/2)-1,endpoint=False), np.linspace(init_val,init_val*(1+self.param_scale),int(n/2)))
@@ -438,17 +438,17 @@ class Sensitivity():
                 mod.hyperparam.loc[i,'Value'] = val
                 print(f'Scenario {count}/{total_num_scenarios}: {i} = {val}')
                 count += 1
-                
+
                 self.check_run_append(mod)
                 self.mod = mod
-    
+
     def run_monte_carlo(self, n_scenarios, random_state=220530,
                         sensitivity_parameters=['elas','response','growth','improvements','refinery_capacity_fraction_increase_mining','incentive_opening_probability'],
                         bayesian_tune=False,n_params=1):
         '''
         Runs a Monte Carlo based approach to the sensitivity, where all the sensitivity_parameters
         given are then given values randomly selected from between zero and one.
-        
+
         Always runs an initial scenario with default parameters, so remember to skip that one
         when looking at the resulting pickle file
         ----------------------
@@ -462,7 +462,7 @@ class Sensitivity():
           cannot be accessed here. collection_rate_price_response, direct_melt_price_response,
           and secondary_refined_price_response are excluded from the parameters to change
           regardless of the inputs here, since they are True/False values and are determined
-          by the scenario input given when the Senstivity class is initialized. 
+          by the scenario input given when the Senstivity class is initialized.
         bayesian_tune: bool, whether to use the Bayesian optimization over historical data
           to try to select the next sentivitity parameter values
         n_params: int, number of columns from self.historical_data to use in the objective
@@ -479,12 +479,12 @@ class Sensitivity():
         if self.verbosity>-1:
             print(params_to_change)
         # do something with incentive_opening_probability?
-        
+
         if bayesian_tune:
             self.setup_bayesian_tune(n_params=n_params)
-            
+
         for n in np.arange(1,n_scenarios):
-            if self.verbosity>-1: 
+            if self.verbosity>-1:
                 print(f'Scenario {n+1}/{n_scenarios}')
             for enum,scenario_name in enumerate(self.scenarios):
                 if self.verbosity>-1:
@@ -492,7 +492,7 @@ class Sensitivity():
                 mod = Integration(simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct,scenario_name=scenario_name)
                 self.mod = mod
                 self.notes = scenario_name
-                
+
                 ###### CHANGING BASE PARAMETERS ######
                 changing_base_parameters_series = self.changing_base_parameters_series.copy()
                 if self.verbosity>0: print('parameters getting updated from outside using changing_base_parameters_series input:\n',changing_base_parameters_series.index)
@@ -522,7 +522,7 @@ class Sensitivity():
                     if 'incentive_opening_probability' in params_to_change:
                         new_param_series.loc['incentive_opening_probability']*=0.1/(1-self.incentive_opening_probability_fraction_zero)
                         if new_param_series['incentive_opening_probability']>0.1:
-                            new_param_series.loc['incentive_opening_probability'] = 0 
+                            new_param_series.loc['incentive_opening_probability'] = 0
                     # ^ these values should be small, since small changes make big changes
                     all_three_here = np.all([q in params_to_change for q in ['close_probability_split_max','close_probability_split_mean','close_probability_split_min']])
                     if 'close_probability_split_max' in params_to_change and not all_three_here:
@@ -538,7 +538,7 @@ class Sensitivity():
                         new_param_series.loc['close_years_back'] = int(10*new_param_series.loc['close_years_back']+3)
                     if all_three_here:
                         new_param_series.loc[['close_probability_split_mean','close_probability_split_min','close_probability_split_max']] /=  new_param_series.loc[['close_probability_split_mean','close_probability_split_min','close_probability_split_max']].sum()
-                    
+
                     for param in params_to_change:
                         if type(mod.hyperparam['Value'][param])!=bool:
                             mod.hyperparam.loc[param,'Value'] = new_param_series[param]*np.sign(mod.hyperparam.loc[param,'Value'])
@@ -548,10 +548,10 @@ class Sensitivity():
                 if bayesian_tune:
                     self.complete_bayesian_trial(mod=mod, trial_index=trial_index, n_params=n_params,
                                                 new_param_series=new_param_series, scenario_number=n+enum)
-            
+
         if bayesian_tune:
             self.save_bayesian_results(n_params=n_params)
-            
+
     def setup_bayesian_tune(self, n_params=1):
         '''
         Initializes the things needed to run the Bayesian optimization
@@ -590,11 +590,11 @@ class Sensitivity():
                     parameter_constraints=['close_probability_split_max + close_probability_split_mean + close_probability_split_min <= 1']
                 )
         self.rmse_df = pd.DataFrame()
-        
+
     def complete_bayesian_trial(self, mod, trial_index, n_params=1, new_param_series=pd.Series(dtype=float), scenario_number=0):
         '''
         calculates root mean squared errors (RMSE) from current variables and historical
-        values to give the error the Bayesian optimization is trying to minimize. 
+        values to give the error the Bayesian optimization is trying to minimize.
         '''
         if n_params==1:
             rmse = ((mod.total_demand['Global']-self.historical_data['Total demand'])**2).loc[self.simulation_time].astype(float).sum()**0.5
@@ -624,14 +624,14 @@ class Sensitivity():
                 rmse_list += [(rmse,0)]
                 new_param_series.loc[param+' RMSE'] = rmse
             rmse_dict = dict(zip(self.objective_parameters,rmse_list))
-        
+
         new_param_series = pd.concat([new_param_series],keys=[scenario_number])
         self.rmse_df = pd.concat([self.rmse_df,new_param_series])
         self.ax_client.complete_trial(trial_index=trial_index, raw_data=rmse_dict)
-    
+
     def save_bayesian_results(self,n_params=1):
         '''
-        saves the results of the Bayesian optimization in the 
+        saves the results of the Bayesian optimization in the
         updated_commodity_inputs.pkl file
         '''
         rmse_df = self.rmse_df.copy()
@@ -639,7 +639,7 @@ class Sensitivity():
         rmse_df = rmse_df[0]
         rmse_df = rmse_df.unstack()
         self.rmse_df = rmse_df.copy()
-            
+
         if n_params==1:
             best_params = pd.DataFrame(rmse_df.loc[rmse_df['RMSE'].idxmin()].drop('RMSE'))
             best_params = best_params.rename(columns={best_params.columns[0]:self.material})
@@ -647,13 +647,13 @@ class Sensitivity():
         elif n_params>1:
             best_params = self.ax_client.get_pareto_optimal_parameters()
             best_params = pd.DataFrame(best_params)
-            
+
         path=''
         if os.path.exists('data/updated_commodity_inputs.pkl'):
             path = 'data/updated_commodity_inputs.pkl'
         elif os.path.exists('updated_commodity_inputs.pkl'):
             path = 'updated_commodity_inputs.pkl'
-            
+
         if path!='':
             self.updated_commodity_inputs = pd.read_pickle(path)
             if n_params==1:
@@ -662,7 +662,7 @@ class Sensitivity():
             elif n_params>1:
                 self.updated_commodity_inputs.loc['pareto_'+str(n_params)+'p',self.material] = [best_params]
             self.updated_commodity_inputs.to_pickle(path)
-                
+
         else:
             self.updated_commodity_inputs = best_params.copy()
             if os.path.exists('data'):
@@ -675,15 +675,15 @@ class Sensitivity():
         Varies the parameters for demand (sector_specific_dematerialization_tech_growth,
         sector_specific_price_response, region_specific_price_response, and
         intensity_response_to_gdp) to minimize the RMSE between simulated
-        demand and historical. 
-        
+        demand and historical.
+
         Uses Ax Adaptive Experimentation Platform Bayesian Optimization to find these
         parameters: https://ax.dev/tutorials/gpei_hartmann_service.html,
         install: https://ax.dev/, pip3 install ax-platform
-        
+
         Adds/updates a dataframe self.updated_commodity_inputs that contains all demand
         updates for all commodities, which is saved in updated_commodity_inputs.pkl
-        '''      
+        '''
         self.pkl_filename = self.pkl_filename.split('.pkl')[0]+'_DEM.pkl'
         self.notes += ' check demand'
         if os.path.exists(self.pkl_filename) and not self.overwrite:
@@ -698,7 +698,7 @@ class Sensitivity():
         mod = demandModel(verbosity=0,simulation_time=self.simulation_time)
         params_to_change = ['sector_specific_dematerialization_tech_growth','sector_specific_price_response','region_specific_price_response','intensity_response_to_gdp']
         print(params_to_change)
-        
+
         ax_client = AxClient(random_seed=self.random_state)
         ax_client.create_experiment(
             name="minimize_RMSE_with_real",
@@ -713,13 +713,13 @@ class Sensitivity():
                 {
                     "name": "sector_specific_price_response",
                     "type": "range",
-                    "value_type": "float", 
+                    "value_type": "float",
                     "bounds": [0.001, 0.3],
                 },
                 {
                     "name": "region_specific_price_response",
                     "type": "range",
-                    "value_type": "float", 
+                    "value_type": "float",
                     "bounds": [0.001, 0.3],
                 },
                 {
@@ -734,14 +734,14 @@ class Sensitivity():
         )
         self.rmse_df = pd.DataFrame()
         for n in np.arange(0,n_scenarios):
-            if self.verbosity>-1: 
+            if self.verbosity>-1:
                 print(f'Scenario {n+1}/{n_scenarios}')
             mod = demandModel(verbosity=0,simulation_time=self.simulation_time)
             mod.commodity_price_series = self.historical_data['Primary commodity price']
             mod.commodity_price_series = pd.concat([pd.Series(mod.commodity_price_series.iloc[0],np.arange(1900,self.simulation_time[0])),
                                                     mod.commodity_price_series])
             mod.version = '220620'
-            
+
             ###### CHANGING BASE PARAMETERS ######
             changing_base_parameters_series = self.changing_base_parameters_series.copy()
             for base in np.intersect1d(mod.hyperparam.index, changing_base_parameters_series.index):
@@ -749,7 +749,7 @@ class Sensitivity():
                 if n==0 and self.verbosity>-1:
                     print(base,changing_base_parameters_series[base])
             self.hyperparam_copy = mod.hyperparam.copy()
-            
+
             ###### UPDATING PARAMETERS ######
             parameters, trial_index = ax_client.get_next_trial()
             new_param_series = pd.Series(parameters,params_to_change)
@@ -759,9 +759,9 @@ class Sensitivity():
             new_param_series.loc['RMSE'] = rmse
             new_param_series = pd.concat([new_param_series],keys=[n])
             self.rmse_df = pd.concat([self.rmse_df,new_param_series])
-            
+
             ax_client.complete_trial(trial_index=trial_index, raw_data=rmse)
-        
+
         rmse_df = self.rmse_df.copy()
         rmse_df.index = pd.MultiIndex.from_tuples(rmse_df.index)
         rmse_df = rmse_df[0]
@@ -787,7 +787,7 @@ class Sensitivity():
             self.changing_base_parameters_series.loc[i] = best_params[self.material][i]
         self.notes = self.notes.split(' check demand')[0]
         self.pkl_filename = self.pkl_filename.split('_DEM')[0]+'.pkl'
-    
+
     def check_hist_demand_convergence(self):
         '''
         Run after historical_sim_check_demand() method to plot
@@ -813,7 +813,7 @@ class Sensitivity():
         ax[-1].set(title='Historical regressed on simulated')
         plt.suptitle('Total demand, varying demand parameters (sensitivity historical_sim_check_demand result)',fontweight='bold')
         fig.tight_layout()
-        
+
         hyps=['sector_specific_dematerialization_tech_growth','sector_specific_price_response','region_specific_price_response','intensity_response_to_gdp']
         hyper = pd.concat([big_df.loc['hyperparam'].dropna().loc[i].loc[hyps,'Value'] for i in ind],keys=ind,axis=1)
         hyper.loc['RMSE'] = (tot_demand.astype(float).apply(lambda x: x-historical_data['Total demand'])**2).sum().astype(float)**0.5
@@ -822,13 +822,13 @@ class Sensitivity():
             a.scatter(hyper.loc[i],hyper.loc['RMSE'])
             a.set(title=i,ylabel='RMSE (kt)',xlabel='Elasticity value')
         plt.suptitle('Checking correlation betwen RMSE and parameter value (sensitivity historical_sim_check_demand_result)',fontweight='bold')
-        
+
     def run_historical_monte_carlo(self, n_scenarios, random_state=220621,
                                    sensitivity_parameters=['elas','incentive_opening_probability','improvements','refinery_capacity_fraction_increase_mining'],
                                    bayesian_tune=False,n_params=2):
         '''
         Wrapper to run the run_monte_carlo() method on historical data
-        
+
         Always runs an initial scenario with default parameters, so remember to skip that one
         when looking at the resulting pickle file
         --------------
@@ -850,22 +850,22 @@ class Sensitivity():
             pass
         else:
             raise ValueError('updated_commodity_inputs.pkl does not exist in the expected locations (in this directory, in data folder, as attribute of Sensitivity)')
-        
+
         if hasattr(self,'material') and self.material!='':
-            best_params = self.updated_commodity_inputs[self.material].copy()    
+            best_params = self.updated_commodity_inputs[self.material].copy()
         else:
             raise ValueError('need to use a string input to changing_base_parameters_series in Sensitivity initialization to run this method')
-        
+
         demand_params = ['sector_specific_dematerialization_tech_growth','sector_specific_price_response','region_specific_price_response','intensity_response_to_gdp']
         for i in demand_params:
             self.changing_base_parameters_series.loc[i] = best_params[i]
-        
+
         self.run_monte_carlo(n_scenarios=n_scenarios,
                              random_state=random_state,
                              sensitivity_parameters=sensitivity_parameters,
                              bayesian_tune=bayesian_tune,
                              n_params=n_params)
-        
+
     def create_potential_append(self,mod,big_df,notes,reg_results,initialize=False):
         '''
         Sets up a pandas series that could be appended to our big dataframe
@@ -882,7 +882,7 @@ class Sensitivity():
                 mining = deepcopy([mod.mining])[0]
                 refine = deepcopy([mod.refine])[0]
                 demand = deepcopy([mod.demand])[0]
-            potential_append = pd.DataFrame(np.array([mod.version, notes, mod.hyperparam, mining.hyperparam, 
+            potential_append = pd.DataFrame(np.array([mod.version, notes, mod.hyperparam, mining.hyperparam,
                                 refine.hyperparam, demand.hyperparam, reg_results],dtype=object)
                                              ,index=[
                                     'version','notes','hyperparam','mining.hyperparam','refine.hyperparam','demand.hyperparam','results'
@@ -893,7 +893,7 @@ class Sensitivity():
                                 'version','notes','hyperparam','results'
                             ],columns=[new_col_name])
         return potential_append
-    
+
     def check_run_append(self, mod):
         '''
         Checks whether the proposed set of hyperparameters has already been run and saved
@@ -942,7 +942,7 @@ class Sensitivity():
             if type(mod)==Integration: reg_results = create_result_df(mod)
             elif type(mod) == demandModel: reg_results = pd.concat([mod.demand.sum(axis=1),mod.commodity_price_series],axis=1,keys=['Total demand','Primary commodity price'])
             potential_append = self.create_potential_append(mod=mod,big_df=big_df,notes=notes,reg_results=reg_results,initialize=False)
-            
+
             big_df = pd.concat([big_df,potential_append],axis=1)
             # self.big_df = pd.concat([self.big_df,potential_append],axis=1)
             big_df.to_pickle(self.pkl_filename)
@@ -952,17 +952,17 @@ class Sensitivity():
         else:
             if self.verbosity>-1:
                 print('\tScenario already exists\n')
-            
+
 #         direct_melt_elas_scrap_spread
 #         collection_elas_scrap_price
-        
+
 def grade_predict(ci):
     '''
     see slide 116 in the file:
     C:/Users/ryter/Dropbox (MIT)/
     Group Research Folder_Olivetti/
     Displacement/04 Presentations/
-    John/Weekly Updates/20210825 
+    John/Weekly Updates/20210825
     Generalization.pptx
     a + b*log(price),
     a = 8.1748
@@ -1052,7 +1052,7 @@ def generate_commodity_inputs(commodity_inputs, random_state):
             val = 'probabilistic'
     #     print(i, dists['p1'][i], dists['p2'][i], val)
 
-        
+
         if i in ['Secondary fraction of recycled content, Global']:
             seed(rs)
             ci.loc[i] = sample([0,val,1],1)[0]
@@ -1105,7 +1105,7 @@ def generate_commodity_inputs(commodity_inputs, random_state):
         for i in ['construction','electrical','industrial','other','transport']:
             ci.loc['lifetime_sigma_'+i] = stats.uniform.rvs(0.1,0.4,random_state=n+rs)*ci['lifetime_mean_'+i]
             n += 1
-            
+
     ci.loc['incentive_require_tune_years'] = 10
     ci.loc['presimulate_n_years'] = 10
     ci.loc['end_calibrate_years'] = 10

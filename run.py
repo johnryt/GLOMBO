@@ -12,10 +12,10 @@ from scipy import stats
 from random import seed, sample, shuffle
 import warnings
 
-os.chdir('C:\\Users\\ryter\\Dropbox (MIT)\\John MIT\\Research\\generalizationOutside\\generalization')
+os.chdir('C:\\Users\\ryter\\Dropbox (MIT)\\John MIT\\Research\\generalizationOutside\\generalization') #should i touch this? not sure
 
-input_file = pd.read_excel('C:/Users/ryter/Dropbox (MIT)/Group Research Folder_Olivetti/Displacement/08 Generalization/_Python/Data/case study data.xlsx',index_col=0)
-commodity_inputs = input_file['Al'].dropna()
+input_file = pd.read_excel('data/case study data.xlsx',index_col=0) #updated the path to the correct path for my laptop
+commodity_inputs = input_file['Au'].dropna() #changed to gold 'Au'
 commodity_inputs.loc['incentive_require_tune_years'] = 10
 commodity_inputs.loc['presimulate_n_years'] = 10
 commodity_inputs.loc['end_calibrate_years'] = 10

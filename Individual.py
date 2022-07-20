@@ -11,6 +11,12 @@ import os
 from itertools import combinations
 from matplotlib.lines import Line2D
 
+from itertools import combinations
+from matplotlib.lines import Line2D
+
+from itertools import combinations
+from matplotlib.lines import Line2D
+
 def is_pareto_efficient_simple(costs):
     """
     Find the pareto-efficient points
@@ -232,7 +238,7 @@ class Individual():
     def plot_results(self, plot_over_time=True, n_best=0, include_sd=False,
                     plot_hyperparam_heatmap=True,
                     plot_hyperparam_distributions=True, n_per_plot=3,
-                    plot_hyperparam_vs_error=True):
+                    plot_hyperparam_vs_error=True, flip_yx=False):
         '''
         produces many different plots you can use to try and understand the model outputs. More info is given with each model input bool description below.
         
@@ -244,6 +250,7 @@ class Individual():
         plot_hyperparam_distributions: bool, True plots the hyperparameter distributions
         n_per_plot: int, for use with plot_hyperparam_distributions. Determines how many hyperparameter values are put in each plot, since it can be hard to tell what is going on when there are too many lines in a figure
         plot_hyperparam_vs_error: bool, plots the hyperparameter values vs the error value, separate plot for each hyperparameter. Use this to try and see if there are ranges for the best hyperparameter values.
+        flip_yx: bool, False means plot hyperparam value vs error, while True means plot error vs hyperparam value
         '''
         self.normalize_rmses()
         norm_sum = 'NORM SUM' if include_sd else 'NORM SUM OBJ ONLY'
@@ -277,7 +284,7 @@ class Individual():
         ind = [i for i in ind if 'RMSE' not in i and 'NORM' not in i]
         ind = self.hyperparam.loc[ind].loc[(self.hyperparam.loc[ind].std(axis=1)>1e-3)].index
         self.hyperparams_changing = ind
-        best_hyperparam = self.hyperparam.loc[ind,cols].astype(float)
+        best_hyperparam = self.hyperparam.copy().loc[ind,cols].astype(float)
         if 'close_years_back' in best_hyperparam.index:
             best_hyperparam.loc['close_years_back'] /= 10
         
@@ -295,13 +302,21 @@ class Individual():
         if plot_hyperparam_vs_error:
             fig,ax=easy_subplots(self.hyperparams_changing,dpi=self.dpi)
             for a,i in zip(ax,self.hyperparams_changing):
-                v = self.hyperparam.sort_values(by=norm_sum,axis=1).T.reset_index(drop=True).T
+                if flip_yx:
+                    v = self.hyperparam.sort_values(by=i,axis=1).T.reset_index(drop=True).T
+                else:
+                    v = self.hyperparam.sort_values(by=norm_sum,axis=1).T.reset_index(drop=True).T
                 x = v.copy().loc[i]
                 y = v.copy().loc[norm_sum]
                 y = y.where(y<y.quantile(0.7)).dropna()
                 
-                a.plot(y,x[y.index])
-                a.set(title=i,ylabel='Hyperparameter value',xlabel='Normalized error')
+                if flip_yx:
+                    a.plot(x[y.index],y)
+                    a.set(title=i,xlabel='Hyperparameter value',ylabel='Normalized error')
+                else:
+                    a.plot(y,x[y.index])
+                    a.set(title=i,ylabel='Hyperparameter value',xlabel='Normalized error')
+                    
             fig.tight_layout()
             
     def plot_demand_results(self):
@@ -341,11 +356,3 @@ class Individual():
             else:
                 unit = 'kt'
         return simulated_demand, historical_demand, unit
-    
-# indiv = Individual('Al',3,filename='data/aluminum_run_hist_3p.pkl',rmse_not_mae=False,dpi=50)
-# indiv.plot_best_all()
-# indiv.find_pareto(plot=True,log=True,plot_non_pareto=False)
-# indiv.plot_results(plot_over_time=True, include_sd=False,
-#                    plot_hyperparam_heatmap=True, n_best=20,
-#                    plot_hyperparam_distributions=True, n_per_plot=4,
-#                    plot_hyperparam_vs_error=True)

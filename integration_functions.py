@@ -97,7 +97,7 @@ def create_result_df(integ):
         scraps = pd.concat([old_scrap,new_scrap],axis=1,keys=['Old scrap collection','New scrap collection'])
         results = pd.concat([results,collection,scraps],axis=1)
         reg_results.loc[reg] = [results]
-    return old_new_mines, reg_results
+    return reg_results
 
 def check_equivalence(big_df, potential_append):
     '''

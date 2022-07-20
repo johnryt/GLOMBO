@@ -14,6 +14,9 @@ from matplotlib.lines import Line2D
 from itertools import combinations
 from matplotlib.lines import Line2D
 
+from itertools import combinations
+from matplotlib.lines import Line2D
+
 def is_pareto_efficient_simple(costs):
     """
     Find the pareto-efficient points
@@ -247,6 +250,7 @@ class Individual():
         plot_hyperparam_distributions: bool, True plots the hyperparameter distributions
         n_per_plot: int, for use with plot_hyperparam_distributions. Determines how many hyperparameter values are put in each plot, since it can be hard to tell what is going on when there are too many lines in a figure
         plot_hyperparam_vs_error: bool, plots the hyperparameter values vs the error value, separate plot for each hyperparameter. Use this to try and see if there are ranges for the best hyperparameter values.
+        flip_yx: bool, False means plot hyperparam value vs error, while True means plot error vs hyperparam value
         '''
         self.normalize_rmses()
         norm_sum = 'NORM SUM' if include_sd else 'NORM SUM OBJ ONLY'

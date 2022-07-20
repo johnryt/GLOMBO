@@ -2,11 +2,11 @@ import numpy as np
 import pandas as pd
 idx = pd.IndexSlice
 
-def cu_growth_cal(TCRC_growth, TCRC_elas, ref_bal = 0, CU_ref_bal_elas = 0):
+def cu_growth_cal(TCRC_growth, TCRC_elas, ref_bal = 0, CU_ref_bal_elas = 0, price_growth=0, price_elas=0):
     if CU_ref_bal_elas == 0:
-        growth=TCRC_growth**(TCRC_elas)
+        growth=TCRC_growth**(TCRC_elas) * price_growth**price_elas
     else:
-        growth = TCRC_growth**(TCRC_elas)*ref_bal**CU_ref_bal_elas
+        growth = TCRC_growth**(TCRC_elas)*ref_bal**CU_ref_bal_elas * price_growth**price_elas
     return growth
 
 def sec_ratio_growth_cal(TCRC_growth, spread_growth, TCRC_elas, spread_elas):
@@ -30,17 +30,23 @@ def simulate_refinery_production_oneyear(year_i, tcrc_series_, sp2_series_,
                                          pri_CU_ref_bal_elas = 0, sec_CU_ref_bal_elas = 0,
                                          ref_cu_pct_change = 0, ref_sr_pct_change = 0,
                                          simulation_time = np.arange(2019,2041), additional_secondary_refined=0,
-                                         secondary_refined_price_response=True,secondary_ratio=0):
+                                         secondary_refined_price_response=True,secondary_ratio=0,
+                                         refined_price_series_ = 0):
     
     ref_stats_next=pd.Series(0, index=ref_stats.columns)
+    if type(refined_price_series_)==int:
+        refined_price_series = pd.Series(0.01,simulation_time)
     
     pri_CU_TCRC_elas=ref_hyper_param['pri CU TCRC elas']
     sec_CU_TCRC_elas=ref_hyper_param['sec CU TCRC elas']
+    pri_CU_price_elas = ref_hyper_param['pri CU price elas']
+    sec_CU_price_elas = ref_hyper_param['sec CU price elas']
     sec_ratio_TCRC_elas=ref_hyper_param['sec ratio TCRC elas']
     sec_ratio_SP2_elas=ref_hyper_param['sec ratio scrap spread elas']
     
     tcrc_series = tcrc_series_.copy().replace(0,1e-6)
     sp2_series = sp2_series_.copy().replace(0,1e-6)
+    refined_price_series = refined_price_series_.copy().replace(0,1e-6)
     pri_cap_growth_series = pri_cap_growth_series_.copy().replace(0,1e-6)
     sec_cap_growth_series = sec_cap_growth_series_.copy().replace(0,1e-6)
     
@@ -50,6 +56,7 @@ def simulate_refinery_production_oneyear(year_i, tcrc_series_, sp2_series_,
     
     tcrc_growth=tcrc_series.loc[t]/tcrc_series.loc[t_lag_1]
     sp2_growth=sp2_series.loc[t]/sp2_series.loc[t_lag_1]
+    price_growth = refined_price_series[t]/refined_price_series[t_lag_1]
     ratio_growth=sec_ratio_growth_cal(tcrc_growth, sp2_growth, sec_ratio_TCRC_elas, sec_ratio_SP2_elas)
     if growth_lag == 1:
         pri_growth=pri_cap_growth_series.loc[t_lag_1]/pri_cap_growth_series.loc[t_lag_2]
@@ -59,11 +66,11 @@ def simulate_refinery_production_oneyear(year_i, tcrc_series_, sp2_series_,
         sec_growth=sec_cap_growth_series.loc[year_i]/sec_cap_growth_series.loc[year_i-1]
     
     if pri_CU_ref_bal_elas == 0:
-        pri_cu_growth=cu_growth_cal(tcrc_growth, pri_CU_TCRC_elas)
+        pri_cu_growth=cu_growth_cal(tcrc_growth, pri_CU_TCRC_elas, price_growth=price_growth, price_elas=pri_CU_price_elas)
     else:
-        pri_cu_growth=cu_growth_cal(tcrc_growth, pri_CU_TCRC_elas, ref_bal, pri_CU_ref_bal_elas)
+        pri_cu_growth=cu_growth_cal(tcrc_growth, pri_CU_TCRC_elas, ref_bal, price_growth=price_growth, price_elas=pri_CU_price_elas)
     if sec_CU_ref_bal_elas == 0:
-        sec_cu_growth=cu_growth_cal(tcrc_growth, sec_CU_TCRC_elas)
+        sec_cu_growth=cu_growth_cal(tcrc_growth, sec_CU_TCRC_elas, price_growth=price_growth, price_elas=sec_CU_price_elas)
     else: 
         sec_cu_growth=cu_growth_cal(tcrc_growth, sec_CU_TCRC_elas, ref_bal, sec_CU_ref_bal_elas)
     if ref_cu_pct_change != 0:

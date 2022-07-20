@@ -16,6 +16,8 @@ class refiningModel():
         sim_time2 = np.arange(simulation_time[0]-1,1+simulation_time[-1])
         rate = 0.0
         self.tcrc_series = pd.Series([1*(1.0+rate)**(y-simulation_time[0]) for y in sim_time2], sim_time2)
+        rate = 0.0
+        self.refined_price_series = pd.Series([1*(1.0+rate)**(y-simulation_time[0]) for y in sim_time2], sim_time2)
         rate = .01
         self.scrap_spread_series = pd.Series([1*(1.0+rate)**(y-simulation_time[0]) for y in sim_time2], sim_time2)
         self.scrap_spread_series = pd.concat([self.scrap_spread_series for i in [0,0,0]],axis=1,keys=['Global','China','RoW'])
@@ -47,6 +49,8 @@ class refiningModel():
         ref_hyper_param.loc['sec CU',:] = 0.85, 'Capacity at refineries that process secondary material (and also primary if the secondary ratio is less than 1)'
         ref_hyper_param.loc['pri CU TCRC elas',:] = 0.057, 'Capacity at primary-only refineries'
         ref_hyper_param.loc['sec CU TCRC elas',:] = 0.153, 'Capacity at secondary-consuming refineries'
+        ref_hyper_param.loc['pri CU price elas',:] = 0, 'Capacity at primary-only refineries'
+        ref_hyper_param.loc['sec CU price elas',:] = 0, 'Capacity at secondary-consuming refineries'
         ref_hyper_param.loc['sec ratio',:] = 0.3, 'Secondary ratio, or the fraction of secondary-consuming refinery material consumption coming from scrap'
         ref_hyper_param.loc['sec ratio TCRC elas',:] = -0.197, 'Secondary ratio elasticity to TCRC'
         ref_hyper_param.loc['sec ratio scrap spread elas',:] = 0.316, 'Secondary ratio elasticity to scrap spread'
@@ -200,7 +204,8 @@ class refiningModel():
                                          pri_CU_ref_bal_elas = 0, sec_CU_ref_bal_elas = 0,
                                          ref_cu_pct_change = 0, ref_sr_pct_change = 0,
                                          simulation_time = self.simulation_time, additional_secondary_refined=addl_scrap,
-                                         secondary_refined_price_response=self.secondary_refined_price_response,secondary_ratio=sec_ratio_ph)
+                                         secondary_refined_price_response=self.secondary_refined_price_response,secondary_ratio=sec_ratio_ph,
+                                         refined_price_series_=self.refined_price_series)
             rs += [ref_stats]
             if type(addl_scrap)!=int: self.additional_secondary_refined.loc[:,region] = addl_scrap
         ref_stats = pd.concat(rs, keys=self.regions)

@@ -109,7 +109,7 @@ class Integration():
         hyperparameters.loc['presimulate_n_years',:] = 10, 'int, number of years in the past to simulate mining to establish baseline'
         hyperparameters.loc['collection_rate_price_response',:] = True,'bool, whether or not this parameter responds to price'
         hyperparameters.loc['direct_melt_price_response',:] = True,'bool, whether or not this parameter responds to price'
-        hyperparameters.loc['refinery_capacity_fraction_increase_mining'] = 0.5,'0 means refinery capacity growth is determined by demand growth alone; 1 means refinery capacity growth is determined by mining production growth alone. Values in between allow for a weighted mixture.'
+        hyperparameters.loc['refinery_capacity_fraction_increase_mining'] = 0,'0 means refinery capacity growth is determined by demand growth alone; 1 means refinery capacity growth is determined by mining production growth alone. Values in between allow for a weighted mixture.'
 
         # mining only
         hyperparameters.loc['mining only',:] = np.nan

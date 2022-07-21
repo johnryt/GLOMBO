@@ -81,6 +81,8 @@ class Integration():
         hyperparameters.loc['refining only',:] = np.nan
         hyperparameters.loc['pri CU TCRC elas',:] = 0.1, 'Capacity utilization at primary-only refineries'
         hyperparameters.loc['sec CU TCRC elas',:] = 0.1, 'Capacity utilization at secondary-consuming refineries'
+        hyperparameters.loc['pri CU price elas',:] = 0.01, 'primary refinery capacity uitlization elasticity to primary commodity price'
+        hyperparameters.loc['sec CU price elas',:] = 0.01, 'secondary refinery capacity uitlization elasticity to primary commodity price'
         hyperparameters.loc['sec ratio TCRC elas',:] = -0.4, 'Secondary ratio elasticity to TCRC'
         hyperparameters.loc['sec ratio scrap spread elas',:] = 0.8, 'Secondary ratio elasticity to scrap spread'
         hyperparameters.loc['Use regions'] = False, 'True makes it so global refining is determined from combo of China and RoW; False means we ignore the region level'
@@ -371,6 +373,7 @@ class Integration():
         self.refine.i = self.i
         self.refine.tcrc_series = self.tcrc.copy()
         self.refine.scrap_spread_series = self.scrap_spread.copy()
+        self.refine.refined_price_series = self.primary_commodity_price.copy()
         if self.i-2 not in self.concentrate_supply.index:
             self.concentrate_supply.loc[self.i-2] = self.concentrate_supply[self.i-1]*self.refined_demand['Global'][self.i-2]/self.refined_demand['Global'][self.i-1]
         if self.i-2 not in self.scrap_supply.index:

@@ -198,6 +198,7 @@ class Sensitivity():
                  pkl_filename='integration_big_df.pkl',
                  case_study_data_file_path='generalization/data/case study data.xlsx',
                  changing_base_parameters_series=0,
+                 additional_base_parameters=0,
                  params_to_change=0,
                  n_per_param=5,
                  notes='Initial run',
@@ -223,6 +224,9 @@ class Sensitivity():
             sheet name in the case study data excel file, which then causes the base parameters series
             to be loaded using parameters for that commodity. Alternatively, a pandas series can be input that
             contains the hyperparameter names you wish to change
+        additional_base_parameters: pd.series.Series. pandas series of model hyperparameters that is merged onto
+            the eventual changing_base_parameters_series dataframe, such that even when changing_base_parameters_series
+            is a string, we can add additional model hyperparameters to change its functionality.
         params_to_change: list of hyperparameters to be changed when running the most
             simple sensitivity analysis, where we only change one parameter at a time using
             the run() function.
@@ -266,11 +270,12 @@ class Sensitivity():
         dpi: int, stands for dots per inch, and is used to change the resolution of the plots created using
             the check_hist_demand_convergence() method on a historical_sim_check_demand() method run
         '''
+        self.simulation_time = simulation_time
         self.changing_base_parameters_series = changing_base_parameters_series
+        self.additional_base_parameters = additional_base_parameters
         self.case_study_data_file_path = case_study_data_file_path
         self.update_changing_base_parameters_series()
 
-        self.simulation_time = simulation_time
         self.byproduct = byproduct
         self.verbosity = verbosity
         self.param_scale = param_scale
@@ -393,6 +398,13 @@ class Sensitivity():
         else:
             raise ValueError('changing_base_parameters_series input is incorrectly formatted (should be dataframe with parameter values in first column, or a series)')
 
+        if type(self.additional_base_parameters)==pd.core.series.Series:
+            for q in self.additional_base_parameters.index:
+                self.changing_base_parameters_series.loc[q] = self.additional_base_parameters[q]
+        elif type(self.additional_base_parameters)==pd.core.frame.DataFrame:
+            for q in self.additional_base_parameters.index:
+                self.changing_base_parameters_series.loc[q] = self.additional_base_parameters.iloc[:,0][q]
+
     def get_params_to_change(self):
         '''
         gets a list of parameters to change that are already within the
@@ -483,7 +495,7 @@ class Sensitivity():
         self.update_changing_base_parameters_series()
         self.initialize_big_df()
         mod = Integration(simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct)
-        scenario_params_dont_change = ['collection_rate_price_response','direct_melt_price_response','secondary_refined_price_response']
+        scenario_params_dont_change = ['collection_rate_price_response','direct_melt_price_response','secondary_refined_price_response','refinery_capacity_growth_lag']
 #         params_to_change = [i for i in mod.hyperparam.dropna(how='all').index if ('elas' in i or 'response' in i or 'growth' in i or 'improvements' in i) and i not in scenario_params_dont_change]
         params_to_change = [i for i in mod.hyperparam.dropna(how='all').index if np.any([j in i for j in sensitivity_parameters]) and i not in scenario_params_dont_change]
         self.sensitivity_param = params_to_change
@@ -581,8 +593,10 @@ class Sensitivity():
             experiment_param=[{'name':i,'type':'range','bounds':[0.001,1],'value_type':'float'} for i in self.sensitivity_param]
             n_params = min([self.historical_data.shape[1],n_params])
             objective_parameters = self.historical_data.columns[:n_params]
+            # hist_ph = self.historical_data.copy()
             if self.include_sd_objectives:
                 objective_parameters = np.append(objective_parameters,['Scrap SD','Conc. SD','Ref. SD'])
+                #hist_ph.loc[:,'Scrap SD'] = 
             self.objective_parameters = objective_parameters
 #             objective_param = dict([[c, ObjectiveProperties(minimize=True, threshold=branin_currin.ref_point[i])] for i,c in enumerate(objective_parameters)])
             objective_param = dict([[c, ObjectiveProperties(minimize=True)] for i,c in enumerate(objective_parameters)])

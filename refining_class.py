@@ -43,6 +43,7 @@ class refiningModel():
         hyperparam.loc['SX-EW fraction of production','China'] = 0
         hyperparam.loc['Total production','Global'] = 4 # kt
         hyperparam.loc['Use regions'] = False
+        hyperparam.loc['refinery_capacity_growth_lag',:] = 1 # capacity growth lag, can be 1 or 0. 1 means that we use the year_i-1 and year_i-2 years to calculated the growth associated with mining or demand for calculating capacity growth, while 0 means we use year_i and year_i-1.
         
         ref_hyper_param = pd.DataFrame(np.nan,['pri cap','pri CU','pri CU TCRC elas','sec cap','sec CU','sec CU TCRC elas','sec ratio','sec ratio TCRC elas','sec ratio scrap spread elas','conc to cathode eff','scrap to cathode eff'],['Value','Notes'])
         ref_hyper_param.loc['pri CU',:] = 0.85, 'Capacity at primary-only refineries'
@@ -200,7 +201,7 @@ class refiningModel():
             ref_stats, addl_scrap = simulate_refinery_production_oneyear(self.i, self.tcrc_series, self.scrap_spread_series[region], 
                                          self.pri_cap_growth_series, self.sec_cap_growth_series[region],
                                          ref_stats, ref_hp, 
-                                         sec_coef=0, growth_lag=1, ref_bal = 0, 
+                                         sec_coef=0, growth_lag=self.hyperparam[region]['refinery_capacity_growth_lag'], ref_bal = 0, 
                                          pri_CU_ref_bal_elas = 0, sec_CU_ref_bal_elas = 0,
                                          ref_cu_pct_change = 0, ref_sr_pct_change = 0,
                                          simulation_time = self.simulation_time, additional_secondary_refined=addl_scrap,

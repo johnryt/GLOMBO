@@ -328,6 +328,7 @@ class Sensitivity():
         match the string.
         '''
         changing_base_parameters_series = self.changing_base_parameters_series
+        simulation_time = self.simulation_time
         if type(changing_base_parameters_series)==str:
             self.material = changing_base_parameters_series
             input_file = pd.read_excel(self.case_study_data_file_path,index_col=0)
@@ -340,33 +341,40 @@ class Sensitivity():
             commodity_inputs = commodity_inputs.dropna()
 
             history_file = pd.read_excel(self.case_study_data_file_path,index_col=0,sheet_name=changing_base_parameters_series)
-            historical_data = history_file.loc[2001:].dropna(axis=1)
+            historical_data = history_file.loc[simulation_time[0]:].dropna(axis=1)
 
             original_demand = commodity_inputs['initial_demand']
             original_primary_production = commodity_inputs['primary_production']
             if 'Total demand' in historical_data.columns:
-                commodity_inputs.loc['initial_demand'] = historical_data['Total demand'][2001]
+                commodity_inputs.loc['initial_demand'] = historical_data['Total demand'][simulation_time[0]]
             elif 'Primary production' in historical_data.columns:
-                commodity_inputs.loc['initial_demand'] = historical_data['Primary production'][2001]*original_demand/original_primary_production
-                historical_data.loc[:,'Total demand'] = historical_data['Primary production']*original_demand/historical_data['Primary production'][2019]
+                commodity_inputs.loc['initial_demand'] = historical_data['Primary production'][simulation_time[0]]*original_demand/original_primary_production
+                historical_data.loc[:,'Total demand'] = historical_data['Primary production']*original_demand/historical_data['Primary production'][simulation_time[-1]]
+            elif 'Primary supply' in historical_data.columns:
+                commodity_inputs.loc['initial_demand'] = historical_data['Primary supply'][simulation_time[0]]*original_demand/original_primary_production
+                historical_data.loc[:,'Total demand'] = historical_data['Primary supply']*original_demand/historical_data['Primary supply'][simulation_time[-1]]
             else:
                 raise ValueError('Need either [Total demand] or [Primary production] in historical data columns (ignore the brackets, but case sensitive)')
 
             if 'Scrap demand' in historical_data.columns:
-                commodity_inputs.loc['Recycling input rate, Global'] = historical_data['Scrap demand'][2001]/historical_data['Total demand'][2001]
-                commodity_inputs.loc['Recycling input rate, China'] = historical_data['Scrap demand'][2001]/historical_data['Total demand'][2001]
+                commodity_inputs.loc['Recycling input rate, Global'] = historical_data['Scrap demand'][simulation_time[0]]/historical_data['Total demand'][simulation_time[0]]
+                commodity_inputs.loc['Recycling input rate, China'] = historical_data['Scrap demand'][simulation_time[0]]/historical_data['Total demand'][simulation_time[0]]
 
             if 'Primary production' in historical_data.columns:
-                commodity_inputs.loc['primary_production'] = historical_data['Primary production'][2001]
+                commodity_inputs.loc['primary_production'] = historical_data['Primary production'][simulation_time[0]]
+            elif 'Primary supply' in historical_data.columns:
+                commodity_inputs.loc['primary_production'] = historical_data['Primary supply'][simulation_time[0]]
             else:
                 commodity_inputs.loc['primary_production'] *= commodity_inputs['initial_demand']/original_demand
 
             if 'Primary commodity price' in historical_data.columns:
-                commodity_inputs.loc['primary_commodity_price'] = historical_data['Primary commodity price'][2001]
+                commodity_inputs.loc['primary_commodity_price'] = historical_data['Primary commodity price'][simulation_time[0]]
             if 'Scrap demand' in historical_data.columns and 'Primary production' in historical_data.columns:
-                commodity_inputs.loc['Total production, Global'] = historical_data['Primary production'][2001]+historical_data['Scrap demand'][2001]
+                commodity_inputs.loc['Total production, Global'] = historical_data['Primary production'][simulation_time[0]]+historical_data['Scrap demand'][simulation_time[0]]
             elif 'Primary production' in historical_data.columns:
-                commodity_inputs.loc['Total production, Global'] = historical_data['Primary production'][2001]*original_demand/original_primary_production
+                commodity_inputs.loc['Total production, Global'] = historical_data['Primary production'][simulation_time[0]]*original_demand/original_primary_production
+            elif 'Primary supply' in historical_data.columns:
+                commodity_inputs.loc['Total production, Global'] = historical_data['Primary supply'][simulation_time[0]]*original_demand/original_primary_production
             else:
                 commodity_inputs.loc['Total production, Global'] = commodity_inputs['initial_demand']*original_demand/commodity_inputs['Total production, Global']
             self.historical_data = historical_data.copy()
@@ -800,7 +808,7 @@ class Sensitivity():
         big_df = pd.read_pickle(self.pkl_filename.split('.pkl')[0]+'_DEM.pkl')
         ind = big_df.loc['results'].dropna().index
         res = pd.concat([big_df.loc['results',i] for i in ind],keys=ind)
-        tot_demand = res['Total demand'].unstack(0).loc[2001:2019]
+        tot_demand = res['Total demand'].unstack(0).loc[self.simulation_time[0]:self.simulation_time[-1]]
         # below: calculates RMSE (root mean squared error) for each column and idxmin gets the index corresponding to the minimum RMSE
         best_demand = tot_demand[(tot_demand.astype(float).apply(lambda x: x-historical_data['Total demand'])**2).sum().astype(float).idxmin()]
         fig,ax = easy_subplots(3,dpi=self.dpi)

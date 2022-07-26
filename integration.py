@@ -86,6 +86,7 @@ class Integration():
         hyperparameters.loc['sec ratio TCRC elas',:] = -0.4, 'Secondary ratio elasticity to TCRC'
         hyperparameters.loc['sec ratio scrap spread elas',:] = 0.8, 'Secondary ratio elasticity to scrap spread'
         hyperparameters.loc['Use regions'] = False, 'True makes it so global refining is determined from combo of China and RoW; False means we ignore the region level'
+        hyperparameters.loc['refinery_capacity_growth_lag'] = 1,'capacity growth lag, can be 1 or 0. 1 means that we use the year_i-1 and year_i-2 years to calculated the growth associated with mining or demand for calculating capacity growth, while 0 means we use year_i and year_i-1.'
         
         # price
         hyperparameters.loc['price',:] = np.nan
@@ -391,7 +392,7 @@ class Integration():
         self.mining.i = self.i
         self.mining.primary_price_series.loc[self.i] = self.primary_commodity_price[self.i]
         self.mining.primary_tcrc_series.loc[self.i] = self.tcrc[self.i]
-        self.mining.demand_series.loc[self.i] = self.concentrate_demand['Global'][self.i]
+        #self.mining.demand_series.loc[self.i] = self.concentrate_demand['Global'][self.i]
         self.mining.run()
         # concentrate_supply
         self.concentrate_supply.loc[self.i] = self.mining.concentrate_supply_series[self.i]
@@ -478,7 +479,7 @@ class Integration():
         else:
             self.direct_melt_demand.loc[i] = self.total_demand.loc[i]*self.direct_melt_fraction.loc[i]
         
-    def update_integration_variables(self):
+    def update_integration_variables_post_demand(self):
         i = self.i
         
         # scrap supply
@@ -495,6 +496,9 @@ class Integration():
         self.refined_demand.loc[i] = self.total_demand.loc[i] - self.direct_melt_demand.loc[i]
         self.refined_demand[self.refined_demand<0] = 0
         self.direct_melt_demand.loc[i] /= self.scrap_to_cathode_eff
+    
+    def update_integration_variables_post_refine(self):
+        i = self.i
         
         # concentrate_demand, secondary_refined_demand, refined_supply
         self.concentrate_demand.loc[i] = self.refine.ref_stats.loc[i,idx[:,'Primary production']].droplevel(1)
@@ -514,6 +518,8 @@ class Integration():
         # scrap_demand
         self.scrap_demand.loc[i] = self.secondary_refined_demand.loc[i]+self.direct_melt_demand.loc[i]
         
+        self.mining.demand_series.loc[self.i] = self.concentrate_demand['Global'][self.i]
+
     def run(self):
         self.h = self.hyperparam['Value'].copy()
         for year in self.simulation_time:
@@ -526,10 +532,12 @@ class Integration():
                 self.initialize_price()
             else:
                 self.price_evolution()
-                self.run_demand()
-                self.run_refine()
-                self.update_integration_variables()
                 self.run_mining()
+                
+                self.run_demand()
+                self.update_integration_variables_post_demand()
+                self.run_refine()
+                self.update_integration_variables_post_refine()
         self.concentrate_demand = pd.concat([self.mining.demand_series,self.concentrate_demand['China'],
                                             self.concentrate_demand['RoW']],axis=1,keys=['Global','China','RoW'])
 

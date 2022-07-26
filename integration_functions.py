@@ -8,6 +8,7 @@ from random import seed, sample, shuffle
 from demand_class import demandModel
 import os
 from useful_functions import easy_subplots
+import statsmodels.api as sm
 
 from copy import deepcopy
 
@@ -198,6 +199,7 @@ class Sensitivity():
                  pkl_filename='integration_big_df.pkl',
                  case_study_data_file_path='generalization/data/case study data.xlsx',
                  changing_base_parameters_series=0,
+                 additional_base_parameters=0,
                  params_to_change=0,
                  n_per_param=5,
                  notes='Initial run',
@@ -210,6 +212,7 @@ class Sensitivity():
                  random_state=220620,
                  incentive_opening_probability_fraction_zero=0.1,
                  include_sd_objectives=False,
+                 use_rmse_not_r2=True,
                  dpi=50):
         '''
         Initializing Sensitivity class.
@@ -223,6 +226,9 @@ class Sensitivity():
             sheet name in the case study data excel file, which then causes the base parameters series
             to be loaded using parameters for that commodity. Alternatively, a pandas series can be input that
             contains the hyperparameter names you wish to change
+        additional_base_parameters: pd.series.Series. pandas series of model hyperparameters that is merged onto
+            the eventual changing_base_parameters_series dataframe, such that even when changing_base_parameters_series
+            is a string, we can add additional model hyperparameters to change its functionality.
         params_to_change: list of hyperparameters to be changed when running the most
             simple sensitivity analysis, where we only change one parameter at a time using
             the run() function.
@@ -266,11 +272,12 @@ class Sensitivity():
         dpi: int, stands for dots per inch, and is used to change the resolution of the plots created using
             the check_hist_demand_convergence() method on a historical_sim_check_demand() method run
         '''
+        self.simulation_time = simulation_time
         self.changing_base_parameters_series = changing_base_parameters_series
+        self.additional_base_parameters = additional_base_parameters
         self.case_study_data_file_path = case_study_data_file_path
         self.update_changing_base_parameters_series()
 
-        self.simulation_time = simulation_time
         self.byproduct = byproduct
         self.verbosity = verbosity
         self.param_scale = param_scale
@@ -283,6 +290,7 @@ class Sensitivity():
         self.random_state = random_state
         self.include_sd_objectives = include_sd_objectives
         self.incentive_opening_probability_fraction_zero = incentive_opening_probability_fraction_zero
+        self.use_rmse_not_r2 = use_rmse_not_r2
         self.dpi = dpi
 
         if self.overwrite: print('WARNING, YOU ARE OVERWRITING AN EXISTING FILE')
@@ -300,11 +308,11 @@ class Sensitivity():
             self.mod = mod
             mod.run()
             big_df = pd.DataFrame(np.nan,index=[
-                'version','notes','hyperparam','mining.hyperparam','refine.hyperparam','demand.hyperparam','results'
+                'version','notes','hyperparam','mining.hyperparam','refine.hyperparam','demand.hyperparam','results','mine_data'
             ],columns=[])
             reg_results = create_result_df(mod)
             big_df.loc[:,0] = np.array([mod.version, self.notes, mod.hyperparam, mod.mining.hyperparam,
-                                        mod.refine.hyperparam, mod.demand.hyperparam, reg_results],dtype=object)
+                                        mod.refine.hyperparam, mod.demand.hyperparam, reg_results, mod.mining.ml],dtype=object)
             big_df.to_pickle(self.pkl_filename)
             self.mod = mod
         self.big_df = big_df.copy()
@@ -328,6 +336,7 @@ class Sensitivity():
         match the string.
         '''
         changing_base_parameters_series = self.changing_base_parameters_series
+        simulation_time = self.simulation_time
         if type(changing_base_parameters_series)==str:
             self.material = changing_base_parameters_series
             input_file = pd.read_excel(self.case_study_data_file_path,index_col=0)
@@ -340,33 +349,40 @@ class Sensitivity():
             commodity_inputs = commodity_inputs.dropna()
 
             history_file = pd.read_excel(self.case_study_data_file_path,index_col=0,sheet_name=changing_base_parameters_series)
-            historical_data = history_file.loc[2001:].dropna(axis=1)
+            historical_data = history_file.loc[simulation_time[0]:].dropna(axis=1)
 
             original_demand = commodity_inputs['initial_demand']
             original_primary_production = commodity_inputs['primary_production']
             if 'Total demand' in historical_data.columns:
-                commodity_inputs.loc['initial_demand'] = historical_data['Total demand'][2001]
+                commodity_inputs.loc['initial_demand'] = historical_data['Total demand'][simulation_time[0]]
             elif 'Primary production' in historical_data.columns:
-                commodity_inputs.loc['initial_demand'] = historical_data['Primary production'][2001]*original_demand/original_primary_production
-                historical_data.loc[:,'Total demand'] = historical_data['Primary production']*original_demand/historical_data['Primary production'][2019]
+                commodity_inputs.loc['initial_demand'] = historical_data['Primary production'][simulation_time[0]]*original_demand/original_primary_production
+                historical_data.loc[:,'Total demand'] = historical_data['Primary production']*original_demand/historical_data['Primary production'][simulation_time[-1]]
+            elif 'Primary supply' in historical_data.columns:
+                commodity_inputs.loc['initial_demand'] = historical_data['Primary supply'][simulation_time[0]]*original_demand/original_primary_production
+                historical_data.loc[:,'Total demand'] = historical_data['Primary supply']*original_demand/historical_data['Primary supply'][simulation_time[-1]]
             else:
                 raise ValueError('Need either [Total demand] or [Primary production] in historical data columns (ignore the brackets, but case sensitive)')
 
             if 'Scrap demand' in historical_data.columns:
-                commodity_inputs.loc['Recycling input rate, Global'] = historical_data['Scrap demand'][2001]/historical_data['Total demand'][2001]
-                commodity_inputs.loc['Recycling input rate, China'] = historical_data['Scrap demand'][2001]/historical_data['Total demand'][2001]
+                commodity_inputs.loc['Recycling input rate, Global'] = historical_data['Scrap demand'][simulation_time[0]]/historical_data['Total demand'][simulation_time[0]]
+                commodity_inputs.loc['Recycling input rate, China'] = historical_data['Scrap demand'][simulation_time[0]]/historical_data['Total demand'][simulation_time[0]]
 
             if 'Primary production' in historical_data.columns:
-                commodity_inputs.loc['primary_production'] = historical_data['Primary production'][2001]
+                commodity_inputs.loc['primary_production'] = historical_data['Primary production'][simulation_time[0]]
+            elif 'Primary supply' in historical_data.columns:
+                commodity_inputs.loc['primary_production'] = historical_data['Primary supply'][simulation_time[0]]
             else:
                 commodity_inputs.loc['primary_production'] *= commodity_inputs['initial_demand']/original_demand
 
             if 'Primary commodity price' in historical_data.columns:
-                commodity_inputs.loc['primary_commodity_price'] = historical_data['Primary commodity price'][2001]
+                commodity_inputs.loc['primary_commodity_price'] = historical_data['Primary commodity price'][simulation_time[0]]
             if 'Scrap demand' in historical_data.columns and 'Primary production' in historical_data.columns:
-                commodity_inputs.loc['Total production, Global'] = historical_data['Primary production'][2001]+historical_data['Scrap demand'][2001]
+                commodity_inputs.loc['Total production, Global'] = historical_data['Primary production'][simulation_time[0]]+historical_data['Scrap demand'][simulation_time[0]]
             elif 'Primary production' in historical_data.columns:
-                commodity_inputs.loc['Total production, Global'] = historical_data['Primary production'][2001]*original_demand/original_primary_production
+                commodity_inputs.loc['Total production, Global'] = historical_data['Primary production'][simulation_time[0]]*original_demand/original_primary_production
+            elif 'Primary supply' in historical_data.columns:
+                commodity_inputs.loc['Total production, Global'] = historical_data['Primary supply'][simulation_time[0]]*original_demand/original_primary_production
             else:
                 commodity_inputs.loc['Total production, Global'] = commodity_inputs['initial_demand']*original_demand/commodity_inputs['Total production, Global']
             self.historical_data = historical_data.copy()
@@ -384,6 +400,13 @@ class Sensitivity():
             self.changing_base_parameters_series = pd.Series(dtype=object)
         else:
             raise ValueError('changing_base_parameters_series input is incorrectly formatted (should be dataframe with parameter values in first column, or a series)')
+
+        if type(self.additional_base_parameters)==pd.core.series.Series:
+            for q in self.additional_base_parameters.index:
+                self.changing_base_parameters_series.loc[q] = self.additional_base_parameters[q]
+        elif type(self.additional_base_parameters)==pd.core.frame.DataFrame:
+            for q in self.additional_base_parameters.index:
+                self.changing_base_parameters_series.loc[q] = self.additional_base_parameters.iloc[:,0][q]
 
     def get_params_to_change(self):
         '''
@@ -475,7 +498,7 @@ class Sensitivity():
         self.update_changing_base_parameters_series()
         self.initialize_big_df()
         mod = Integration(simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct)
-        scenario_params_dont_change = ['collection_rate_price_response','direct_melt_price_response','secondary_refined_price_response']
+        scenario_params_dont_change = ['collection_rate_price_response','direct_melt_price_response','secondary_refined_price_response','refinery_capacity_growth_lag']
 #         params_to_change = [i for i in mod.hyperparam.dropna(how='all').index if ('elas' in i or 'response' in i or 'growth' in i or 'improvements' in i) and i not in scenario_params_dont_change]
         params_to_change = [i for i in mod.hyperparam.dropna(how='all').index if np.any([j in i for j in sensitivity_parameters]) and i not in scenario_params_dont_change]
         self.sensitivity_param = params_to_change
@@ -566,18 +589,24 @@ class Sensitivity():
                 name="minimize_RMSE_with_real",
                 parameters=experiment_param,
                 objective_name="RMSE",
-                minimize=True, # default False
+                minimize=self.use_rmse_not_r2, # default False, true if using RMSE, false if using R2
             )
         elif n_params>1:
             self.ax_client = AxClient(random_seed=self.random_state,verbose_logging=self.verbosity>-1)
             experiment_param=[{'name':i,'type':'range','bounds':[0.001,1],'value_type':'float'} for i in self.sensitivity_param]
             n_params = min([self.historical_data.shape[1],n_params])
             objective_parameters = self.historical_data.columns[:n_params]
+            hist_ph = self.historical_data.copy()
+            h = self.mod.hyperparam['Value']
             if self.include_sd_objectives:
                 objective_parameters = np.append(objective_parameters,['Scrap SD','Conc. SD','Ref. SD'])
+                hist_ph.loc[:,'Scrap SD'] = h['initial_demand']*h['Recycling input rate, Global']*0.1
+                hist_ph.loc[:,'Conc. SD'] = h['initial_demand']*(1-h['Recycling input rate, Global'])*0.1
+                hist_ph.loc[:,'Ref. SD'] = h['initial_demand']*(1-h['Recycling input rate, Global'])*0.1
+                
             self.objective_parameters = objective_parameters
 #             objective_param = dict([[c, ObjectiveProperties(minimize=True, threshold=branin_currin.ref_point[i])] for i,c in enumerate(objective_parameters)])
-            objective_param = dict([[c, ObjectiveProperties(minimize=True)] for i,c in enumerate(objective_parameters)])
+            objective_param = dict([[c, ObjectiveProperties(minimize=self.use_rmse_not_r2)] for i,c in enumerate(objective_parameters)])
             all_three_here = np.all([q in self.sensitivity_param for q in ['close_probability_split_max','close_probability_split_mean','close_probability_split_min']])
             if not all_three_here:
                 self.ax_client.create_experiment(
@@ -608,30 +637,51 @@ class Sensitivity():
              'Primary commodity price':'primary_commodity_price','Primary supply':'primary_supply',
              'Scrap demand':'scrap_demand'}
             rmse_list = []
+            r2_list = []
             for param in self.objective_parameters:
                 if 'SD' not in param:
                     historical = self.historical_data[param]
                     simulated = getattr(mod,param_variable_map[param])
                     if hasattr(simulated,'columns') and 'Global' in simulated.columns:
                         simulated = simulated['Global']
-                    rmse = ((simulated-historical)**2).loc[self.simulation_time].astype(float).sum()**0.5
+                    rmse = self.calculate_rmse_r2(simulated,historical,True)
+                    r2 = self.calculate_rmse_r2(simulated,historical,False)
                 else:
                     if 'Conc' in param:
-                        rmse = ((mod.primary_supply-mod.primary_demand)**2).loc[self.simulation_time].astype(float).sum()**0.5
+                        rmse = self.calculate_rmse_r2(primary_supply,primary_demand,True)
+                        r2 = self.calculate_rmse_r2(primary_supply,primary_demand,False)
                     elif 'Scrap' in param:
-                        rmse = ((mod.scrap_supply-mod.scrap_demand)**2).loc[self.simulation_time].astype(float).sum()**0.5
+                        rmse = self.calculate_rmse_r2(mod.scrap_supply,mod.scrap_demand,True)
+                        r2 = self.calculate_rmse_r2(mod.scrap_supply,mod.scrap_demand,False)
                     elif 'Ref' in param:
-                        rmse = ((mod.refined_supply-mod.refined_demand)**2).loc[self.simulation_time].astype(float).sum()**0.5
-                    if hasattr(rmse,'index') and 'Global' in rmse.index:
-                        rmse = rmse['Global']
-                rmse_list += [(rmse,0)]
+                        rmse = self.calculate_rmse_r2(mod.refined_supply,mod.refined_demand,True)
+                        r2= self.calculate_rmse_r2(mod.refined_supply,mod.refined_demand,False)
+                if self.use_rmse_not_r2:
+                    rmse_list += [(rmse,0)]
+                else:
+                    rmse_list+= [(r2,0)]
+                
                 new_param_series.loc[param+' RMSE'] = rmse
+                new_param_series.loc[param+' R2'] = r2
+                
             rmse_dict = dict(zip(self.objective_parameters,rmse_list))
 
         new_param_series = pd.concat([new_param_series],keys=[scenario_number])
         self.rmse_df = pd.concat([self.rmse_df,new_param_series])
         self.ax_client.complete_trial(trial_index=trial_index, raw_data=rmse_dict)
 
+    def calculate_rmse_r2(self, sim, hist, use_rmse):
+        n = len(self.simulation_time)
+        x, y = sim.loc[self.simulation_time].astype(float), hist.loc[self.simulation_time].astype(float)
+        if hasattr(x,'columns') and 'Global' in x.columns: x=x['Global']
+        if hasattr(y,'columns') and 'Global' in y.columns: y=y['Global']
+        m = sm.GLS(x,sm.add_constant(y)).fit(cov_type='HC3')
+        if use_rmse:
+            result = m.mse_resid**0.5
+        else:
+            result = m.rsquared
+        return result
+    
     def save_bayesian_results(self,n_params=1):
         '''
         saves the results of the Bayesian optimization in the
@@ -800,7 +850,7 @@ class Sensitivity():
         big_df = pd.read_pickle(self.pkl_filename.split('.pkl')[0]+'_DEM.pkl')
         ind = big_df.loc['results'].dropna().index
         res = pd.concat([big_df.loc['results',i] for i in ind],keys=ind)
-        tot_demand = res['Total demand'].unstack(0).loc[2001:2019]
+        tot_demand = res['Total demand'].unstack(0).loc[self.simulation_time[0]:self.simulation_time[-1]]
         # below: calculates RMSE (root mean squared error) for each column and idxmin gets the index corresponding to the minimum RMSE
         best_demand = tot_demand[(tot_demand.astype(float).apply(lambda x: x-historical_data['Total demand'])**2).sum().astype(float).idxmin()]
         fig,ax = easy_subplots(3,dpi=self.dpi)
@@ -878,7 +928,7 @@ class Sensitivity():
         new_col_name=0 if len(big_df.columns)==0 else max(big_df.columns)+1
         if type(mod)==Integration:
             if initialize:
-                mining = pd.DataFrame([],[],['hyperparam'])
+                mining = pd.DataFrame([],[],['hyperparam','ml'])
                 refine = pd.DataFrame([],[],['hyperparam'])
                 demand = pd.DataFrame([],[],['hyperparam'])
             else:
@@ -886,9 +936,9 @@ class Sensitivity():
                 refine = deepcopy([mod.refine])[0]
                 demand = deepcopy([mod.demand])[0]
             potential_append = pd.DataFrame(np.array([mod.version, notes, mod.hyperparam, mining.hyperparam,
-                                refine.hyperparam, demand.hyperparam, reg_results],dtype=object)
+                                refine.hyperparam, demand.hyperparam, reg_results, mining.ml],dtype=object)
                                              ,index=[
-                                    'version','notes','hyperparam','mining.hyperparam','refine.hyperparam','demand.hyperparam','results'
+                                    'version','notes','hyperparam','mining.hyperparam','refine.hyperparam','demand.hyperparam','results','mine_data'
                                 ],columns=[new_col_name])
         elif type(mod)==demandModel:
             potential_append = pd.DataFrame(np.array([mod.version, notes, mod.hyperparam, reg_results],dtype=object)

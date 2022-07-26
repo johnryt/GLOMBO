@@ -61,10 +61,12 @@ def simulate_refinery_production_oneyear(year_i, tcrc_series_, sp2_series_,
     if growth_lag == 1:
         pri_growth=pri_cap_growth_series.loc[t_lag_1]/pri_cap_growth_series.loc[t_lag_2]
         sec_growth=sec_cap_growth_series.loc[year_i-1]/sec_cap_growth_series.loc[year_i-2]
-    else:
+    elif growth_lag==0:
         pri_growth=pri_cap_growth_series.loc[t]/pri_cap_growth_series.loc[t_lag_1]
         sec_growth=sec_cap_growth_series.loc[year_i]/sec_cap_growth_series.loc[year_i-1]
-    
+    else:
+        raise ValueError('refinery capacity growth_lag input does not fit the requirements of being either 0 or 1')
+        
     if pri_CU_ref_bal_elas == 0:
         pri_cu_growth=cu_growth_cal(tcrc_growth, pri_CU_TCRC_elas, price_growth=price_growth, price_elas=pri_CU_price_elas)
     else:

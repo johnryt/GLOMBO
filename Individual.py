@@ -11,12 +11,6 @@ import os
 from itertools import combinations
 from matplotlib.lines import Line2D
 
-from itertools import combinations
-from matplotlib.lines import Line2D
-
-from itertools import combinations
-from matplotlib.lines import Line2D
-
 def is_pareto_efficient_simple(costs):
     """
     Find the pareto-efficient points
@@ -87,7 +81,7 @@ class Individual():
                 self.big_df = pd.read_pickle(self.filename)
                 big_df = self.big_df.copy()
                 if self.historical_data_filename=='':
-                    self.historical_data_filename='C:/Users/ryter/Dropbox (MIT)/Group Research Folder_Olivetti/Displacement/08 Generalization/_Python/Data/case study data.xlsx'
+                    self.historical_data_filename='generalization/data/case study data.xlsx'
                 self.historical_data = pd.read_excel(self.historical_data_filename,sheet_name=self.material,index_col=0).loc[2001:].astype(float)
                 self.simulated_demand = pd.concat([big_df.loc['results'][i]['Total demand'] for i in big_df.columns],keys=big_df.columns,axis=1).loc[2001:2019]
                 self.price =  pd.concat([big_df.loc['results'][i]['Primary commodity price'] for i in big_df.columns],keys=big_df.columns,axis=1).loc[2001:2019]
@@ -137,7 +131,7 @@ class Individual():
             hyperparameters = hyperparameters[cols].copy()
         
         if historical_data_filename=='':
-            historical_data_filename='C:/Users/ryter/Dropbox (MIT)/Group Research Folder_Olivetti/Displacement/08 Generalization/_Python/Data/case study data.xlsx'
+            historical_data_filename='generalization/data/case study data.xlsx'
         historical_data = pd.read_excel(historical_data_filename,sheet_name=material,index_col=0).loc[2001:].astype(float)
 
         self.objective_params = historical_data.columns[:n_params]
@@ -163,6 +157,10 @@ class Individual():
                     rmses = abs(simulated.apply(lambda x: x-historical_data[obj])).sum()
             hyperparameters.loc['RMSE '+obj] = rmses        
 
+        self.big_df = big_df.copy()
+        if 'mine_data' in big_df.index: 
+            self.mine_data = pd.concat([big_df[i]['mine_data'] for i in big_df.columns],keys=big_df.columns)
+            self.mine_data.index.set_names(['scenario','year','mine_id'],inplace=True)
         return results.astype(float), hyperparameters, historical_data.astype(float)
     
     def plot_best_all(self):
@@ -227,7 +225,7 @@ class Individual():
         adds the NORM SUM and NORM SUM OBJ ONLY rows to the indiv.hyperparam dataframe
         '''
         for i in [i for i in self.hyperparam.index if 'RMSE' in i]:
-            self.hyperparam.loc['NORM '+i] = self.hyperparam.loc[i]/self.hyperparam.loc[i].min()
+            self.hyperparam.loc['NORM '+i] = self.hyperparam.loc[i]/self.hyperparam.loc[i].replace(0,1e-6).min()
         if 'NORM RMSE Primary commodity price' in self.hyperparam.index:
             self.hyperparam.loc['NORM RMSE Primary commodity price'] = self.hyperparam.loc['NORM RMSE Primary commodity price']**self.weight_price
         normed = [i for i in self.hyperparam.index if 'NORM' in i]
@@ -356,3 +354,48 @@ class Individual():
             else:
                 unit = 'kt'
         return simulated_demand, historical_demand, unit
+
+    def get_unit_df(self, res):
+        maxx, minn = abs(res).max().max(), abs(res).min().min()
+        if np.any([i in res.columns[0].lower() for i in ['price','cost','tcrc','spread']]):
+            unit = ' (USD/t)'
+        elif 'CU' in res.columns[0]:
+            unit = ''
+        elif 'grade' in res.columns[0]:
+            unit = ' (%)'
+        elif minn>1000:
+            res/=1000
+            unit=' (Mt)'
+        elif maxx<1:
+            res*=1000
+            unit=' (t)'
+        else:
+            unit=' (kt)'
+        return res, unit
+        
+    def plot_best_scenario_sd(self, include_sd=False, plot_supply_demand_stack=True):
+        self.normalize_rmses()
+        norm_sum = 'NORM SUM' if include_sd else 'NORM SUM OBJ ONLY'
+        best = self.hyperparam.loc[norm_sum].astype(float).idxmin()
+        print(f'Best scenario is scenario number: {best}')
+        results = self.results.loc[best].copy().dropna()
+        variables = ['Total','Conc','Ref.','Scrap','Spread','TCRC','Refined','CU','SR','Direct','Mean total','mine grade','Conc. SD','Ref. SD','Scrap SD']
+        fig,ax=easy_subplots(variables)
+        for var,a in zip(variables,ax):
+            parameters = [i for i in results.columns if var in i and ('SD' not in i or 'SD' in var)]
+            res = results[parameters]
+            res, unit = self.get_unit_df(res)
+            param_str = ', '.join(parameters) if len(', '.join(parameters))<30 else ',\n'.join(parameters)
+            res.plot(ax=a,title=param_str+unit)
+        fig.tight_layout()
+        
+        if plot_supply_demand_stack:
+            plt.figure()
+            res = results[['Pri. ref. prod.','Sec. ref. prod.','Direct melt','Total demand']]
+            res = res.replace(0,np.nan)
+            res, unit = self.get_unit_df(res)
+            res = res.fillna(0)
+            plt.plot(res['Total demand'],label='Total demand',color='k')
+            plt.stackplot(res.index, res[['Pri. ref. prod.','Sec. ref. prod.','Direct melt']].T, labels=['Pri. ref.','Sec. ref.','Direct melt']);
+            plt.legend(framealpha=0.5,frameon=True);
+            plt.title('Total supply-demand imbalance'+unit)

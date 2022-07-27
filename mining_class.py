@@ -1971,8 +1971,8 @@ class miningModel():
         self.incentive_mines = incentive_mines.copy()
         
         if i not in self.demand_series.index:
-            initial_demand = hyperparameters['Value']['primary_production']
-            change = hyperparameters['Value']['demand_series_pct_change']/100+1
+            initial_demand = inc.hyperparam['Value']['primary_production']
+            change = inc.hyperparam['Value']['demand_series_pct_change']/100+1
             sim_time = inc.simulation_time
             if h['Value']['demand_series_method']=='yoy':
                 self.demand_series = pd.Series([initial_demand*change**(j-sim_time[0]) for j in sim_time],sim_time)

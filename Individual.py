@@ -7,6 +7,7 @@ from integration import Integration
 from random import seed, sample, shuffle
 from demand_class import demandModel
 import os
+
 from itertools import combinations
 from matplotlib.lines import Line2D
 
@@ -135,7 +136,7 @@ class Individual():
 
         self.objective_params = historical_data.columns[:n_params]
         self.objective_results_map = {'Total demand':'Total demand','Primary commodity price':'Refined price',
-                                 'Primary demand':'Conc. demand','Primary supply':'Conc. supply',
+                                 'Primary demand':'Conc. demand','Primary supply':'Mine production',
                                 'Conc. SD':'Conc. SD','Scrap SD':'Scrap SD','Ref. SD':'Ref. SD'}
         for i in ['Conc.','Ref.','Scrap']:
             results.loc[:,i+' SD'] = results[i+' supply']-results[i+' demand']

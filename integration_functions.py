@@ -245,7 +245,8 @@ class Sensitivity():
                  using_thresholds=True,
                  N_INIT=3,
                  normalize_objectives=False,
-                 use_alternative_gold_volumes=True):
+                 use_alternative_gold_volumes=True,
+                 historical_price_rolling_window=1):
         '''
         Initializing Sensitivity class.
 
@@ -324,6 +325,7 @@ class Sensitivity():
         self.additional_base_parameters = additional_base_parameters
         self.case_study_data_file_path = case_study_data_file_path
         self.use_alternative_gold_volumes = use_alternative_gold_volumes
+        self.historical_price_rolling_window = historical_price_rolling_window
         self.update_changing_base_parameters_series()
 
         self.byproduct = byproduct
@@ -400,7 +402,9 @@ class Sensitivity():
 
             history_file = pd.read_excel(self.case_study_data_file_path,index_col=0,sheet_name=changing_base_parameters_series)
             historical_data = history_file.loc[simulation_time[0]:].dropna(axis=1)
-
+            if 'Primary commodity price' in historical_data.columns:
+                historical_data.loc[:,'Primary commodity price'] = historical_data.loc[:,'Primary commodity price'].rolling(self.historical_price_rolling_window,min_periods=1,center=True).mean()
+                
             original_demand = commodity_inputs['initial_demand']
             original_primary_production = commodity_inputs['primary_production']
             if 'Total demand' in historical_data.columns:
@@ -1121,19 +1125,23 @@ class Sensitivity():
                 mining = pd.DataFrame([],[],['hyperparam','ml'])
                 refine = pd.DataFrame([],[],['hyperparam'])
                 demand = pd.DataFrame([],[],['hyperparam'])
+                if not hasattr(self,'rmse_df'):
+                    self.rmse_df=0
             else:
                 mining = deepcopy([self.mod.mining])[0]
                 refine = deepcopy([self.mod.refine])[0]
                 demand = deepcopy([self.mod.demand])[0]
             potential_append = pd.DataFrame(np.array([self.mod.version, notes, self.mod.hyperparam, mining.hyperparam,
-                                refine.hyperparam, demand.hyperparam, reg_results, mining.ml],dtype=object)
+                                refine.hyperparam, demand.hyperparam, reg_results, mining.ml, self.rmse_df],dtype=object)
                                              ,index=[
-                                    'version','notes','hyperparam','mining.hyperparam','refine.hyperparam','demand.hyperparam','results','mine_data'
+                                    'version','notes','hyperparam','mining.hyperparam','refine.hyperparam','demand.hyperparam','results','mine_data','rmse_df'
                                 ],columns=[new_col_name])
         elif type(self.mod)==demandModel:
-            potential_append = pd.DataFrame(np.array([self.mod.version, notes, self.mod.hyperparam, reg_results],dtype=object)
+            if not hasattr(self,'rmse_df'):
+                self.rmse_df = 0
+            potential_append = pd.DataFrame(np.array([self.mod.version, notes, self.mod.hyperparam, reg_results, self.rmse_df],dtype=object)
                                          ,index=[
-                                'version','notes','hyperparam','results'
+                                'version','notes','hyperparam','results','rmse_df'
                             ],columns=[new_col_name])
         return potential_append
 

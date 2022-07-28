@@ -2,6 +2,7 @@ from demand_functions import *
 import numpy as np
 import pandas as pd
 idx = pd.IndexSlice
+from matplotlib import pyplot as plt
 
 class demandModel():
     '''
@@ -86,6 +87,7 @@ class demandModel():
         hyperparameters.loc['Use regions',:] = False,'whether to use regions in collection rate response to scrap price or to use the global value'
         hyperparameters.loc['collection_elas_scrap_price',:] = 0.1,'Collection rate elasticity to scrap price'
         hyperparameters.loc['commodity',:] = 'notAu','used to allow for other volumes to be substituted in the case of materials that need it, e.g. Au (set to Au to allow Au volume substitution)'
+        hyperparameters.loc['gold_rolling_window',:] = 3, 'number of years to use in the rolling mean for gold volume drivers'
         self.hyperparam = hyperparameters.copy()
         
     def load_demand_data(self):
@@ -97,11 +99,14 @@ class demandModel():
         self.alt_demand = pd.read_excel('generalization/data/End use combined data-copper.xlsx',sheet_name='Combined',index_col=0)
         intensity_parameters_cu = pd.read_excel('generalization/data/elasticity estimates-copper.xlsx', sheet_name='S+R S intercept only', header=[0], index_col=0).sort_index(axis=1)
         self.intensity_parameters_al = pd.read_excel('generalization/data/baseline_scenario_aluminum.xlsx', sheet_name='intensity_parameters', header=[0,1], index_col=0).sort_index().sort_index(axis=1)
+        self.original_growth_rate = 1.02546855
         intensity_parameters_cu_original = intensity_parameters_cu.copy()
         self.intensity_parameters = intensity_parameters_cu.copy()
+        
         if self.hyperparam['Value']['commodity']=='Au':
             gold_vols = pd.read_excel('generalization/data/Gold demand volume indicators.xlsx',sheet_name='Volume drivers',index_col=0).loc[2000:]
-            self.volumes.loc[:,idx[:,'Industrial']] = self.volumes.loc[:,idx[:,'Industrial']].apply(lambda x: x/x.sum(), axis=1).apply(lambda x: x*gold_vols['US circulating coin production (million coins)'])
+            gold_vols = gold_vols.rolling(self.hyperparam['Value']['gold_rolling_window'],min_periods=1,center=True).mean()
+            self.volumes.loc[:,idx[:,'Industrial']] = self.volumes.loc[:,idx[:,'Industrial']].apply(lambda x: x/x.sum(), axis=1).apply(lambda x: x*gold_vols['Global gold cash reserves (USD$2021)'])#['US circulating coin production (million coins)'])
             self.volumes.loc[:,idx[:,'Transport']] = self.volumes.loc[:,idx[:,'Transport']].apply(lambda x: x/x.sum(), axis=1).apply(lambda x: x*gold_vols['Diamond demand ($B)'])
             
             gold_dem = pd.read_excel('C:/Users/ryter/Dropbox (MIT)/John MIT/Research/generalizationOutside/generalization/data/case study data.xlsx',sheet_name='Au',index_col=0).loc[2001:,'Total demand']
@@ -116,12 +121,10 @@ class demandModel():
         new_volumes = imported_volumes.copy()
         growth_rate = 1+self.hyperparam['Value']['volume_growth_rate']
         imported_growth_rates = imported_volumes/imported_volumes.shift(1)
-        new_growth_rates = imported_growth_rates.apply(lambda x: x*growth_rate/x.loc[self.simulation_time[0]:].mean())
+        new_growth_rates = imported_growth_rates.apply(lambda x: (x)*growth_rate/self.original_growth_rate)
         
         for year_i in self.simulation_time[1:]:
             new_volumes.loc[year_i] = new_volumes.loc[year_i-1]*new_growth_rates.loc[year_i]
-        
-        self.volumes = new_volumes.copy()
         
     def setup_intensity_param(self):
         intensity_parameters = self.intensity_parameters.copy()
@@ -205,6 +208,7 @@ class demandModel():
         total_demand = pd.concat([alt_demand,total_demand.loc[demand_yr:]])
         volumes = pd.concat([alt_volumes,volumes.loc[demand_yr:]])
         self.volumes = volumes.copy()
+        
         total_demand_series = total_demand.sum(axis=1)
         if self.hyperparam['Value']['historical_growth_rate']!=-1:
             total_demand_series.loc[:initial_year-1] = [total_demand_series.loc[initial_year]*(1+self.hyperparam['Value']['historical_growth_rate'])**(t-initial_year) for t in np.arange(total_demand_series.index[0],initial_year)]

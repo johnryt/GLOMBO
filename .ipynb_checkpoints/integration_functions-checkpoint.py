@@ -595,8 +595,8 @@ class Sensitivity():
                 
             timer.end_iter()
 
-        # if bayesian_tune:
-        #     self.save_bayesian_results(n_params=n_params)
+        if bayesian_tune:
+            self.save_bayesian_results(n_params=n_params)
 
 #     def setup_bayesian_tune(self, n_params=1):
 #         '''
@@ -810,12 +810,14 @@ class Sensitivity():
         x, y = sim.loc[self.simulation_time].astype(float), hist.loc[self.simulation_time].astype(float)
         if hasattr(x,'columns') and 'Global' in x.columns: x=x['Global']
         if hasattr(y,'columns') and 'Global' in y.columns: y=y['Global']
-        m = sm.GLS(x,sm.add_constant(y)).fit(cov_type='HC3')
-        if use_rmse:
-            result = m.mse_resid**0.5
-        else:
-            result = m.rsquared
-        return result
+        
+        return (((x-y)**2).sum()/len(x))**0.5
+        # m = sm.GLS(x,sm.add_constant(y)).fit(cov_type='HC3')
+        # if use_rmse:
+        #     result = m.mse_resid**0.5
+        # else:
+        #     result = m.rsquared
+        # return result
     
     def save_bayesian_results(self,n_params=1):
         '''
@@ -828,33 +830,30 @@ class Sensitivity():
         rmse_df = rmse_df.unstack()
         self.rmse_df = rmse_df.copy()
 
-        
-        best_params = pd.DataFrame(rmse_df.loc[rmse_df['RMSE'].idxmin()].drop('RMSE'))
-        best_params = best_params.rename(columns={best_params.columns[0]:self.material})
-        print(best_params)
-        # self.opt.get_result()['x_iters']
+#         best_params = pd.DataFrame(rmse_df.loc[rmse_df['RMSE'].idxmin()].drop('RMSE'))
+#         best_params = best_params.rename(columns={best_params.columns[0]:self.material})
 
-        path=''
-        if os.path.exists('data/updated_commodity_inputs.pkl'):
-            path = 'data/updated_commodity_inputs.pkl'
-        elif os.path.exists('updated_commodity_inputs.pkl'):
-            path = 'updated_commodity_inputs.pkl'
+#         path=''
+#         if os.path.exists('data/updated_commodity_inputs.pkl'):
+#             path = 'data/updated_commodity_inputs.pkl'
+#         elif os.path.exists('updated_commodity_inputs.pkl'):
+#             path = 'updated_commodity_inputs.pkl'
 
-        if path!='':
-            self.updated_commodity_inputs = pd.read_pickle(path)
-            if n_params==1:
-                for i in best_params.index:
-                    self.updated_commodity_inputs.loc[i,self.material] = best_params[self.material][i]
-            elif n_params>1:
-                self.updated_commodity_inputs.loc['pareto_'+str(n_params)+'p',self.material] = [best_params]
-            self.updated_commodity_inputs.to_pickle(path)
+#         if path!='':
+#             self.updated_commodity_inputs = pd.read_pickle(path)
+#             if n_params==1:
+#                 for i in best_params.index:
+#                     self.updated_commodity_inputs.loc[i,self.material] = best_params[self.material][i]
+#             elif n_params>1:
+#                 self.updated_commodity_inputs.loc['pareto_'+str(n_params)+'p',self.material] = [best_params]
+#             self.updated_commodity_inputs.to_pickle(path)
 
-        else:
-            self.updated_commodity_inputs = best_params.copy()
-            if os.path.exists('data'):
-                self.updated_commodity_inputs.to_pickle('data/updated_commodity_inputs_all.pkl')
-            else:
-                self.updated_commodity_inputs.to_pickle('updated_commodity_inputs_all.pkl')
+#         else:
+#             self.updated_commodity_inputs = best_params.copy()
+#             if os.path.exists('data'):
+#                 self.updated_commodity_inputs.to_pickle('data/updated_commodity_inputs_all.pkl')
+#             else:
+#                 self.updated_commodity_inputs.to_pickle('updated_commodity_inputs_all.pkl')
 
     def historical_sim_check_demand(self, n_scenarios):
         '''

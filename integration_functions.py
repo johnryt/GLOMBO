@@ -76,7 +76,7 @@ def create_result_df(integ):
                integ.refine.ref_stats[reg]['Primary capacity'], integ.refine.ref_stats[reg]['Secondary capacity'],
                integ.refine.ref_stats[reg]['Primary production'], integ.refine.ref_stats[reg]['Secondary production'],
                integ.additional_direct_melt[reg],integ.additional_secondary_refined[reg],addl_scrap[reg],
-               integ.sxew_supply,integ.primary_supply[reg],integ.primary_demand[reg]
+               integ.sxew_supply,integ.primary_supply[reg],integ.primary_demand[reg],integ.mine_production
               ],axis=1,
               keys=['Total demand','Scrap demand','Scrap supply',
                     'Conc. demand','Conc. supply',
@@ -92,13 +92,13 @@ def create_result_df(integ):
                     'Pri. ref. capacity','Sec. ref. capacity',
                     'Pri. ref. prod.','Sec. ref. prod.',
                     'Additional direct melt','Additional secondary refined','Additional scrap',
-                    'SX-EW supply','Primary supply','Primary demand'])
+                    'SX-EW supply','Primary supply','Primary demand','Mine production'])
         if reg=='Global':
             collection = integ.demand.old_scrap_collected.groupby(level=0).sum()/integ.demand.eol.groupby(level=0).sum()
             old_scrap = integ.demand.old_scrap_collected.groupby(level=0).sum().sum(axis=1)
             new_scrap = integ.demand.new_scrap_collected.groupby(level=0).sum().sum(axis=1)
         else:
-            collection = integ.collection_rate.loc[idx[:,reg],:].droplevel(1)
+            collection = integ.collection_rate.loc[idx[:,reg],:].droplevel(1).fillna(0)
             old_scrap = integ.demand.old_scrap_collected.loc[idx[:,reg],:].droplevel(1).sum(axis=1)
             new_scrap = integ.demand.new_scrap_collected.loc[idx[:,reg],:].droplevel(1).sum(axis=1)
         collection = collection.rename(columns=dict(zip(collection.columns,['Collection rate '+j.lower() for j in collection.columns])))
@@ -140,6 +140,21 @@ def check_equivalence(big_df, potential_append):
 #                 print(i,'already a thing')
                 bools += [True]
     return not np.all(bools),bools
+
+def is_pareto_efficient_simple(costs):
+    """
+    Find the pareto-efficient points
+    :param costs: An (n_points, n_costs) array
+    :return: A (n_points, ) boolean array, indicating whether each point is Pareto efficient
+    
+    from Peter at https://stackoverflow.com/questions/32791911/fast-calculation-of-pareto-front-in-python
+    """
+    is_efficient = np.ones(costs.shape[0], dtype = bool)
+    for i, c in enumerate(costs):
+        if is_efficient[i]:
+            is_efficient[is_efficient] = np.any(costs[is_efficient]<c, axis=1)  # Keep any point with a lower cost
+            is_efficient[i] = True  # And keep self
+    return is_efficient
 
 class Sensitivity():
     '''
@@ -800,7 +815,8 @@ class Sensitivity():
         if hasattr(y,'columns') and 'Global' in y.columns: y=y['Global']
         m = sm.GLS(x,sm.add_constant(y)).fit(cov_type='HC3')
         if use_rmse:
-            result = m.mse_resid**0.5
+            # result = m.mse_resid**0.5
+            result = (((x-y)**2).sum()/len(x))**0.5
         else:
             result = m.rsquared
         return result
@@ -821,8 +837,20 @@ class Sensitivity():
             best_params = best_params.rename(columns={best_params.columns[0]:self.material})
 #             best_parameters, values = self.ax_client.get_best_parameters()
         elif n_params>1:
-            best_params = self.ax_client.get_pareto_optimal_parameters()
-            best_params = pd.DataFrame(best_params)
+            if not self.using_thresholds:
+                best_params = self.ax_client.get_pareto_optimal_parameters()
+                best_params = pd.DataFrame(best_params)
+            else:
+                if self.use_rmse_not_r2:
+                    cost_df = self.rmse_df.loc[:,[i for i in self.rmse_df.columns if 'RMSE' in i]]
+                else:
+                    cost_df = self.rmse_df.loc[:,[i for i in self.rmse_df.columns if 'R2' in i]]
+                cost_array = cost_df.values
+                cost_df.loc[:,'is_pareto'] = is_pareto_efficient_simple(cost_array)
+                self.rmse_df.loc[:,'is_pareto'] = cost_df.is_pareto
+                yes = cost_df.loc[cost_df.is_pareto].astype(float)
+                no = cost_df.loc[cost_df.is_pareto==False].astype(float)
+                best_params = self.rmse_df.copy().loc[self.rmse_df['is_pareto']]
 
         path=''
         if os.path.exists('data/updated_commodity_inputs.pkl'):
@@ -848,7 +876,7 @@ class Sensitivity():
 
     def get_rmse_r2(self):
         param_variable_map = {'Total demand':'total_demand','Primary demand':'primary_demand',
-            'Primary commodity price':'primary_commodity_price','Primary supply':'primary_supply',
+            'Primary commodity price':'primary_commodity_price','Primary supply':'mine_production',
             'Scrap demand':'scrap_demand'}
         rmse_list = []
         r2_list = []
@@ -865,9 +893,9 @@ class Sensitivity():
                 r2 = self.calculate_rmse_r2(simulated,historical,False)
             else:
                 if 'Conc' in param:
-                    rmse = self.calculate_rmse_r2(self.mod.primary_supply,self.mod.primary_demand,True)
+                    rmse = self.calculate_rmse_r2(self.mod.concentrate_supply,self.mod.concentrate_demand,True)
                     if self.normalize_objectives:
-                        rmse /= self.mod.primary_demand.iloc[0] if not hasattr(self.mod.primary_demand,'columns') else self.mod.primary_demand['Global'].iloc[0]
+                        rmse /= self.mod.concentrate_demand.iloc[0] if not hasattr(self.mod.concentrate_demand,'columns') else self.mod.concentrate_demand['Global'].iloc[0]
                     r2 = self.calculate_rmse_r2(self.mod.primary_supply,self.mod.primary_demand,False)
                 elif 'Scrap' in param:
                     rmse = self.calculate_rmse_r2(self.mod.scrap_supply,self.mod.scrap_demand,True)

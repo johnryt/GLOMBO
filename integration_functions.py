@@ -7,7 +7,7 @@ from integration import Integration
 from random import seed, sample, shuffle
 from demand_class import demandModel
 import os
-from useful_functions import easy_subplots
+from useful_functions import easy_subplots, do_a_regress
 import statsmodels.api as sm
 
 from copy import deepcopy
@@ -996,7 +996,7 @@ class Sensitivity():
             parameters, trial_index = ax_client.get_next_trial()
             new_param_series = pd.Series(parameters,params_to_change)
             self.mod.hyperparam.loc[params_to_change,'Value'] = new_param_series*np.sign(self.mod.hyperparam.loc[params_to_change,'Value'])
-            self.check_run_append(self.mod)
+            self.check_run_append()
             rmse = ((self.mod.demand.sum(axis=1)-self.historical_data['Total demand'])**2).loc[self.simulation_time].astype(float).sum()**0.5
             new_param_series.loc['RMSE'] = rmse
             new_param_series = pd.concat([new_param_series],keys=[n])

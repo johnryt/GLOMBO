@@ -26,17 +26,7 @@ class demandModel():
         self.simulation_time = simulation_time
         self.verbosity = verbosity
         self.i = self.simulation_time[0]
-        self.load_demand_data()
-        self.all_time = np.sort(np.union1d(self.volumes.index,self.simulation_time))
-        self.commodity_price_series = pd.Series(5000,self.all_time)
-        if simulation_time[0]-1 not in self.commodity_price_series.index:
-            self.commodity_price_series.loc[simulation_time[0]-1] = self.commodity_price_series.loc[simulation_time[0]]
-            self.commodity_price_series = self.commodity_price_series.sort_index()
-        self.regions = list(self.intensities.columns.get_level_values(0).unique())
-        self.sectors = list(self.intensities.columns.get_level_values(1).unique())
-        
         self.init_hyperparams()
-        self.row = [i for i in self.volumes.columns.levels[0] if i!='China']
         
         self.collection_rate_price_response = True
         self.scrap_spread = pd.DataFrame(0.1,np.arange(simulation_time[0]-1,simulation_time[-1]+1),['Global','China','RoW'])
@@ -95,6 +85,7 @@ class demandModel():
         
         hyperparameters.loc['Use regions',:] = False,'whether to use regions in collection rate response to scrap price or to use the global value'
         hyperparameters.loc['collection_elas_scrap_price',:] = 0.1,'Collection rate elasticity to scrap price'
+        hyperparameters.loc['commodity',:] = 'notAu','used to allow for other volumes to be substituted in the case of materials that need it, e.g. Au (set to Au to allow Au volume substitution)'
         self.hyperparam = hyperparameters.copy()
         
     def load_demand_data(self):
@@ -108,6 +99,17 @@ class demandModel():
         self.intensity_parameters_al = pd.read_excel('generalization/data/baseline_scenario_aluminum.xlsx', sheet_name='intensity_parameters', header=[0,1], index_col=0).sort_index().sort_index(axis=1)
         intensity_parameters_cu_original = intensity_parameters_cu.copy()
         self.intensity_parameters = intensity_parameters_cu.copy()
+        if self.hyperparam['Value']['commodity']=='Au':
+            gold_vols = pd.read_excel('generalization/data/Gold demand volume indicators.xlsx',sheet_name='Volume drivers',index_col=0).loc[2000:]
+            self.volumes.loc[:,idx[:,'Industrial']] = self.volumes.loc[:,idx[:,'Industrial']].apply(lambda x: x/x.sum(), axis=1).apply(lambda x: x*gold_vols['US circulating coin production (million coins)'])
+            self.volumes.loc[:,idx[:,'Transport']] = self.volumes.loc[:,idx[:,'Transport']].apply(lambda x: x/x.sum(), axis=1).apply(lambda x: x*gold_vols['Diamond demand ($B)'])
+            
+            gold_dem = pd.read_excel('C:/Users/ryter/Dropbox (MIT)/John MIT/Research/generalizationOutside/generalization/data/case study data.xlsx',sheet_name='Au',index_col=0).loc[2001:,'Total demand']
+            ad = self.alt_demand.copy()
+            sectors = ['Construction','Electrical','Industrial','Transport','Other']
+            ad.loc[2001:,sectors] = ad.loc[2001:,sectors].apply(lambda x: x/x.sum(),axis=1).apply(lambda x: x*gold_dem.loc[:2019])
+            ad.loc[:2000,sectors] *= ad.loc[2001,sectors].sum()/ad.loc[2000,sectors].sum()**2*self.alt_demand.loc[2001,sectors].sum()
+            self.alt_demand = ad.copy()
 
     def update_volumes(self):
         imported_volumes = self.volumes.copy()
@@ -447,6 +449,18 @@ class demandModel():
         
     def run(self):
         if self.i==self.simulation_time[0]:
+            simulation_time = self.simulation_time
+            self.load_demand_data()
+            self.all_time = np.sort(np.union1d(self.volumes.index,self.simulation_time))
+            self.commodity_price_series = pd.Series(5000,self.all_time)
+            if simulation_time[0]-1 not in self.commodity_price_series.index:
+                self.commodity_price_series.loc[simulation_time[0]-1] = self.commodity_price_series.loc[simulation_time[0]]
+                self.commodity_price_series = self.commodity_price_series.sort_index()
+            self.regions = list(self.intensities.columns.get_level_values(0).unique())
+            self.sectors = list(self.intensities.columns.get_level_values(1).unique())
+            
+            self.row = [i for i in self.volumes.columns.levels[0] if i!='China']
+        
             self.initialize_demand()
             self.initialize_lifetimes()
             self.initialize_fabrication_efficiency()

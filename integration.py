@@ -143,6 +143,7 @@ class Integration():
 
         # demand
         hyperparameters.loc['demand only',:] = np.nan
+        hyperparameters.loc['commodity'] = 'notAu'
         hyperparameters.loc['sector_specific_dematerialization_tech_growth','Value'] = -0.03
         hyperparameters.loc['sector_specific_price_response','Value'] = -0.06
         hyperparameters.loc['region_specific_price_response','Value'] = -0.1

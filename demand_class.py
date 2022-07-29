@@ -106,7 +106,7 @@ class demandModel():
         if self.hyperparam['Value']['commodity']=='Au':
             gold_vols = pd.read_excel('generalization/data/Gold demand volume indicators.xlsx',sheet_name='Volume drivers',index_col=0).loc[2000:]
             gold_vols = gold_vols.rolling(self.hyperparam['Value']['gold_rolling_window'],min_periods=1,center=True).mean()
-            self.volumes.loc[:,idx[:,'Industrial']] = self.volumes.loc[:,idx[:,'Industrial']].apply(lambda x: x/x.sum(), axis=1).apply(lambda x: x*gold_vols['Global gold cash reserves (USD$2021)'])#['US circulating coin production (million coins)'])
+            self.volumes.loc[:,idx[:,'Industrial']] = self.volumes.loc[:,idx[:,'Industrial']].apply(lambda x: x/x.sum(), axis=1).apply(lambda x: x*gold_vols['Global cash reserves (USD$2021)'])#['US circulating coin production (million coins)'])
             self.volumes.loc[:,idx[:,'Transport']] = self.volumes.loc[:,idx[:,'Transport']].apply(lambda x: x/x.sum(), axis=1).apply(lambda x: x*gold_vols['Diamond demand ($B)'])
             
             gold_dem = pd.read_excel('generalization/data/case study data.xlsx',sheet_name='Au',index_col=0).loc[2001:,'Total demand'].astype(float)

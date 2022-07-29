@@ -27,6 +27,7 @@ import sys
 sys.path.append("../../")
 from luca_utils import IterTimer
 from joblib import Parallel, delayed
+from sklearn.metrics import mean_squared_error, r2_score
 
 def create_result_df(integ):
     '''
@@ -672,8 +673,12 @@ class Sensitivity():
         
         for new_param_series in [out[1] for out in output]:
             self.rmse_df = pd.concat([self.rmse_df, new_param_series])
-            
-        self.opt.tell(next_parameters, [out[0] for out in output])
+        
+        if self.use_rmse_not_r2:
+            self.opt.tell(next_parameters, [out[0] for out in output])
+        else:
+            #reverse sign for r2 because we want to maximise r2 (skopt only minimises)
+            self.opt.tell(next_parameters, [-out[0] for out in output])
 
 #         rmse_all = []
         
@@ -811,13 +816,11 @@ class Sensitivity():
         if hasattr(x,'columns') and 'Global' in x.columns: x=x['Global']
         if hasattr(y,'columns') and 'Global' in y.columns: y=y['Global']
         
-        return (((x-y)**2).sum()/len(x))**0.5
-        # m = sm.GLS(x,sm.add_constant(y)).fit(cov_type='HC3')
-        # if use_rmse:
-        #     result = m.mse_resid**0.5
-        # else:
-        #     result = m.rsquared
-        # return result
+        if use_rmse:
+            result = mean_squared_error(y, x)**0.5
+        else:
+            result = r2_score(y, x)
+        return result
     
     def save_bayesian_results(self,n_params=1):
         '''

@@ -11,6 +11,9 @@ import os
 from itertools import combinations
 from matplotlib.lines import Line2D
 
+from useful_functions import easy_subplots
+import seaborn as sns
+
 def is_pareto_efficient_simple(costs):
     """
     Find the pareto-efficient points
@@ -136,7 +139,7 @@ class Individual():
 
         self.objective_params = historical_data.columns[:n_params]
         self.objective_results_map = {'Total demand':'Total demand','Primary commodity price':'Refined price',
-                                 'Primary demand':'Conc. demand','Primary supply':'Conc. supply',
+                                 'Primary demand':'Conc. demand','Primary supply':'Mine production',
                                 'Conc. SD':'Conc. SD','Scrap SD':'Scrap SD','Ref. SD':'Ref. SD'}
         for i in ['Conc.','Ref.','Scrap']:
             results.loc[:,i+' SD'] = results[i+' supply']-results[i+' demand']
@@ -158,6 +161,7 @@ class Individual():
             hyperparameters.loc['RMSE '+obj] = rmses        
 
         self.big_df = big_df.copy()
+        
         if 'mine_data' in big_df.index: 
             self.mine_data = pd.concat([big_df[i]['mine_data'] for i in big_df.columns],keys=big_df.columns)
             self.mine_data.index.set_names(['scenario','year','mine_id'],inplace=True)
@@ -378,7 +382,7 @@ class Individual():
         norm_sum = 'NORM SUM' if include_sd else 'NORM SUM OBJ ONLY'
         best = self.hyperparam.loc[norm_sum].astype(float).idxmin()
         print(f'Best scenario is scenario number: {best}')
-        results = self.results.loc[best].copy().dropna()
+        results = self.results.loc[best].copy().dropna(how='all')
         variables = ['Total','Conc','Ref.','Scrap','Spread','TCRC','Refined','CU','SR','Direct','Mean total','mine grade','Conc. SD','Ref. SD','Scrap SD']
         fig,ax=easy_subplots(variables)
         for var,a in zip(variables,ax):

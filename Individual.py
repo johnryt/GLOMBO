@@ -11,6 +11,9 @@ import os
 from itertools import combinations
 from matplotlib.lines import Line2D
 
+from useful_functions import easy_subplots
+import seaborn as sns
+
 def is_pareto_efficient_simple(costs):
     """
     Find the pareto-efficient points

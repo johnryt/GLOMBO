@@ -739,18 +739,32 @@ class Sensitivity():
         values to give the error the Bayesian optimization is trying to minimize.
         '''
         
-        #output is of the form [(score_0, new_params_0), (score_1, new_params_1), ...]
+        #output is of the form [(score_0, new_params_0, potential_append_0), (score_1, new_params_1, potential_append_0), ...]
         output = Parallel(n_jobs=self.n_points)(delayed(self.skopt_run_score)(mod, param_series, s_n) for mod, param_series, s_n in zip(mods, new_param_series_all, scenario_numbers))
         
+        #give scores to skopt 
+        self.opt.tell(next_parameters, [out[0] for out in output])
+        
+        #save new_param_series in rmse_df
         for new_param_series in [out[1] for out in output]:
             self.rmse_df = pd.concat([self.rmse_df, new_param_series])
         
-        self.opt.tell(next_parameters, [out[0] for out in output])
+        #save scenario results in pickle file
+        big_df = pd.read_pickle(self.pkl_filename)
+        for potential_append in [out[2] for out in output]:
+            if potential_append is None:
+                raise Exception("Scenario has already been run, this case has not been implemented yet. Ask Luca Montanelli why.")
+            big_df = pd.concat([big_df,potential_append],axis=1)
+        
+        big_df.to_pickle(self.pkl_filename)
+        if self.verbosity>-1:
+            print('\tScenario successfully saved\n')
+        
             
     def skopt_run_score(self, mod, new_param_series, s_n):
         
         #run model
-        self.check_run_append(mod)
+        potential_append = self.check_run_append(mod, s_n)
         
         #get scores
         rmse_list, r2_list = self.get_rmse_r2(mod)
@@ -768,7 +782,7 @@ class Sensitivity():
             #we flip the sign because skopt only minimises
             score = sum(-r[0] for r in r2_list)
         
-        return score, new_param_series
+        return score, new_param_series, potential_append
     
     def calculate_rmse_r2(self, sim, hist, use_rmse):
         n = len(self.simulation_time)
@@ -1085,6 +1099,8 @@ class Sensitivity():
         Sets up a pandas series that could be appended to our big dataframe
         that is used for saving, such that we can check whether this
         combination of parameters already exists in the big dataframe or not
+        
+        mod should be None except as part of a BO loop
         '''
         
         #if no mod is provided, use self.mod, otherwise use mod
@@ -1119,11 +1135,13 @@ class Sensitivity():
                             ],columns=[new_col_name])
         return potential_append
 
-    def check_run_append(self, mod=None):
+    def check_run_append(self, mod=None, s_n=None):
         '''
         Checks whether the proposed set of hyperparameters has already been run and saved
         in the current big result dataframe. If it has, it skips. Otherwise, it runs the
         scenario and appends it to the big dataframe, resaving it.
+        
+        mod and s_n should be None except as part of a BO loop
         '''
         
         #if no mod is provided, use self.mod, otherwise use mod
@@ -1174,14 +1192,26 @@ class Sensitivity():
             elif type(mod) == demandModel: reg_results = pd.concat([mod.demand.sum(axis=1),mod.commodity_price_series],axis=1,keys=['Total demand','Primary commodity price'])
             potential_append = self.create_potential_append(big_df=big_df,notes=notes,reg_results=reg_results,initialize=False, mod=mod)
             
-            big_df = pd.concat([big_df,potential_append],axis=1)
-            # self.big_df = pd.concat([self.big_df,potential_append],axis=1)
-            big_df.to_pickle(self.pkl_filename)
-            if self.verbosity>-1:
-                print('\tScenario successfully saved\n')
+            if mod is None:
+                big_df = pd.concat([big_df,potential_append],axis=1)
+                # self.big_df = pd.concat([self.big_df,potential_append],axis=1)
+                big_df.to_pickle(self.pkl_filename)
+                if self.verbosity>-1:
+                    print('\tScenario successfully saved\n')
+            else:
+                #if there is a scenario number, use that intead of the default index from create_potential_append()
+                #prevents the overwriting of scenarios when having multiple samples at each iteration
+                if s_n is not None:
+                    potential_append.columns = [s_n+1] #+1 because the first scenario is the default params
+                
+                return potential_append
+            
         else:
-            if self.verbosity>-1:
-                print('\tScenario already exists\n')
+            if mod is None:
+                if self.verbosity>-1:
+                    print('\tScenario already exists\n')
+            else:    
+                return None
 
 #         direct_melt_elas_scrap_spread
 #         collection_elas_scrap_price

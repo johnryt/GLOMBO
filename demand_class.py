@@ -109,7 +109,7 @@ class demandModel():
             self.volumes.loc[:,idx[:,'Industrial']] = self.volumes.loc[:,idx[:,'Industrial']].apply(lambda x: x/x.sum(), axis=1).apply(lambda x: x*gold_vols['Global gold cash reserves (USD$2021)'])#['US circulating coin production (million coins)'])
             self.volumes.loc[:,idx[:,'Transport']] = self.volumes.loc[:,idx[:,'Transport']].apply(lambda x: x/x.sum(), axis=1).apply(lambda x: x*gold_vols['Diamond demand ($B)'])
             
-            gold_dem = pd.read_excel('generalization/data/case study data.xlsx',sheet_name='Au',index_col=0).loc[2001:,'Total demand']
+            gold_dem = pd.read_excel('generalization/data/case study data.xlsx',sheet_name='Au',index_col=0).loc[2001:,'Total demand'].astype(float)
             ad = self.alt_demand.copy()
             sectors = ['Construction','Electrical','Industrial','Transport','Other']
             ad.loc[2001:,sectors] = ad.loc[2001:,sectors].apply(lambda x: x/x.sum(),axis=1).apply(lambda x: x*gold_dem.loc[:2019])

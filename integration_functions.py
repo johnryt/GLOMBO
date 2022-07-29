@@ -532,7 +532,7 @@ class Sensitivity():
 
     def run_monte_carlo(self, n_scenarios, random_state=220530,
                         sensitivity_parameters=['elas','response','growth','improvements','refinery_capacity_fraction_increase_mining','incentive_opening_probability'],
-                        bayesian_tune=False,n_params=1):
+                        bayesian_tune=False,n_params=1, n_jobs=3):
         '''
         Runs a Monte Carlo based approach to the sensitivity, where all the sensitivity_parameters
         given are then given values randomly selected from between zero and one.
@@ -556,6 +556,8 @@ class Sensitivity():
         n_params: int, number of columns from self.historical_data to use in the objective
           function for tuning. >1 means multi-objective optimization, and depends on the
           order of the columns, since it grabs the leftmost n_params columns.
+        n_jobs: int, the number of points to sample at each Bayesian iteration, also
+            the number of cores to use to parallelise Integration() calculation.
         '''
         self.random_state = random_state
         self.update_changing_base_parameters_series()
@@ -582,68 +584,69 @@ class Sensitivity():
             if self.verbosity>-1:
                 print(f'Scenario {n+1}/{n_scenarios}')
                 
-            next_parameters = self.opt.ask(n_points=self.n_points)
+            next_parameters = self.opt.ask(n_points=n_jobs)
             mods = []
             new_param_series_all = []    
             
-            for enum,scenario_name in enumerate(self.scenarios):
-                if self.verbosity>-1:
-                    print(f'\tSub-scenario {enum+1}/{len(self.scenarios)}: {scenario_name} checking if exists...')
-                self.mod = Integration(simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct,scenario_name=scenario_name)
-                self.notes = scenario_name
+            for i in range(n_jobs):
+                for enum,scenario_name in enumerate(self.scenarios):
+                    if self.verbosity>-1:
+                        print(f'\tSub-scenario {enum+1}/{len(self.scenarios)}: {scenario_name} checking if exists...')
+                    self.mod = Integration(simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct,scenario_name=scenario_name)
+                    self.notes = scenario_name
 
-                ###### CHANGING BASE PARAMETERS ######
-                changing_base_parameters_series = self.changing_base_parameters_series.copy()
-                if self.verbosity>0: print('parameters getting updated from outside using changing_base_parameters_series input:\n',changing_base_parameters_series.index)
-                for base in changing_base_parameters_series.index:
-                    self.mod.hyperparam.loc[base,'Value'] = changing_base_parameters_series[base]
-                    if n==0 and self.verbosity>0:
-                        print(base,changing_base_parameters_series[base])
-                self.hyperparam_copy = self.mod.hyperparam.copy()
+                    ###### CHANGING BASE PARAMETERS ######
+                    changing_base_parameters_series = self.changing_base_parameters_series.copy()
+                    if self.verbosity>0: print('parameters getting updated from outside using changing_base_parameters_series input:\n',changing_base_parameters_series.index)
+                    for base in changing_base_parameters_series.index:
+                        self.mod.hyperparam.loc[base,'Value'] = changing_base_parameters_series[base]
+                        if n==0 and self.verbosity>0:
+                            print(base,changing_base_parameters_series[base])
+                    self.hyperparam_copy = self.mod.hyperparam.copy()
 
-                ###### UPDATING MONTE CARLO PARAMETERS ######
-                if len(params_to_change)>0:
-                    rs = random_state+n
-                    values = stats.uniform.rvs(loc=0,scale=1,size=len(params_to_change),random_state=rs)
-                    new_param_series = pd.Series(values, params_to_change)
-                    if bayesian_tune:
-                        new_param_series = pd.Series(next_parameters[i], params_to_change)
-                    if self.verbosity>0:
-                        print('Parameters getting changed via Monte Carlo random selection:\n',params_to_change)
-                    if 'sector_specific_dematerialization_tech_growth' in params_to_change:
-                        new_param_series.loc['sector_specific_dematerialization_tech_growth'] *= 0.15
-                    if 'sector_specific_price_response' in params_to_change:
-                        new_param_series.loc['sector_specific_price_response'] *= 0.15
-                    if 'region_specific_price_response' in params_to_change:
-                        new_param_series.loc['region_specific_price_response'] *= 0.15
-                    if 'incentive_opening_probability' in params_to_change:
-                        new_param_series.loc['incentive_opening_probability']*=0.1/(1-self.incentive_opening_probability_fraction_zero)
-                        if new_param_series['incentive_opening_probability']>0.1:
-                            new_param_series.loc['incentive_opening_probability'] = 0
-                    # ^ these values should be small, since small changes make big changes
-                    all_three_here = np.all([q in params_to_change for q in ['close_probability_split_max','close_probability_split_mean','close_probability_split_min']])
-                    if 'close_probability_split_max' in params_to_change and not all_three_here:
-                        new_param_series.loc['close_probability_split_max'] *= 0.8
-                    if 'close_probability_split_mean' in params_to_change and not all_three_here:
-                        new_param_series.loc['close_probability_split_mean'] *= 0.8
-                    if 'close_probability_split_max' in params_to_change and 'close_probability_split_mean' in params_to_change and not all_three_here:
-                        sum_mean_max = new_param_series.loc[['close_probability_split_max','close_probability_split_mean']].sum()
-                        if sum_mean_max>0.95:
-                            new_param_series.loc[['close_probability_split_max','close_probability_split_mean']] *= 0.95/sum_mean_max
-                        new_param_series.loc['close_probability_split_mean'] = 1-new_param_series.loc[['close_probability_split_max','close_probability_split_mean']].sum()
-                    if 'close_years_back' in params_to_change:
-                        new_param_series.loc['close_years_back'] = int(10*new_param_series.loc['close_years_back']+3)
-                    if all_three_here:
-                        new_param_series.loc[['close_probability_split_mean','close_probability_split_min','close_probability_split_max']] /=  new_param_series.loc[['close_probability_split_mean','close_probability_split_min','close_probability_split_max']].sum()
+                    ###### UPDATING MONTE CARLO PARAMETERS ######
+                    if len(params_to_change)>0:
+                        rs = random_state+n
+                        values = stats.uniform.rvs(loc=0,scale=1,size=len(params_to_change),random_state=rs)
+                        new_param_series = pd.Series(values, params_to_change)
+                        if bayesian_tune:
+                            new_param_series = pd.Series(next_parameters[i], params_to_change)
+                        if self.verbosity>0:
+                            print('Parameters getting changed via Monte Carlo random selection:\n',params_to_change)
+                        if 'sector_specific_dematerialization_tech_growth' in params_to_change:
+                            new_param_series.loc['sector_specific_dematerialization_tech_growth'] *= 0.15
+                        if 'sector_specific_price_response' in params_to_change:
+                            new_param_series.loc['sector_specific_price_response'] *= 0.15
+                        if 'region_specific_price_response' in params_to_change:
+                            new_param_series.loc['region_specific_price_response'] *= 0.15
+                        if 'incentive_opening_probability' in params_to_change:
+                            new_param_series.loc['incentive_opening_probability']*=0.1/(1-self.incentive_opening_probability_fraction_zero)
+                            if new_param_series['incentive_opening_probability']>0.1:
+                                new_param_series.loc['incentive_opening_probability'] = 0
+                        # ^ these values should be small, since small changes make big changes
+                        all_three_here = np.all([q in params_to_change for q in ['close_probability_split_max','close_probability_split_mean','close_probability_split_min']])
+                        if 'close_probability_split_max' in params_to_change and not all_three_here:
+                            new_param_series.loc['close_probability_split_max'] *= 0.8
+                        if 'close_probability_split_mean' in params_to_change and not all_three_here:
+                            new_param_series.loc['close_probability_split_mean'] *= 0.8
+                        if 'close_probability_split_max' in params_to_change and 'close_probability_split_mean' in params_to_change and not all_three_here:
+                            sum_mean_max = new_param_series.loc[['close_probability_split_max','close_probability_split_mean']].sum()
+                            if sum_mean_max>0.95:
+                                new_param_series.loc[['close_probability_split_max','close_probability_split_mean']] *= 0.95/sum_mean_max
+                            new_param_series.loc['close_probability_split_mean'] = 1-new_param_series.loc[['close_probability_split_max','close_probability_split_mean']].sum()
+                        if 'close_years_back' in params_to_change:
+                            new_param_series.loc['close_years_back'] = int(10*new_param_series.loc['close_years_back']+3)
+                        if all_three_here:
+                            new_param_series.loc[['close_probability_split_mean','close_probability_split_min','close_probability_split_max']] /=  new_param_series.loc[['close_probability_split_mean','close_probability_split_min','close_probability_split_max']].sum()
 
-                    for param in params_to_change:
-                        if type(self.mod.hyperparam['Value'][param])!=bool:
-                            self.mod.hyperparam.loc[param,'Value'] = new_param_series[param]*np.sign(self.mod.hyperparam.loc[param,'Value'])
-                        else:
-                            self.mod.hyperparam.loc[param,'Value'] = new_param_series[param]
-                
-                mods.append(mod)
-                new_param_series_all.append(new_param_series)
+                        for param in params_to_change:
+                            if type(self.mod.hyperparam['Value'][param])!=bool:
+                                self.mod.hyperparam.loc[param,'Value'] = new_param_series[param]*np.sign(self.mod.hyperparam.loc[param,'Value'])
+                            else:
+                                self.mod.hyperparam.loc[param,'Value'] = new_param_series[param]
+
+                    mods.append(self.mod)
+                    new_param_series_all.append(new_param_series)
                 
             if bayesian_tune:
                 self.complete_bayesian_trial(mods=mods, 
@@ -730,7 +733,7 @@ class Sensitivity():
             new_param_series = pd.Series(new_param_series)
         return new_param_series
         
-    def complete_bayesian_trial(self, n_params=1, new_param_series=pd.Series(dtype=float), scenario_number=0):
+    def complete_bayesian_trial(self, mods, new_param_series_all, next_parameters, scenario_numbers):
         '''
         calculates root mean squared errors (RMSE) from current variables and historical
         values to give the error the Bayesian optimization is trying to minimize.
@@ -750,7 +753,13 @@ class Sensitivity():
         self.check_run_append(mod)
         
         #get scores
-        rmse_list, r2_list = get_rmse_r2(mod)
+        rmse_list, r2_list = self.get_rmse_r2(mod)
+        
+        #add rmse and r2 score in new_param_series to then be added into rmse_df
+        for param, rmse, r2 in zip(self.objective_parameters, rmse_list, r2_list):
+            new_param_series.loc[param+' RMSE'] = rmse[0]
+            new_param_series.loc[param+' R2'] = r2[0] 
+        new_param_series = pd.concat([new_param_series],keys=[s_n])
         
         #if we optimise on rmse, return that, else return r2
         if self.use_rmse_not_r2:
@@ -869,6 +878,7 @@ class Sensitivity():
             
             rmse_list += [(rmse,0)]
             r2_list+= [(r2,0)]
+            
         return rmse_list, r2_list
             
     def historical_sim_check_demand(self, n_scenarios):
@@ -1026,7 +1036,7 @@ class Sensitivity():
 
     def run_historical_monte_carlo(self, n_scenarios, random_state=220621,
                                    sensitivity_parameters=['elas','incentive_opening_probability','improvements','refinery_capacity_fraction_increase_mining'],
-                                   bayesian_tune=False,n_params=2):
+                                   bayesian_tune=False,n_params=2, n_jobs=3):
         '''
         Wrapper to run the run_monte_carlo() method on historical data
 
@@ -1040,6 +1050,8 @@ class Sensitivity():
             counting from the left in the sheet with the matching commodity name in
             case study data.xlsx. We have been able to find 3 for everything so far:
             Total demand, Primary commodity price, and Primary production
+        n_jobs: int, the number of points to sample at each Bayesian iteration, also
+            the number of cores to use to parallelise Integration() calculation
         '''
         self.random_state = random_state
         if os.path.exists('data/updated_commodity_inputs.pkl'):
@@ -1066,16 +1078,23 @@ class Sensitivity():
                              random_state=random_state,
                              sensitivity_parameters=sensitivity_parameters,
                              bayesian_tune=bayesian_tune,
-                             n_params=n_params)
+                             n_params=n_params, n_jobs=n_jobs)
 
-    def create_potential_append(self,big_df,notes,reg_results,initialize=False):
+    def create_potential_append(self,big_df,notes,reg_results,initialize=False, mod=None):
         '''
         Sets up a pandas series that could be appended to our big dataframe
         that is used for saving, such that we can check whether this
         combination of parameters already exists in the big dataframe or not
         '''
+        
+        #if no mod is provided, use self.mod, otherwise use mod
+        #this is because default model behaviour was to use self.mod but that doesn't work with 
+        #having multiple samples per BO iteration
+        if mod is None:
+            mod = self.mod
+        
         new_col_name=0 if len(big_df.columns)==0 else max(big_df.columns)+1
-        if type(self.mod)==Integration:
+        if type(mod)==Integration:
             if initialize:
                 mining = pd.DataFrame([],[],['hyperparam','ml'])
                 refine = pd.DataFrame([],[],['hyperparam'])
@@ -1083,37 +1102,44 @@ class Sensitivity():
                 if not hasattr(self,'rmse_df'):
                     self.rmse_df=0
             else:
-                mining = deepcopy([self.mod.mining])[0]
-                refine = deepcopy([self.mod.refine])[0]
-                demand = deepcopy([self.mod.demand])[0]
-            potential_append = pd.DataFrame(np.array([self.mod.version, notes, self.mod.hyperparam, mining.hyperparam,
+                mining = deepcopy([mod.mining])[0]
+                refine = deepcopy([mod.refine])[0]
+                demand = deepcopy([mod.demand])[0]
+            potential_append = pd.DataFrame(np.array([mod.version, notes, mod.hyperparam, mining.hyperparam,
                                 refine.hyperparam, demand.hyperparam, reg_results, mining.ml, self.rmse_df],dtype=object)
                                              ,index=[
                                     'version','notes','hyperparam','mining.hyperparam','refine.hyperparam','demand.hyperparam','results','mine_data','rmse_df'
                                 ],columns=[new_col_name])
-        elif type(self.mod)==demandModel:
+        elif type(mod)==demandModel:
             if not hasattr(self,'rmse_df'):
                 self.rmse_df = 0
-            potential_append = pd.DataFrame(np.array([self.mod.version, notes, self.mod.hyperparam, reg_results, self.rmse_df],dtype=object)
+            potential_append = pd.DataFrame(np.array([mod.version, notes, mod.hyperparam, reg_results, self.rmse_df],dtype=object)
                                          ,index=[
                                 'version','notes','hyperparam','results','rmse_df'
                             ],columns=[new_col_name])
         return potential_append
 
-    def check_run_append(self):
+    def check_run_append(self, mod=None):
         '''
         Checks whether the proposed set of hyperparameters has already been run and saved
         in the current big result dataframe. If it has, it skips. Otherwise, it runs the
         scenario and appends it to the big dataframe, resaving it.
         '''
+        
+        #if no mod is provided, use self.mod, otherwise use mod
+        #this is because default model behaviour was to use self.mod but that doesn't work with 
+        #having multiple samples per BO iteration
+        if mod is None:
+            mod = self.mod
+        
         big_df = pd.read_pickle(self.pkl_filename)
         potential_append = self.create_potential_append(big_df=big_df,notes=self.notes,reg_results=[],initialize=True)
-        if type(self.mod)==demandModel or self.overwrite or check_equivalence(big_df, potential_append)[0]:
+        if type(mod)==demandModel or self.overwrite or check_equivalence(big_df, potential_append)[0]:
             if self.verbosity>-1:
                 print('\tScenario does not already exist, running...')
-            if type(self.mod)==Integration:
+            if type(mod)==Integration:
                 try:
-                    self.mod.run()
+                    mod.run()
                 except MemoryError:
                     if self.verbosity>-1:
                         print('************************MemoryError, no clue what to do about this************************')
@@ -1122,32 +1148,32 @@ class Sensitivity():
                         'Scrap demand':'scrap_demand'}
                     for param in self.objective_parameters:
                         historical = self.historical_data[param]
-                        simulated = getattr(self.mod,param_variable_map[param])
+                        simulated = getattr(mod,param_variable_map[param])
                         if hasattr(simulated,'columns') and 'Global' in simulated.columns:
-                            getattr(self.mod,param_variable_map[param]).loc[:,'Global'] = historical*5
+                            getattr(mod,param_variable_map[param]).loc[:,'Global'] = historical*5
                         else:
-                            getattr(self.mod,param_variable_map[param]).loc[:] = historical*5
+                            getattr(mod,param_variable_map[param]).loc[:] = historical*5
                     raise MemoryError
-            elif type(self.mod)==demandModel:
-                for i in self.mod.simulation_time:
-                    self.mod.i = i
-                    self.mod.run()
+            elif type(mod)==demandModel:
+                for i in mod.simulation_time:
+                    mod.i = i
+                    mod.run()
 
             if hasattr(self,'val'):
                 notes = self.notes+ f', {i}={self.val}'
             else:
                 notes = self.notes+''
             ind = [j for j in self.hyperparam_copy.index if type(self.hyperparam_copy['Value'][j]) not in [np.ndarray,list]]
-            z = self.hyperparam_copy['Value'][ind].dropna()!=self.mod.hyperparam['Value'][ind].dropna()
+            z = self.hyperparam_copy['Value'][ind].dropna()!=mod.hyperparam['Value'][ind].dropna()
             z = [j for j in z[z].index]
             if len(z)>0:
                 for zz in z:
-                    notes += ', {}={}'.format(zz,self.mod.hyperparam['Value'][zz])
+                    notes += ', {}={}'.format(zz,mod.hyperparam['Value'][zz])
 
-            if type(self.mod)==Integration: reg_results = create_result_df(self.mod)
-            elif type(self.mod) == demandModel: reg_results = pd.concat([self.mod.demand.sum(axis=1),self.mod.commodity_price_series],axis=1,keys=['Total demand','Primary commodity price'])
-            potential_append = self.create_potential_append(big_df=big_df,notes=notes,reg_results=reg_results,initialize=False)
-
+            if type(mod)==Integration: reg_results = create_result_df(mod)
+            elif type(mod) == demandModel: reg_results = pd.concat([mod.demand.sum(axis=1),mod.commodity_price_series],axis=1,keys=['Total demand','Primary commodity price'])
+            potential_append = self.create_potential_append(big_df=big_df,notes=notes,reg_results=reg_results,initialize=False, mod=mod)
+            
             big_df = pd.concat([big_df,potential_append],axis=1)
             # self.big_df = pd.concat([self.big_df,potential_append],axis=1)
             big_df.to_pickle(self.pkl_filename)

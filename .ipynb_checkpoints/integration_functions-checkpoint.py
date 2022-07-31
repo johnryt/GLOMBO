@@ -532,7 +532,7 @@ class Sensitivity():
 
     def run_monte_carlo(self, n_scenarios, random_state=220530,
                         sensitivity_parameters=['elas','response','growth','improvements','refinery_capacity_fraction_increase_mining','incentive_opening_probability'],
-                        bayesian_tune=False,n_params=1, n_jobs=3):
+                        bayesian_tune=False,n_params=1, n_jobs=3, surrogate_model='GBRT'):
         '''
         Runs a Monte Carlo based approach to the sensitivity, where all the sensitivity_parameters
         given are then given values randomly selected from between zero and one.
@@ -572,7 +572,7 @@ class Sensitivity():
         # do something with incentive_opening_probability?
 
         if bayesian_tune:
-            self.setup_bayesian_tune(n_params=n_params)
+            self.setup_bayesian_tune(n_params=n_params, surrogate_model=surrogate_model)
             
         timer = IterTimer(n_iters=n_scenarios-1)
 
@@ -583,12 +583,13 @@ class Sensitivity():
             self.scenario_number = n-1
             if self.verbosity>-1:
                 print(f'Scenario {n+1}/{n_scenarios}')
-                
-            next_parameters = self.opt.ask(n_points=n_jobs)
-            mods = []
-            new_param_series_all = []    
+              
+            if bayesian_tune:
+                next_parameters = self.opt.ask(n_points=self.n_jobs)
+                mods = []
+                new_param_series_all = []    
             
-            for i in range(n_jobs):
+            for i in range(self.n_jobs):
                 for enum,scenario_name in enumerate(self.scenarios):
                     if self.verbosity>-1:
                         print(f'\tSub-scenario {enum+1}/{len(self.scenarios)}: {scenario_name} checking if exists...')
@@ -644,14 +645,15 @@ class Sensitivity():
                                 self.mod.hyperparam.loc[param,'Value'] = new_param_series[param]*np.sign(self.mod.hyperparam.loc[param,'Value'])
                             else:
                                 self.mod.hyperparam.loc[param,'Value'] = new_param_series[param]
-
-                    mods.append(self.mod)
-                    new_param_series_all.append(new_param_series)
+                    
+                    if bayesian_tune:
+                        mods.append(self.mod)
+                        new_param_series_all.append(new_param_series)
                 
             if bayesian_tune:
                 self.complete_bayesian_trial(mods=mods, 
                                              new_param_series_all=new_param_series_all, 
-                                             scenario_numbers=range(3*(n-1), 3*(n-1)+3), 
+                                             scenario_numbers=range(3*n-2, 3*n+1),
                                              next_parameters=next_parameters)
             
             timer.end_iter()
@@ -685,7 +687,7 @@ class Sensitivity():
 
         return result
     
-    def setup_bayesian_tune(self, n_params=1):
+    def setup_bayesian_tune(self, n_params=1, surrogate_model='GBRT'):
         '''
         Initializes the things needed to run the Bayesian optimization
         '''
@@ -693,13 +695,14 @@ class Sensitivity():
         self.objective_parameters = self.historical_data.columns[:n_params]
         self.opt = Optimizer(
             dimensions=[(0.001, 1.0) for _ in self.sensitivity_param],
-            base_estimator='et',
+            base_estimator=surrogate_model,
             n_initial_points=20,
-            initial_point_generator='lhs',
-            n_jobs=4,
+            initial_point_generator='random' if surrogate_model=='dummy' else 'lhs',
+            n_jobs=self.n_jobs,
             acq_func='gp_hedge',
             acq_optimizer='auto',
-            acq_func_kwargs={"kappa": 1.96}
+            acq_func_kwargs={"kappa": 1.96},
+            random_state=np.random.default_rng().integers(0, 1e6)
         )
         
         self.rmse_df = pd.DataFrame()
@@ -740,7 +743,7 @@ class Sensitivity():
         '''
         
         #output is of the form [(score_0, new_params_0, potential_append_0), (score_1, new_params_1, potential_append_0), ...]
-        output = Parallel(n_jobs=self.n_points)(delayed(self.skopt_run_score)(mod, param_series, s_n) for mod, param_series, s_n in zip(mods, new_param_series_all, scenario_numbers))
+        output = Parallel(n_jobs=self.n_jobs)(delayed(self.skopt_run_score)(mod, param_series, s_n) for mod, param_series, s_n in zip(mods, new_param_series_all, scenario_numbers))
         
         #give scores to skopt 
         self.opt.tell(next_parameters, [out[0] for out in output])
@@ -1050,7 +1053,7 @@ class Sensitivity():
 
     def run_historical_monte_carlo(self, n_scenarios, random_state=220621,
                                    sensitivity_parameters=['elas','incentive_opening_probability','improvements','refinery_capacity_fraction_increase_mining'],
-                                   bayesian_tune=False,n_params=2, n_jobs=3):
+                                   bayesian_tune=False,n_params=2, n_jobs=3, surrogate_model='GBRT'):
         '''
         Wrapper to run the run_monte_carlo() method on historical data
 
@@ -1088,11 +1091,17 @@ class Sensitivity():
         for i in demand_params:
             self.changing_base_parameters_series.loc[i] = best_params[i]
 
+        if not bayesian_tune:
+            n_jobs = 1
+            
+        self.n_jobs = n_jobs
+            
         self.run_monte_carlo(n_scenarios=n_scenarios,
                              random_state=random_state,
                              sensitivity_parameters=sensitivity_parameters,
                              bayesian_tune=bayesian_tune,
-                             n_params=n_params, n_jobs=n_jobs)
+                             n_params=n_params,
+                             surrogate_model=surrogate_model)
 
     def create_potential_append(self,big_df,notes,reg_results,initialize=False, mod=None):
         '''
@@ -1143,7 +1152,6 @@ class Sensitivity():
         
         mod and s_n should be None except as part of a BO loop
         '''
-        
         #if no mod is provided, use self.mod, otherwise use mod
         #this is because default model behaviour was to use self.mod but that doesn't work with 
         #having multiple samples per BO iteration
@@ -1202,7 +1210,7 @@ class Sensitivity():
                 #if there is a scenario number, use that intead of the default index from create_potential_append()
                 #prevents the overwriting of scenarios when having multiple samples at each iteration
                 if s_n is not None:
-                    potential_append.columns = [s_n+1] #+1 because the first scenario is the default params
+                    potential_append.columns = [s_n]
                 
                 return potential_append
             

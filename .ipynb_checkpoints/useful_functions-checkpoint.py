@@ -558,4 +558,4 @@ def find_best_dist(stacked_df, plot=True, print_chi_squared=False, bins=40, ax=0
 #         ax[1].plot(y,best_dist.pdf(y,))
     return results.index
     
-# init_plot2()
+init_plot2()

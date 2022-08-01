@@ -1979,7 +1979,7 @@ class miningModel():
             elif h['Value']['demand_series_method']=='target':
                 self.demand_series = pd.Series(np.linspace(initial_demand,initial_demand*change,len(sim_time)),sim_time)
 
-        self.resources_contained_series.loc[i] = self.demand_series[i]*\
+        self.resources_contained_series.loc[i] = self.demand_series[i-1]*\
              (h['Value']['annual_reserves_ratio_with_initial_production']+
               h['Value']['annual_reserves_ratio_with_initial_production_slope']*(i-self.simulation_time[0]))
         if i>self.simulation_time[0]:

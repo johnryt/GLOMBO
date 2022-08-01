@@ -394,7 +394,7 @@ class Integration():
         self.mining.i = self.i
         self.mining.primary_price_series.loc[self.i] = self.primary_commodity_price[self.i]
         self.mining.primary_tcrc_series.loc[self.i] = self.tcrc[self.i]
-        #self.mining.demand_series.loc[self.i] = self.concentrate_demand['Global'][self.i]
+        self.mining.demand_series.loc[self.i-1] = self.concentrate_demand['Global'][self.i-1]
         self.mining.run()
         # concentrate_supply
         self.concentrate_supply.loc[self.i] = self.mining.concentrate_supply_series[self.i]

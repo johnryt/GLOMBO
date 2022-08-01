@@ -28,7 +28,7 @@ class Integration():
          (in that order)
         
     '''
-    def __init__(self,simulation_time=np.arange(2019,2041),verbosity=0,byproduct=False,input_hyperparam=0, scenario_name=''):
+    def __init__(self, data_folder=None, simulation_time=np.arange(2019,2041), verbosity=0, byproduct=False, input_hyperparam=0, scenario_name=''):
         self.version = '2022-05-30 09:12:42' # str(datetime.now())[:19]
         self.i = simulation_time[0]
         self.simulation_time = simulation_time
@@ -37,7 +37,7 @@ class Integration():
         self.input_hyperparam = input_hyperparam
         self.scenario_name = scenario_name
         
-        self.demand = demandModel(simulation_time=simulation_time, verbosity=verbosity)
+        self.demand = demandModel(data_folder=data_folder, simulation_time=simulation_time, verbosity=verbosity)
         self.refine = refiningModel(simulation_time=simulation_time, verbosity=verbosity)
         self.initialize_hyperparam()
         self.hyperparam.loc['simulation_time',:] = np.array([simulation_time,'simulation time from model initialization'],dtype=object)
@@ -143,6 +143,7 @@ class Integration():
 
         # demand
         hyperparameters.loc['demand only',:] = np.nan
+        hyperparameters.loc['commodity'] = 'notAu'
         hyperparameters.loc['sector_specific_dematerialization_tech_growth','Value'] = -0.03
         hyperparameters.loc['sector_specific_price_response','Value'] = -0.06
         hyperparameters.loc['region_specific_price_response','Value'] = -0.1
@@ -279,8 +280,8 @@ class Integration():
         self.secondary_refined_demand.loc[i+1:] = np.nan
         self.secondary_ratio = self.refine.ref_stats.loc[:,idx[:,'Secondary ratio']].droplevel(1,axis=1)
         self.refined_supply = self.concentrate_demand + self.secondary_refined_demand
-        self.primary_supply = self.concentrate_demand
-        self.primary_demand = self.refined_demand - self.secondary_refined_demand
+        self.primary_supply = self.concentrate_demand/self.refined_supply*self.refined_demand
+        self.primary_demand = self.refined_demand * self.secondary_refined_demand / self.refined_supply
         
         self.concentrate_demand = self.concentrate_demand.apply(lambda x: x/self.conc_to_cathode_eff,axis=1)
         self.secondary_refined_demand = self.secondary_refined_demand.apply(lambda x: x/self.scrap_to_cathode_eff,axis=1)
@@ -319,6 +320,7 @@ class Integration():
             self.mining.run()
         self.concentrate_supply = self.mining.concentrate_supply_series.copy()
         self.sxew_supply = self.mining.sxew_supply_series.copy()
+        self.mine_production = self.concentrate_supply+self.sxew_supply
         
         # scrap_supply, scrap_demand
         self.scrap_supply = self.demand.scrap_supply.copy()
@@ -397,6 +399,7 @@ class Integration():
         # concentrate_supply
         self.concentrate_supply.loc[self.i] = self.mining.concentrate_supply_series[self.i]
         self.sxew_supply.loc[self.i] = self.mining.sxew_supply_series[self.i]
+        self.mine_production.loc[self.i] = self.concentrate_supply.loc[self.i]+self.sxew_supply.loc[self.i]
         
         self.primary_supply.loc[self.i,'Global'] += self.sxew_supply.loc[self.i]
         self.primary_supply.loc[self.i,'RoW'] += self.sxew_supply.loc[self.i]
@@ -450,7 +453,9 @@ class Integration():
         m.hyperparam.loc['incentive_mine_cost_improvement','Value'] = incentive_mine_cost_improvement
         m.hyperparam.loc['annual_reserves_ratio_with_initial_production_slope','Value'] = annual_reserves_ratio_with_initial_production_slope
         m.hyperparam.loc['internal_price_formation','Value'] = False
-        self.concentrate_supply = m.supply_series.copy()
+        self.concentrate_supply = m.concentrate_supply_series.copy()
+        self.sxew_supply = m.sxew_supply_series.copy()
+        self.mine_production = self.concentrate_supply+self.sxew_supply
         self.tcrc = m.primary_tcrc_series.copy()
         self.mining = m
                 
@@ -508,8 +513,8 @@ class Integration():
         self.refined_supply.loc[i] = self.concentrate_demand.loc[i] + self.secondary_refined_demand.loc[i]
         
         # primary supply and demand, assuming all sxew is done in RoW (this update is done in the mining module, and here we do primary supply as primary refined supply)
-        self.primary_supply.loc[i] = self.concentrate_demand.copy().loc[i]
-        self.primary_demand.loc[i] = self.refined_demand.loc[i] - self.secondary_refined_demand.loc[i]
+        self.primary_supply.loc[i] = self.concentrate_demand.copy().loc[i]/self.refined_supply.loc[i]*self.refined_demand.loc[i]
+        self.primary_demand.loc[i] = self.refined_demand.loc[i]*self.secondary_refined_demand.loc[i]/self.refined_supply.loc[i]
         
         # correcting concentrate demand and secondary refined demand for efficiency loss
         self.concentrate_demand.loc[i] /= self.conc_to_cathode_eff

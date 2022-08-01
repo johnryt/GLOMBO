@@ -232,7 +232,7 @@ class Sensitivity():
     '''
     def __init__(self,
                  pkl_filename='integration_big_df.pkl',
-                 case_study_data_file_path='generalization/data/case study data.xlsx',
+                 data_folder=None,
                  changing_base_parameters_series=0,
                  additional_base_parameters=0,
                  params_to_change=0,
@@ -330,7 +330,8 @@ class Sensitivity():
         self.simulation_time = simulation_time
         self.changing_base_parameters_series = changing_base_parameters_series
         self.additional_base_parameters = additional_base_parameters
-        self.case_study_data_file_path = case_study_data_file_path
+        self.data_folder = 'generalization/data' if data_folder is None else data_folder
+        self.case_study_data_file_path = f'{self.data_folder}/case study data.xlsx'
         self.use_alternative_gold_volumes = use_alternative_gold_volumes
         self.historical_price_rolling_window = historical_price_rolling_window
         self.update_changing_base_parameters_series()
@@ -363,7 +364,7 @@ class Sensitivity():
         if os.path.exists(self.pkl_filename) and not self.overwrite:
             big_df = pd.read_pickle(self.pkl_filename)
         else:
-            self.mod = Integration(simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct,scenario_name='')
+            self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct,scenario_name='')
             for base in self.changing_base_parameters_series.index:
                 self.mod.hyperparam.loc[base,'Value'] = self.changing_base_parameters_series[base]
             self.mod.run()
@@ -477,7 +478,7 @@ class Sensitivity():
         Integration class hyperparam dataframe
         '''
         if type(self.params_to_change)==int:
-            self.mod = Integration(simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct)
+            self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct)
             for base in self.changing_base_parameters_series.index:
                 self.mod.hyperparam.loc[base,'Value'] = self.changing_base_parameters_series[base]
             self.params_to_change = pd.concat([
@@ -514,7 +515,7 @@ class Sensitivity():
                 if val!=0:
                     val = round(val, n_sig_dig-1 - int(np.floor(np.log10(abs(val)))))
                 self.val = val
-                self.mod = Integration(simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct)
+                self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct)
                 self.hyperparam_copy = self.mod.hyperparam.copy()
 
                 ###### CHANGING BASE PARAMETERS ######
@@ -562,7 +563,7 @@ class Sensitivity():
         self.random_state = random_state
         self.update_changing_base_parameters_series()
         self.initialize_big_df()
-        self.mod = Integration(simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct)
+        self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct)
         scenario_params_dont_change = ['collection_rate_price_response','direct_melt_price_response','secondary_refined_price_response','refinery_capacity_growth_lag']
 #         params_to_change = [i for i in self.mod.hyperparam.dropna(how='all').index if ('elas' in i or 'response' in i or 'growth' in i or 'improvements' in i) and i not in scenario_params_dont_change]
         params_to_change = [i for i in self.mod.hyperparam.dropna(how='all').index if np.any([j in i for j in sensitivity_parameters]) and i not in scenario_params_dont_change]
@@ -593,7 +594,7 @@ class Sensitivity():
                 for enum,scenario_name in enumerate(self.scenarios):
                     if self.verbosity>-1:
                         print(f'\tSub-scenario {enum+1}/{len(self.scenarios)}: {scenario_name} checking if exists...')
-                    self.mod = Integration(simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct,scenario_name=scenario_name)
+                    self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct,scenario_name=scenario_name)
                     self.notes = scenario_name
 
                     ###### CHANGING BASE PARAMETERS ######

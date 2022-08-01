@@ -28,7 +28,7 @@ class Integration():
          (in that order)
         
     '''
-    def __init__(self,simulation_time=np.arange(2019,2041),verbosity=0,byproduct=False,input_hyperparam=0, scenario_name=''):
+    def __init__(self, data_folder=None, simulation_time=np.arange(2019,2041), verbosity=0, byproduct=False, input_hyperparam=0, scenario_name=''):
         self.version = '2022-05-30 09:12:42' # str(datetime.now())[:19]
         self.i = simulation_time[0]
         self.simulation_time = simulation_time
@@ -37,7 +37,7 @@ class Integration():
         self.input_hyperparam = input_hyperparam
         self.scenario_name = scenario_name
         
-        self.demand = demandModel(simulation_time=simulation_time, verbosity=verbosity)
+        self.demand = demandModel(data_folder=data_folder, simulation_time=simulation_time, verbosity=verbosity)
         self.refine = refiningModel(simulation_time=simulation_time, verbosity=verbosity)
         self.initialize_hyperparam()
         self.hyperparam.loc['simulation_time',:] = np.array([simulation_time,'simulation time from model initialization'],dtype=object)

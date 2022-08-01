@@ -64,7 +64,7 @@ class Individual():
         - func indiv.plot_results(): produces many different plots you can use to try and understand the model outputs. Plots the best overall scenario over time (using NORM SUM or NORM SUM OBJ ONLY) for each objective to allow comparison, plots a heatmap of the hyperparameter values for the best n scenarios, plots the hyperparameter distributions, plots the hyperparameter values vs the error value
     '''
     
-    def __init__(self,material='Al',n_params=3,filename='',historical_data_filename='',rmse_not_mae=True, drop_no_price_elasticity=True, weight_price=1, dpi=50):
+    def __init__(self,material='Al',n_params=3,filename='',historical_data_filename='',rmse_not_mae=True, drop_no_price_elasticity=True, weight_price=1, dpi=50, historical_price_rolling_window=1):
         self.material = material
         self.n_params = n_params
         self.filename = filename
@@ -74,6 +74,7 @@ class Individual():
         self.weight_price = weight_price
         self.get_results()            
         self.dpi = dpi
+        self.historical_price_rolling_window = historical_price_rolling_window
         
     def get_results(self):
         '''
@@ -136,6 +137,9 @@ class Individual():
         if historical_data_filename=='':
             historical_data_filename='generalization/data/case study data.xlsx'
         historical_data = pd.read_excel(historical_data_filename,sheet_name=material,index_col=0).loc[2001:].astype(float)
+        
+        if 'Primary commodity price' in historical_data.columns:
+                historical_data.loc[:,'Primary commodity price'] = historical_data.loc[:,'Primary commodity price'].rolling(self.historical_price_rolling_window,min_periods=1,center=True).mean()
 
         self.objective_params = historical_data.columns[:n_params]
         self.objective_results_map = {'Total demand':'Total demand','Primary commodity price':'Refined price',

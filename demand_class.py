@@ -23,9 +23,10 @@ class demandModel():
         - old_scrap_collected
         
     '''
-    def __init__(self, simulation_time=np.arange(2019,2041), verbosity=0):
+    def __init__(self, data_folder=None, simulation_time=np.arange(2019,2041), verbosity=0):
         self.simulation_time = simulation_time
         self.verbosity = verbosity
+        self.data_folder = "generalization/data" if data_folder is None else data_folder
         self.i = self.simulation_time[0]
         self.init_hyperparams()
         
@@ -91,25 +92,25 @@ class demandModel():
         self.hyperparam = hyperparameters.copy()
         
     def load_demand_data(self):
-        file = 'generalization/data/Demand prediction data-copper.xlsx'
+        file = f'{self.data_folder}/Demand prediction data-copper.xlsx'
         with pd.ExcelFile(file) as xl:
             self.volumes = pd.read_excel(xl, sheet_name='All sectors', header=[0,1], index_col=0).sort_index().sort_index(axis=1).stack(0).unstack()
             self.gdp_growth = pd.read_excel(xl, sheet_name='GDP growth', header=[0], index_col=0, usecols='A:F').sort_index().sort_index(axis=1).dropna()
             self.intensities = pd.read_excel(xl, sheet_name='Intensity', header=[0,1], index_col=0).sort_index().sort_index(axis=1).stack(0).unstack()
-        self.alt_demand = pd.read_excel('generalization/data/End use combined data-copper.xlsx',sheet_name='Combined',index_col=0)
-        intensity_parameters_cu = pd.read_excel('generalization/data/elasticity estimates-copper.xlsx', sheet_name='S+R S intercept only', header=[0], index_col=0).sort_index(axis=1)
-        self.intensity_parameters_al = pd.read_excel('generalization/data/baseline_scenario_aluminum.xlsx', sheet_name='intensity_parameters', header=[0,1], index_col=0).sort_index().sort_index(axis=1)
+        self.alt_demand = pd.read_excel(f'{self.data_folder}/End use combined data-copper.xlsx',sheet_name='Combined',index_col=0)
+        intensity_parameters_cu = pd.read_excel(f'{self.data_folder}/elasticity estimates-copper.xlsx', sheet_name='S+R S intercept only', header=[0], index_col=0).sort_index(axis=1)
+        self.intensity_parameters_al = pd.read_excel(f'{self.data_folder}/baseline_scenario_aluminum.xlsx', sheet_name='intensity_parameters', header=[0,1], index_col=0).sort_index().sort_index(axis=1)
         self.original_growth_rate = 1.02546855
         intensity_parameters_cu_original = intensity_parameters_cu.copy()
         self.intensity_parameters = intensity_parameters_cu.copy()
         
         if self.hyperparam['Value']['commodity']=='Au':
-            gold_vols = pd.read_excel('generalization/data/Gold demand volume indicators.xlsx',sheet_name='Volume drivers',index_col=0).loc[2000:]
+            gold_vols = pd.read_excel(f'{self.data_folder}/Gold demand volume indicators.xlsx',sheet_name='Volume drivers',index_col=0).loc[2000:]
             gold_vols = gold_vols.rolling(self.hyperparam['Value']['gold_rolling_window'],min_periods=1,center=True).mean()
             self.volumes.loc[:,idx[:,'Industrial']] = self.volumes.loc[:,idx[:,'Industrial']].apply(lambda x: x/x.sum(), axis=1).apply(lambda x: x*gold_vols['Global cash reserves (USD$2021)'])#['US circulating coin production (million coins)'])
             self.volumes.loc[:,idx[:,'Transport']] = self.volumes.loc[:,idx[:,'Transport']].apply(lambda x: x/x.sum(), axis=1).apply(lambda x: x*gold_vols['Diamond demand ($B)'])
             
-            gold_dem = pd.read_excel('generalization/data/case study data.xlsx',sheet_name='Au',index_col=0).loc[2001:,'Total demand'].astype(float)
+            gold_dem = pd.read_excel(f'{self.data_folder}/case study data.xlsx',sheet_name='Au',index_col=0).loc[2001:,'Total demand'].astype(float)
             ad = self.alt_demand.copy()
             sectors = ['Construction','Electrical','Industrial','Transport','Other']
             ad.loc[2001:,sectors] = ad.loc[2001:,sectors].apply(lambda x: x/x.sum(),axis=1).apply(lambda x: x*gold_dem.loc[:2019])

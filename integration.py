@@ -16,17 +16,17 @@ class Integration():
          relative to the initial year total demand
         44: X%inc, where X is any float/int and is the
          increase/decrease in the %tot value per year
-        
+
         e.g. ss_pr_1yr_1%tot_0%inc
-        
+
         for 22-44, an additional X should be placed at
          the end when 00==both, describing the sd values
          e.g. ss_pr_1yr1_1%tot1_0%inc0
-         
+
         Can also have 11 as nono, prno, nopr, or prpr to
          control the ss and sd price response individually
          (in that order)
-        
+
     '''
     def __init__(self, data_folder=None, simulation_time=np.arange(2019,2041), verbosity=0, byproduct=False, input_hyperparam=0, scenario_name=''):
         self.version = '2022-05-30 09:12:42' # str(datetime.now())[:19]
@@ -36,13 +36,12 @@ class Integration():
         self.byproduct = byproduct
         self.input_hyperparam = input_hyperparam
         self.scenario_name = scenario_name
-        
         self.demand = demandModel(data_folder=data_folder, simulation_time=simulation_time, verbosity=verbosity)
         self.refine = refiningModel(simulation_time=simulation_time, verbosity=verbosity)
         self.initialize_hyperparam()
         self.hyperparam.loc['simulation_time',:] = np.array([simulation_time,'simulation time from model initialization'],dtype=object)
         self.update_hyperparam()
-        
+
         price_simulation_time = np.arange(simulation_time[0]-15,simulation_time[-1]+1)
         self.concentrate_supply = pd.Series(np.nan,price_simulation_time)
         self.sxew_supply = pd.Series(np.nan,price_simulation_time)
@@ -58,16 +57,16 @@ class Integration():
         self.primary_demand = self.concentrate_demand.copy()
         self.secondary_supply = self.concentrate_demand.copy()
         self.secondary_demand = self.concentrate_demand.copy()
-        
+
         self.scrap_spread = self.concentrate_demand.copy()
         self.primary_commodity_price = self.concentrate_supply.copy()
         self.tcrc = self.concentrate_supply.copy()
-        
+
         self.decode_scrap_scenario_name()
-    
+
     def initialize_hyperparam(self):
         hyperparameters = pd.DataFrame(np.nan,index=[],columns=['Value','Notes'])
-        
+
         # refining and demand
         hyperparameters.loc['refining and demand',:] = np.nan
         hyperparameters.loc['initial_demand',:] = 1,'initial overall demand'
@@ -87,12 +86,12 @@ class Integration():
         hyperparameters.loc['sec ratio scrap spread elas',:] = 0.8, 'Secondary ratio elasticity to scrap spread'
         hyperparameters.loc['Use regions'] = False, 'True makes it so global refining is determined from combo of China and RoW; False means we ignore the region level'
         hyperparameters.loc['refinery_capacity_growth_lag'] = 1,'capacity growth lag, can be 1 or 0. 1 means that we use the year_i-1 and year_i-2 years to calculated the growth associated with mining or demand for calculating capacity growth, while 0 means we use year_i and year_i-1.'
-        
+
         # price
         hyperparameters.loc['price',:] = np.nan
         hyperparameters.loc['primary_commodity_price',:] = 6000,'primary commodity price'
         hyperparameters.loc['initial_scrap_spread',:] = 500,'scrap spread at simulation start'
-        
+
         # price elasticities
         hyperparameters.loc['price elasticities',:] = np.nan
         hyperparameters.loc['primary_commodity_price_elas_sd',:] = -0.4, 'primary commodity price elasticity to supply-demand imbalance (here using S/D ratio)'
@@ -148,10 +147,10 @@ class Integration():
         hyperparameters.loc['sector_specific_price_response','Value'] = -0.06
         hyperparameters.loc['region_specific_price_response','Value'] = -0.1
         hyperparameters.loc['intensity_response_to_gdp','Value'] = 0.69
-        
+
         self.hyperparam = hyperparameters.copy()
         self.h = hyperparameters.copy()['Value']
-        
+
     def update_hyperparam(self):
         update = 0
         if type(self.input_hyperparam) == pd.core.frame.DataFrame:
@@ -164,7 +163,7 @@ class Integration():
         if type(update)!=int:
             for ind in update.index:
                 self.hyperparam.loc[ind,'Value'] = update[ind]
-        
+
     def hyperparam_agreement(self):
         dem = self.demand
         dem.collection_rate_price_response = self.collection_rate_price_response
@@ -172,34 +171,34 @@ class Integration():
         dem.collection_rate_duration = self.collection_rate_duration
         dem.collection_rate_pct_change_tot = self.collection_rate_pct_change_tot
         dem.collection_rate_pct_change_inc = self.collection_rate_pct_change_inc
-        
+
         ref = self.refine
         ref.scenario_type = self.scenario_type
         ref.secondary_refine_duration = self.secondary_refined_duration
         ref.secondary_refine_pct_change_tot = self.secondary_refined_pct_change_tot
         ref.secondary_refine_pct_change_inc = self.secondary_refined_pct_change_inc
         h = self.h
-        
+
         dem.hyperparam.loc['initial_demand','Value'] = h['initial_demand']
         ref.hyperparam.loc['Total production','Global'] = h['initial_demand'] # will need updated later
 
         dem.hyperparam.loc['china_fraction_demand','Value'] = h['china_fraction_demand']
         ref.hyperparam.loc['Regional production fraction of total production','China'] = h['china_fraction_demand']
-        
+
         ref.hyperparam.loc['Recycling input rate','Global'] = h['Recycling input rate, Global']
         ref.hyperparam.loc['Recycling input rate','China'] = h['Recycling input rate, China']
         dem.hyperparam.loc['recycling_input_rate_china','Value'] = h['Recycling input rate, China']
         dem.hyperparam.loc['recycling_input_rate_row','Value'] = (h['Recycling input rate, Global']-h['Recycling input rate, China']*h['china_fraction_demand'])/(1-h['china_fraction_demand'])
-        
+
         dem.hyperparam.loc['scrap_to_cathode_eff','Value'] = h['scrap_to_cathode_eff']
         ref.hyperparam.loc['scrap_to_cathode_eff',:] = h['scrap_to_cathode_eff']
-        
+
         if self.verbosity>1: print('Refinery parameters updated:')
         for param in np.intersect1d(ref.hyperparam.index, h.index):
             ref.hyperparam.loc[param,:] = h[param]
             if self.verbosity>1:
                 print('   ref',param,'now',h[param])
-        
+
         h_index_split = [j for j in h.index if ', ' in j]
         h_index_ind = np.unique([j.split(', ')[0] for j in h_index_split])
         for param in np.intersect1d(ref.hyperparam.index,h_index_ind):
@@ -208,20 +207,20 @@ class Integration():
                 ref.hyperparam.loc[param,reg] = h[', '.join([param,reg])]
                 if self.verbosity>1:
                     print('   ref',param,reg,'now',h[', '.join([param,reg])])
-        
+
         for param in np.intersect1d(ref.ref_hyper_param.index, h.index):
             ref.ref_hyper_param.loc[param,:] = h[param]
             if self.verbosity>1:
                 print('   rhp',param)
-                
+
         for param in np.intersect1d(dem.hyperparam.index, h.index):
             dem.hyperparam.loc[param,'Value'] = h[param]
             if self.verbosity>1:
                 print('   demand',param)
-            
+
         self.demand = dem
         self.refine = ref
-    
+
     def initialize_integration(self):
         '''
         Sets up the integration, also sets up the scenario corresponding with scenario_name
@@ -229,18 +228,18 @@ class Integration():
         i = self.i
         self.conc_to_cathode_eff = self.refine.ref_param['Global']['conc to cathode eff']
         self.scrap_to_cathode_eff = self.refine.ref_param['Global']['scrap to cathode eff']
-        
+
         # initializing demand
         self.hyperparam_agreement()
         self.demand.run()
-        
+
         # initializing collection_rate (scenario modification is done in the demand class)
         self.collection_rate = self.demand.collection_rate.copy()
         self.additional_scrap = self.demand.additional_scrap.copy()
-        
+
         # initializing refining
         self.refine.run()
-        
+
         # total_demand
         self.total_demand = pd.concat([self.demand.demand.sum(axis=1),
                                        self.demand.demand['China'].sum(axis=1),
@@ -282,7 +281,7 @@ class Integration():
         self.refined_supply = self.concentrate_demand + self.secondary_refined_demand
         self.primary_supply = self.concentrate_demand/self.refined_supply*self.refined_demand
         self.primary_demand = self.refined_demand * self.secondary_refined_demand / self.refined_supply
-        
+
         self.concentrate_demand = self.concentrate_demand.apply(lambda x: x/self.conc_to_cathode_eff,axis=1)
         self.secondary_refined_demand = self.secondary_refined_demand.apply(lambda x: x/self.scrap_to_cathode_eff,axis=1)
         self.additional_secondary_refined = self.direct_melt_demand.copy()
@@ -321,36 +320,44 @@ class Integration():
         self.concentrate_supply = self.mining.concentrate_supply_series.copy()
         self.sxew_supply = self.mining.sxew_supply_series.copy()
         self.mine_production = self.concentrate_supply+self.sxew_supply
-        
+
         # scrap_supply, scrap_demand
         self.scrap_supply = self.demand.scrap_supply.copy()
         self.scrap_demand = self.secondary_refined_demand+self.direct_melt_demand
-        
+
     def initialize_price(self):
         i = self.i
         h = self.h
         self.scrap_spread.loc[:i] = h['initial_scrap_spread']
         self.primary_commodity_price.loc[:i] = h['primary_commodity_price']
         self.tcrc.loc[:i] = self.mining.primary_tcrc_series[i]
-        
+
     def price_evolution(self):
         i = self.i
         h = self.h
         # refined
-        self.primary_commodity_price.loc[i] = self.primary_commodity_price.loc[i-1]*(self.refined_supply.replace(0,1e-6)['Global'][i-1]/self.refined_demand.replace(0,1e-6)['Global'][i-1])**h['primary_commodity_price_elas_sd']
-        
+        self.refined_supply = self.refined_supply.where(self.refined_supply>1e-9).fillna(1e-9)
+        self.refined_demand = self.refined_demand.where(self.refined_demand>1e-9).fillna(1e-9)
+        self.primary_commodity_price.loc[i] = self.primary_commodity_price.loc[i-1]*(self.refined_supply['Global'][i-1]/self.refined_demand['Global'][i-1])**h['primary_commodity_price_elas_sd']
+        self.primary_commodity_price = self.primary_commodity_price.where(self.primary_commodity_price>1e-9).fillna(1e-9)
+
         # tcrc
-        self.tcrc.loc[i] = self.tcrc.loc[i-1]*(self.concentrate_supply.replace(0,1e-6)[i-1]/self.concentrate_demand.replace(0,1e-6)['Global'][i-1])**h['tcrc_elas_sd']\
+        self.concentrate_supply = self.concentrate_supply.where(self.concentrate_supply>1e-9).fillna(1e-9)
+        self.concentrate_demand = self.concentrate_demand.where(self.concentrate_demand>1e-9).fillna(1e-9)
+        self.tcrc.loc[i] = self.tcrc.loc[i-1]*(self.concentrate_supply[i-1]/self.concentrate_demand['Global'][i-1])**h['tcrc_elas_sd']\
                                 *(self.primary_commodity_price.loc[i]/self.primary_commodity_price.loc[i-1])**h['tcrc_elas_price']
-        
+        self.tcrc = self.tcrc.where(self.tcrc>1e-9).fillna(1e-9)
+
         # scrap trade
+        self.scrap_supply = self.scrap_supply.where(self.scrap_supply>1e-9).fillna(1e-9)
+        self.scrap_demand = self.scrap_demand.where(self.scrap_demand>1e-9).fillna(1e-9)
         if h['scrap_trade_simplistic'] and i>self.simulation_time[2]:
             self.scrap_supply.loc[i-1,'China'] = self.scrap_supply['China'][i-2]*self.scrap_supply['Global'][i-1]/self.scrap_supply['Global'][i-2]
-            self.scrap_supply.loc[i-1,'RoW'] = self.scrap_supply['RoW'][i-2]*self.scrap_supply['Global'][i-1]/self.scrap_supply['Global'][i-2]                
+            self.scrap_supply.loc[i-1,'RoW'] = self.scrap_supply['RoW'][i-2]*self.scrap_supply['Global'][i-1]/self.scrap_supply['Global'][i-2]
         elif h['scrap_trade_simplistic']:
             self.scrap_supply.loc[i-1,'China'] = self.scrap_supply['Global'][i-1]*self.scrap_demand['China'][i-1]/self.scrap_demand['Global'][i-1]
             self.scrap_supply.loc[i-1,'RoW'] = self.scrap_supply['Global'][i-1]*self.scrap_demand['RoW'][i-1]/self.scrap_demand['Global'][i-1]
-            
+
         # scrap spread
         self.scrap_spread.loc[i,'China'] = self.scrap_spread['China'][i-1]*(self.scrap_supply['China'][i-1]/self.scrap_demand['China'][i-1])**h['scrap_spread_elas_sd']\
             * (self.primary_commodity_price[i]/self.primary_commodity_price[i-1])**h['scrap_spread_elas_primary_commodity_price']
@@ -358,7 +365,8 @@ class Integration():
             * (self.primary_commodity_price[i]/self.primary_commodity_price[i-1])**h['scrap_spread_elas_primary_commodity_price']
         self.scrap_spread.loc[i,'Global'] = self.scrap_spread['Global'][i-1]*(self.scrap_supply['Global'][i-1]/self.scrap_demand['Global'][i-1])**h['scrap_spread_elas_sd']\
             * (self.primary_commodity_price[i]/self.primary_commodity_price[i-1])**h['scrap_spread_elas_primary_commodity_price']
-        
+        self.scrap_spread = self.scrap_spread.where(self.scrap_spread>1e-9).fillna(1e-9)
+
     def run_demand(self):
         self.demand.i = self.i
         i = self.i
@@ -367,11 +375,11 @@ class Integration():
             self.primary_commodity_price.loc[self.i-2] = self.primary_commodity_price[self.i-1]
         if self.i-2 not in self.scrap_spread.index:
             self.scrap_spread.loc[i-2] = self.scrap_spread.loc[i-1]
-        self.demand.commodity_price_series = self.primary_commodity_price.copy()        
+        self.demand.commodity_price_series = self.primary_commodity_price.copy()
         self.demand.collection_rate = self.collection_rate.copy()
         self.demand.run()
         self.additional_scrap = self.demand.additional_scrap.copy()
-        
+
     def run_refine(self):
         self.refine.i = self.i
         self.refine.tcrc_series = self.tcrc.copy()
@@ -386,10 +394,10 @@ class Integration():
         ref_demand = self.refined_demand['Global'].copy()/self.refined_demand['Global'][self.simulation_time[0]]
         pri_growth_series = conc_supply*self.h['refinery_capacity_fraction_increase_mining'] + ref_demand*(1-self.h['refinery_capacity_fraction_increase_mining'])
         self.refine.pri_cap_growth_series = pri_growth_series
-        
+
         self.refine.sec_cap_growth_series = self.scrap_supply.copy()
         self.refine.run()
-        
+
     def run_mining(self):
         self.mining.i = self.i
         self.mining.primary_price_series.loc[self.i] = self.primary_commodity_price[self.i]
@@ -400,10 +408,10 @@ class Integration():
         self.concentrate_supply.loc[self.i] = self.mining.concentrate_supply_series[self.i]
         self.sxew_supply.loc[self.i] = self.mining.sxew_supply_series[self.i]
         self.mine_production.loc[self.i] = self.concentrate_supply.loc[self.i]+self.sxew_supply.loc[self.i]
-        
+
         self.primary_supply.loc[self.i,'Global'] += self.sxew_supply.loc[self.i]
         self.primary_supply.loc[self.i,'RoW'] += self.sxew_supply.loc[self.i]
-            
+
     def presimulate_mining(self):
         h = self.h.copy()
         end_yr = self.simulation_time[0]
@@ -416,7 +424,7 @@ class Integration():
             m.hyperparam.loc[param,'Value'] = h[param]
             if self.verbosity>1:
                 print('  ',param,'now',h[param])
-        
+
         initial_ore_grade_decline = m.hyperparam['Value']['initial_ore_grade_decline']
         incentive_mine_cost_improvement = m.hyperparam['Value']['incentive_mine_cost_improvement']
         annual_reserves_ratio_with_initial_production_slope = m.hyperparam['Value']['annual_reserves_ratio_with_initial_production_slope']
@@ -424,7 +432,7 @@ class Integration():
         m.hyperparam.loc['initial_ore_grade_decline','Value'] = 0
         m.hyperparam.loc['incentive_mine_cost_improvement','Value'] = 0
         m.hyperparam.loc['annual_reserves_ratio_with_initial_production_slope','Value'] = 0
-        
+
 #         primary_production
         m.demand_series = self.demand.alt_demand[[j for j in self.demand.alt_demand.columns if j!='China Fraction']].sum(axis=1).rolling(5).mean()
         m.demand_series *= self.concentrate_demand['Global'][end_yr]/m.demand_series[end_yr]
@@ -448,7 +456,7 @@ class Integration():
                 ax[0].legend()
                 ax[1].plot(m.primary_tcrc_series,marker='o')
                 plt.show()
-        
+
         m.hyperparam.loc['initial_ore_grade_decline','Value'] = initial_ore_grade_decline
         m.hyperparam.loc['incentive_mine_cost_improvement','Value'] = incentive_mine_cost_improvement
         m.hyperparam.loc['annual_reserves_ratio_with_initial_production_slope','Value'] = annual_reserves_ratio_with_initial_production_slope
@@ -458,7 +466,7 @@ class Integration():
         self.mine_production = self.concentrate_supply+self.sxew_supply
         self.tcrc = m.primary_tcrc_series.copy()
         self.mining = m
-                
+
     def calculate_direct_melt_demand(self):
         i = self.i
 #         self.direct_melt_fraction.loc[i-1] = self.direct_melt_demand.loc[i-1]/self.total_demand.loc[i-1]
@@ -483,46 +491,46 @@ class Integration():
             self.temp_direct_melt_fraction = temp_direct_melt_fraction.copy()
         else:
             self.direct_melt_demand.loc[i] = self.total_demand.loc[i]*self.direct_melt_fraction.loc[i]
-        
+
     def update_integration_variables_post_demand(self):
         i = self.i
-        
+
         # scrap supply
         self.scrap_supply = self.demand.scrap_supply.copy()
-        
+
         # total_demand
         self.total_demand.loc[i,'Global'] = self.demand.demand.sum(axis=1)[i]
         self.total_demand.loc[i,'China'] = self.demand.demand['China'].sum(axis=1)[i]
         self.total_demand.loc[i,'RoW'] = self.demand.demand['RoW'].sum(axis=1)[i]
         self.total_demand[self.total_demand<0] = 0
-        
+
         # refined_demand, direct_melt_demand
         self.calculate_direct_melt_demand()
         self.refined_demand.loc[i] = self.total_demand.loc[i] - self.direct_melt_demand.loc[i]
         self.refined_demand[self.refined_demand<0] = 0
         self.direct_melt_demand.loc[i] /= self.scrap_to_cathode_eff
-    
+
     def update_integration_variables_post_refine(self):
         i = self.i
-        
+
         # concentrate_demand, secondary_refined_demand, refined_supply
         self.concentrate_demand.loc[i] = self.refine.ref_stats.loc[i,idx[:,'Primary production']].droplevel(1)
         self.concentrate_demand[self.concentrate_demand<0] = 0
         self.secondary_refined_demand.loc[i] = self.refine.ref_stats.loc[i,idx[:,'Secondary production']].droplevel(1)
         self.secondary_refined_demand[self.secondary_refined_demand<0] = 0
         self.refined_supply.loc[i] = self.concentrate_demand.loc[i] + self.secondary_refined_demand.loc[i]
-        
+
         # primary supply and demand, assuming all sxew is done in RoW (this update is done in the mining module, and here we do primary supply as primary refined supply)
         self.primary_supply.loc[i] = self.concentrate_demand.copy().loc[i]/self.refined_supply.loc[i]*self.refined_demand.loc[i]
         self.primary_demand.loc[i] = self.refined_demand.loc[i]*self.secondary_refined_demand.loc[i]/self.refined_supply.loc[i]
-        
+
         # correcting concentrate demand and secondary refined demand for efficiency loss
         self.concentrate_demand.loc[i] /= self.conc_to_cathode_eff
-        self.secondary_refined_demand.loc[i] /= self.scrap_to_cathode_eff 
-        
+        self.secondary_refined_demand.loc[i] /= self.scrap_to_cathode_eff
+
         # scrap_demand
         self.scrap_demand.loc[i] = self.secondary_refined_demand.loc[i]+self.direct_melt_demand.loc[i]
-        
+
         self.mining.demand_series.loc[self.i] = self.concentrate_demand['Global'][self.i]
 
     def run(self):
@@ -538,7 +546,7 @@ class Integration():
             else:
                 self.price_evolution()
                 self.run_mining()
-                
+
                 self.run_demand()
                 self.update_integration_variables_post_demand()
                 self.run_refine()
@@ -584,7 +592,7 @@ class Integration():
         secondary_refined_duration = 0
         secondary_refined_pct_change_tot = 0
         secondary_refined_pct_change_inc = 0
-        
+
         if scenario_name=='':
             scenario_type = scenario_name
         else:
@@ -624,7 +632,7 @@ class Integration():
                     direct_melt_price_response=True
                 elif name[1]=='no':
                     direct_melt_price_response=False
-                    
+
             if len(name[1])>2:
                 if name[1]=='nono':
                     collection_rate_price_response=False

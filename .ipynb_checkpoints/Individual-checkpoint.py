@@ -13,6 +13,7 @@ from matplotlib.lines import Line2D
 
 from useful_functions import easy_subplots
 import seaborn as sns
+import statsmodels.api as sm
 
 def is_pareto_efficient_simple(costs):
     """
@@ -72,9 +73,9 @@ class Individual():
         self.rmse_not_mae = rmse_not_mae
         self.drop_no_price_elasticity = drop_no_price_elasticity
         self.weight_price = weight_price
+        self.historical_price_rolling_window = historical_price_rolling_window
         self.get_results()            
         self.dpi = dpi
-        self.historical_price_rolling_window = historical_price_rolling_window
         
     def get_results(self):
         '''
@@ -151,19 +152,30 @@ class Individual():
         if 'Conc. SD' not in self.objective_params:
             self.all_params = np.append(self.objective_params,self.sd_ind)
         for obj in self.all_params:
+            r2s = None
             simulated = results[self.objective_results_map[obj]].unstack(0).loc[2001:2019].astype(float)
             if self.rmse_not_mae:
                 if 'SD' in obj:
                     rmses = (simulated**2).sum().div(simulated.shape[0])**0.5
                 else:
                     rmses = (simulated.apply(lambda x: x-historical_data[obj])**2).sum().div(simulated.shape[0])**0.5
+                    r2s = []
+                    for scenario in simulated.columns:
+                        m = sm.GLS(simulated[scenario].values,sm.add_constant(historical_data[obj].values)).fit(cov_type='HC3')
+                        r2s.append(m.rsquared)
             else:
                 if 'SD' in obj:
                     rmses = abs(simulated).sum()
                 else:
                     rmses = abs(simulated.apply(lambda x: x-historical_data[obj])).sum()
-            hyperparameters.loc['RMSE '+obj] = rmses        
+            hyperparameters.loc['RMSE '+obj] = rmses 
+            if r2s is not None:
+                hyperparameters.loc['R2 '+obj] = r2s 
 
+        hyperparameters.loc['RMSE SUM'] = hyperparameters.loc[[f'RMSE {obj}' for obj in self.objective_params]].sum()
+        if f'R2 {self.objective_params[0]}' in hyperparameters.index:
+            hyperparameters.loc['R2 SUM INVERSE'] = -hyperparameters.loc[[f'R2 {obj}' for obj in self.objective_params]].sum() 
+        
         self.big_df = big_df.copy()
         
         if 'mine_data' in big_df.index: 
@@ -244,7 +256,7 @@ class Individual():
     def plot_results(self, plot_over_time=True, n_best=0, include_sd=False,
                     plot_hyperparam_heatmap=True,
                     plot_hyperparam_distributions=True, n_per_plot=3,
-                    plot_hyperparam_vs_error=True, flip_yx=False):
+                    plot_hyperparam_vs_error=True, flip_yx=False, obj_plot=None):
         '''
         produces many different plots you can use to try and understand the model outputs. More info is given with each model input bool description below.
         
@@ -259,7 +271,8 @@ class Individual():
         flip_yx: bool, False means plot hyperparam value vs error, while True means plot error vs hyperparam value
         '''
         self.normalize_rmses()
-        norm_sum = 'NORM SUM' if include_sd else 'NORM SUM OBJ ONLY'
+        if obj_plot is None:
+            obj_plot = 'NORM SUM' if include_sd else 'NORM SUM OBJ ONLY'
         if plot_over_time:
             fig,ax = easy_subplots(self.all_params,dpi=self.dpi)
             for i,a in zip(self.all_params, ax):
@@ -270,11 +283,11 @@ class Individual():
                     historical_data = pd.Series(results.min(),[0])
                 
                 n_best = n_best if n_best>1 else 2
-                simulated = self.hyperparam.loc[norm_sum].astype(float).sort_values().head(n_best).index
+                simulated = self.hyperparam.loc[obj_plot].astype(float).sort_values().head(n_best).index
                 results = results.loc[idx[simulated,:]]
 
                 results, historical_data, unit = self.get_unit(results, historical_data, i)
-                best = self.hyperparam.loc[norm_sum].astype(float).idxmin()
+                best = self.hyperparam.loc[obj_plot].astype(float).idxmin()
                 best = results.loc[best]
                 best.plot(ax=a,label='Simulated',color='blue')
                 if 'SD' not in i:
@@ -285,9 +298,9 @@ class Individual():
                 a.legend(['Simulated','Historical'])
                 
             fig.tight_layout()
-        cols = self.hyperparam.loc[norm_sum].sort_values().head(n_best).index
+        cols = self.hyperparam.loc[obj_plot].sort_values().head(n_best).index
         ind = [i for i in self.hyperparam.index if type(self.hyperparam.loc[i].iloc[0]) in [float,int]]
-        ind = [i for i in ind if 'RMSE' not in i and 'NORM' not in i]
+        ind = [i for i in ind if 'RMSE' not in i and 'NORM' not in i and 'R2' not in i]
         ind = self.hyperparam.loc[ind].loc[(self.hyperparam.loc[ind].std(axis=1)>1e-3)].index
         self.hyperparams_changing = ind
         best_hyperparam = self.hyperparam.copy().loc[ind,cols].astype(float)
@@ -311,9 +324,9 @@ class Individual():
                 if flip_yx:
                     v = self.hyperparam.sort_values(by=i,axis=1).T.reset_index(drop=True).T
                 else:
-                    v = self.hyperparam.sort_values(by=norm_sum,axis=1).T.reset_index(drop=True).T
+                    v = self.hyperparam.sort_values(by=obj_plot,axis=1).T.reset_index(drop=True).T
                 x = v.copy().loc[i]
-                y = v.copy().loc[norm_sum]
+                y = v.copy().loc[obj_plot]
                 y = y.where(y<y.quantile(0.7)).dropna()
                 
                 if flip_yx:

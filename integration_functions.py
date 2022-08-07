@@ -654,7 +654,7 @@ class Sensitivity():
             if bayesian_tune:
                 self.complete_bayesian_trial(mods=mods, 
                                              new_param_series_all=new_param_series_all, 
-                                             scenario_numbers=range(3*n-2, 3*n+1),
+                                             scenario_numbers=range(self.n_jobs*(n-1)+1, self.n_jobs*n+1),
                                              next_parameters=next_parameters)
             
             timer.end_iter()
@@ -781,10 +781,16 @@ class Sensitivity():
         
         #if we optimise on rmse, return that, else return r2
         if self.use_rmse_not_r2:
-            score = sum(r[0] for r in rmse_list)
+            if self.log:
+                score = sum(np.log(r[0]) for r in rmse_list[1:2])
+            else:
+                score = sum(r[0] for r in rmse_list[1:2])
         else:
-            #we flip the sign because skopt only minimises
-            score = sum(-r[0] for r in r2_list)
+            if self.log:
+                score = sum(np.log(-r[0]+4+1) for r in r2_list[1:2])
+            else:
+                #we flip the sign because skopt only minimises
+                score = sum(-r[0] for r in r2_list[1:2])
         
         return score, new_param_series, potential_append
     
@@ -793,12 +799,12 @@ class Sensitivity():
         x, y = sim.loc[self.simulation_time].astype(float), hist.loc[self.simulation_time].astype(float)
         if hasattr(x,'columns') and 'Global' in x.columns: x=x['Global']
         if hasattr(y,'columns') and 'Global' in y.columns: y=y['Global']
-        m = sm.GLS(x,sm.add_constant(y)).fit(cov_type='HC3')
+        # m = sm.GLS(x,sm.add_constant(y)).fit(cov_type='HC3')
         if use_rmse:
             # result = m.mse_resid**0.5
-            result = (((x-y)**2).sum()/len(x))**0.5
+            result = mean_squared_error(y, x)**0.5
         else:
-            result = m.rsquared
+            result = r2_score(y, x)
         return result
     
     def save_bayesian_results(self,n_params=1):
@@ -1054,7 +1060,7 @@ class Sensitivity():
 
     def run_historical_monte_carlo(self, n_scenarios, random_state=220621,
                                    sensitivity_parameters=['elas','incentive_opening_probability','improvements','refinery_capacity_fraction_increase_mining'],
-                                   bayesian_tune=False,n_params=2, n_jobs=3, surrogate_model='GBRT'):
+                                   bayesian_tune=False,n_params=2, n_jobs=3, surrogate_model='GBRT', log=False):
         '''
         Wrapper to run the run_monte_carlo() method on historical data
 
@@ -1096,6 +1102,7 @@ class Sensitivity():
             n_jobs = 1
             
         self.n_jobs = n_jobs
+        self.log = log
             
         self.run_monte_carlo(n_scenarios=n_scenarios,
                              random_state=random_state,

@@ -12,29 +12,46 @@ import statsmodels.api as sm
 
 from copy import deepcopy
 
-from ax.service.ax_client import AxClient
-from ax.service.utils.instantiation import ObjectiveProperties
+# from ax.service.ax_client import AxClient
+# from ax.service.utils.instantiation import ObjectiveProperties
 
-from ax.metrics.noisy_function import NoisyFunctionMetric
-from ax import RangeParameter, ParameterType, SearchSpace, MultiObjective, Objective, ObjectiveThreshold, MultiObjectiveOptimizationConfig, Models, Experiment, Data
-from ax.runners.synthetic import SyntheticRunner
-from ax.modelbridge.factory import get_MOO_EHVI
-from ax.modelbridge.modelbridge_utils import observed_hypervolume
-from ax.service.utils.report_utils import exp_to_df
+# from ax.metrics.noisy_function import NoisyFunctionMetric
+# from ax import RangeParameter, ParameterType, SearchSpace, MultiObjective, Objective, ObjectiveThreshold, MultiObjectiveOptimizationConfig, Models, Experiment, Data
+# from ax.runners.synthetic import SyntheticRunner
+# from ax.modelbridge.factory import get_MOO_EHVI
+# from ax.modelbridge.modelbridge_utils import observed_hypervolume
+# from ax.service.utils.report_utils import exp_to_df
 
-import torch
-from botorch.test_functions.multi_objective import BraninCurrin
-branin_currin = BraninCurrin(negate=True).to(
-    dtype=torch.double,
-    device= torch.device("cuda" if torch.cuda.is_available() else "cpu"),
-)
+# import torch
+# from botorch.test_functions.multi_objective import BraninCurrin
+# branin_currin = BraninCurrin(negate=True).to(
+#     dtype=torch.double,
+#     device= torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+# )
 
 from skopt import Optimizer
-import sys
-sys.path.append("../../")
-from luca_utils import IterTimer
 from joblib import Parallel, delayed
 from sklearn.metrics import mean_squared_error, r2_score
+
+#check if we are on Luca's computer or not
+if os.path.exists("F:/Code/luca_utils.py"): 
+    on_luca_pc = True
+    #if we are, import IterTimer to give time information
+    import sys
+    sys.path.append("F:/Code")
+    from luca_utils import IterTimer
+else:
+    on_luca_pc = False
+    #if not, we create a dummy IterTimer that won't crash the code but doesn't do anything
+    class IterTimer():
+        def __init__(self, n_iters=None):
+            pass
+        
+        def start_iter(self):
+            pass
+        
+        def end_iter(self):
+            pass
 
 def create_result_df(integ):
     '''
@@ -355,7 +372,7 @@ class Sensitivity():
         self.N_INIT = N_INIT
         self.normalize_objectives = normalize_objectives
 
-        # if self.overwrite: print('WARNING, YOU ARE OVERWRITING AN EXISTING FILE')
+        if self.overwrite and not on_luca_pc: print('WARNING, YOU ARE OVERWRITING AN EXISTING FILE')
 
     def initialize_big_df(self):
         '''
@@ -559,6 +576,8 @@ class Sensitivity():
           order of the columns, since it grabs the leftmost n_params columns.
         n_jobs: int, the number of points to sample at each Bayesian iteration, also
             the number of cores to use to parallelise Integration() calculation.
+        surrogate_model: str, which type of surrogate model to use in BO, can be ET, GBRT,
+            GP, RF, or DUMMY.
         '''
         self.random_state = random_state
         self.update_changing_base_parameters_series()
@@ -1060,7 +1079,7 @@ class Sensitivity():
 
     def run_historical_monte_carlo(self, n_scenarios, random_state=220621,
                                    sensitivity_parameters=['elas','incentive_opening_probability','improvements','refinery_capacity_fraction_increase_mining'],
-                                   bayesian_tune=False,n_params=2, n_jobs=3, surrogate_model='GBRT', log=False):
+                                   bayesian_tune=False, n_params=2, n_jobs=3, surrogate_model='ET', log=True):
         '''
         Wrapper to run the run_monte_carlo() method on historical data
 
@@ -1076,6 +1095,10 @@ class Sensitivity():
             Total demand, Primary commodity price, and Primary production
         n_jobs: int, the number of points to sample at each Bayesian iteration, also
             the number of cores to use to parallelise Integration() calculation
+        surrogate_model: str, which type of surrogate model to use in BO, can be ET, GBRT,
+            GP, RF, or DUMMY
+        log: bool, whether to log the rmse (or r2) score prior to giving it to BO, setting it
+            to True leads to better performance
         '''
         self.random_state = random_state
         if os.path.exists('data/updated_commodity_inputs.pkl'):

@@ -115,16 +115,33 @@ class demandModel():
             ad.loc[2001:,sectors] = ad.loc[2001:,sectors].apply(lambda x: x/x.sum(),axis=1).apply(lambda x: x*gold_dem.loc[:2019])
             ad.loc[:2000,sectors] *= ad.loc[2001,sectors].sum()/ad.loc[2000,sectors].sum()**2*self.alt_demand.loc[2001,sectors].sum()
             self.alt_demand = ad.copy()
+            
+        if self.hyperparam['Value']['commodity']=='Li':
+            conversion_factor = 5.323 # To convet to LCE
+            demand = pd.read_excel('generalization/data/EV_MRS.xlsx',sheet_name='Primary_materials',index_col=2) 
+            #self.volumes.loc[:,idx[:,'Transport']] = demand[(demand['Material']=='Li')]['MRS3'].loc[2000:2019]
+            ad = self.alt_demand.copy()
+            sectors = ['Transport']
+            ad.loc[2001:,sectors] = demand[(demand['Material']=='Li')]['MRS3'].loc[2001:2019].values.reshape(19,1) * conversion_factor # Adding demand values as modelled for 2001 - 2019
+            ad.loc[:2000,sectors] = ad.loc[:2001,sectors] * 0
 
     def update_volumes(self):
-        imported_volumes = self.volumes.copy()
-        new_volumes = imported_volumes.copy()
-        growth_rate = 1+self.hyperparam['Value']['volume_growth_rate']
-        imported_growth_rates = imported_volumes/imported_volumes.shift(1)
-        new_growth_rates = imported_growth_rates.apply(lambda x: (x)*growth_rate/self.original_growth_rate)
-        
-        for year_i in self.simulation_time[1:]:
-            new_volumes.loc[year_i] = new_volumes.loc[year_i-1]*new_growth_rates.loc[year_i]
+        if self.hyperparam['Value']['commodity']=='Li':
+            conversion_factor = 5.323 # To convet to LCE
+            imported_volumes = self.volumes.copy()
+            new_volumes = imported_volumes.copy()
+            demand = pd.read_excel('generalization/data/EV_MRS.xlsx',sheet_name='Primary_materials',index_col=2) 
+            for year_i in self.simulation_time[1:]:
+                new_volumes.loc[year_i] = demand[(demand['Material']=='Li')]['MRS3'].loc[2000:2019] * conversion_factor # Adding future demand volumes
+        else:   
+            imported_volumes = self.volumes.copy()
+            new_volumes = imported_volumes.copy()
+            growth_rate = 1+self.hyperparam['Value']['volume_growth_rate']
+            imported_growth_rates = imported_volumes/imported_volumes.shift(1)
+            new_growth_rates = imported_growth_rates.apply(lambda x: (x)*growth_rate/self.original_growth_rate)
+            
+            for year_i in self.simulation_time[1:]:
+                new_volumes.loc[year_i] = new_volumes.loc[year_i-1]*new_growth_rates.loc[year_i]
         
     def setup_intensity_param(self):
         intensity_parameters = self.intensity_parameters.copy()

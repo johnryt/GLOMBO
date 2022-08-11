@@ -17,7 +17,7 @@ from joblib import Parallel, delayed
 from sklearn.metrics import mean_squared_error, r2_score
 
 #check if we are on Luca's computer or not
-if os.path.exists("F:/Code/luca_utils.py"): 
+if os.path.exists("F:/Code/luca_utils.py"):
     on_luca_pc = True
     #if we are, import IterTimer to give time information
     import sys
@@ -29,10 +29,10 @@ else:
     class IterTimer():
         def __init__(self, n_iters=None):
             pass
-        
+
         def start_iter(self):
             pass
-        
+
         def end_iter(self):
             pass
 
@@ -43,7 +43,7 @@ def create_result_df(integ):
     '''
     reg = 'Global'
     reg_results = pd.Series(np.nan,['Global','China','RoW'],dtype=object)
-    
+
     new = integ.mining.ml.loc[integ.mining.ml['Opening']>integ.simulation_time[0]]
     old = integ.mining.ml.loc[integ.mining.ml['Opening']<=integ.simulation_time[0]]
     old_new_mines = pd.concat([
@@ -153,7 +153,7 @@ def is_pareto_efficient_simple(costs):
     Find the pareto-efficient points
     :param costs: An (n_points, n_costs) array
     :return: A (n_points, ) boolean array, indicating whether each point is Pareto efficient
-    
+
     from Peter at https://stackoverflow.com/questions/32791911/fast-calculation-of-pareto-front-in-python
     """
     is_efficient = np.ones(costs.shape[0], dtype = bool)
@@ -168,7 +168,7 @@ class Sensitivity():
     Look at the initialization (__init__) docstring for input
     information, below is more general information like the
     available most-used methods/functions and what they do.
-    
+
     changing_base_parameters_series: can be a string referring to a
       commodity in case_study_data, or a series with hyperparameter
       inputs in the same format
@@ -201,7 +201,7 @@ class Sensitivity():
         plotting the simulated demands, the best simulated demand, and historical
         demand. Also plots the RMSE vs the demand parameters.
     - run_historical_monte_carlo: similar to the run_monte_carlo function, but also
-        requires the presence of a 
+        requires the presence of a
 
     The update_changing_base_parameters_series function could be a source of error,
         as it updates the model start values with historical values within
@@ -311,12 +311,12 @@ class Sensitivity():
             to set the number of mines opening such that concentrate supply=demand
         dpi: int, stands for dots per inch, and is used to change the resolution of the plots created using
             the check_hist_demand_convergence() method on a historical_sim_check_demand() method run
-        using_thresholds: bool, determines whether to use the old AxClient approach instead of 
+        using_thresholds: bool, determines whether to use the old AxClient approach instead of
             updated Bayesian optimization approach which uses the Service API, which allows us to set thresholds
             for our objectives. Hoping that the new one works better than the old one due to presence of thresholds.
             Both are visible at: https://ax.dev/tutorials/multiobjective_optimization, where thresholds are set
             using the algorithms farther down the page, under the heading Set Objective Thresholds. I cannot tell
-            whether the AxClient approach uses the same algorithm for multi-objective optimization. In the 
+            whether the AxClient approach uses the same algorithm for multi-objective optimization. In the
             Service API approach, we specify we are using the qNEHVI option, Noisy Expected Hypervolume Improvement.
             It is the one they recommend so that is my assumption/hope that the AxClient approach uses the same
             algorithm. From the two Pareto Frontiers they show, it appears this is the case.
@@ -350,7 +350,7 @@ class Sensitivity():
         self.incentive_opening_probability_fraction_zero = incentive_opening_probability_fraction_zero
         self.use_rmse_not_r2 = use_rmse_not_r2
         self.dpi = dpi
-        
+
         self.using_thresholds = using_thresholds
         self.N_INIT = N_INIT
         self.normalize_objectives = normalize_objectives
@@ -412,7 +412,7 @@ class Sensitivity():
             historical_data = history_file.loc[simulation_time[0]:].dropna(axis=1)
             if 'Primary commodity price' in historical_data.columns:
                 historical_data.loc[:,'Primary commodity price'] = historical_data.loc[:,'Primary commodity price'].rolling(self.historical_price_rolling_window,min_periods=1,center=True).mean()
-                
+
             original_demand = commodity_inputs['initial_demand']
             original_primary_production = commodity_inputs['primary_production']
             if 'Total demand' in historical_data.columns:
@@ -471,7 +471,7 @@ class Sensitivity():
                 self.changing_base_parameters_series.loc[q] = self.additional_base_parameters.iloc[:,0][q]
         if 'commodity' not in self.changing_base_parameters_series.index and self.use_alternative_gold_volumes:
             self.changing_base_parameters_series.loc['commodity'] = self.material
-            
+
     def get_params_to_change(self):
         '''
         gets a list of parameters to change that are already within the
@@ -576,22 +576,22 @@ class Sensitivity():
 
         if bayesian_tune:
             self.setup_bayesian_tune(n_params=n_params, surrogate_model=surrogate_model)
-            
+
         timer = IterTimer(n_iters=n_scenarios-1)
 
         for n in np.arange(1,n_scenarios):
-            
+
             timer.start_iter()
-            
+
             self.scenario_number = n-1
             if self.verbosity>-1:
                 print(f'Scenario {n+1}/{n_scenarios}')
-              
+
             if bayesian_tune:
                 next_parameters = self.opt.ask(n_points=self.n_jobs)
                 mods = []
-                new_param_series_all = []    
-            
+                new_param_series_all = []
+
             for i in range(self.n_jobs):
                 for enum,scenario_name in enumerate(self.scenarios):
                     if self.verbosity>-1:
@@ -648,17 +648,17 @@ class Sensitivity():
                                 self.mod.hyperparam.loc[param,'Value'] = new_param_series[param]*np.sign(self.mod.hyperparam.loc[param,'Value'])
                             else:
                                 self.mod.hyperparam.loc[param,'Value'] = new_param_series[param]
-                    
+
                     if bayesian_tune:
                         mods.append(self.mod)
                         new_param_series_all.append(new_param_series)
-                
+
             if bayesian_tune:
-                self.complete_bayesian_trial(mods=mods, 
-                                             new_param_series_all=new_param_series_all, 
+                self.complete_bayesian_trial(mods=mods,
+                                             new_param_series_all=new_param_series_all,
                                              scenario_numbers=range(self.n_jobs*(n-1)+1, self.n_jobs*n+1),
                                              next_parameters=next_parameters)
-            
+
             timer.end_iter()
 
         if bayesian_tune:
@@ -667,7 +667,7 @@ class Sensitivity():
     def get_model_results(self,x1):
         '''
         Runs only in the updated Bayesian optimization setup, and is used to save
-        and then read model run results. 
+        and then read model run results.
         '''
         x = pd.Series(x1, self.sensitivity_param)
         check = np.any([(x==self.model_data.loc[x.index,m]).all() for m in self.model_data.columns])
@@ -689,12 +689,12 @@ class Sensitivity():
         self.x = x.copy()
 
         return result
-    
+
     def setup_bayesian_tune(self, n_params=1, surrogate_model='GBRT'):
         '''
         Initializes the things needed to run the Bayesian optimization
         '''
-        
+
         self.objective_parameters = self.historical_data.columns[:n_params]
         self.opt = Optimizer(
             dimensions=[(0.001, 1.0) for _ in self.sensitivity_param],
@@ -707,9 +707,9 @@ class Sensitivity():
             acq_func_kwargs={"kappa": 1.96},
             random_state=np.random.default_rng().integers(0, 1e6)
         )
-        
+
         self.rmse_df = pd.DataFrame()
-        
+
     def build_experiment(self):
         experiment = Experiment(
             name="pareto_experiment",
@@ -718,50 +718,50 @@ class Sensitivity():
             runner=SyntheticRunner(),
         )
         return experiment
-    
-        
+
+
     def complete_bayesian_trial(self, mods, new_param_series_all, next_parameters, scenario_numbers):
         '''
         calculates root mean squared errors (RMSE) from current variables and historical
         values to give the error the Bayesian optimization is trying to minimize.
         '''
-        
+
         #output is of the form [(score_0, new_params_0, potential_append_0), (score_1, new_params_1, potential_append_0), ...]
         output = Parallel(n_jobs=self.n_jobs)(delayed(self.skopt_run_score)(mod, param_series, s_n) for mod, param_series, s_n in zip(mods, new_param_series_all, scenario_numbers))
-        
-        #give scores to skopt 
+
+        #give scores to skopt
         self.opt.tell(next_parameters, [out[0] for out in output])
-        
+
         #save new_param_series in rmse_df
         for new_param_series in [out[1] for out in output]:
             self.rmse_df = pd.concat([self.rmse_df, new_param_series])
-        
+
         #save scenario results in pickle file
         big_df = pd.read_pickle(self.pkl_filename)
         for potential_append in [out[2] for out in output]:
             if potential_append is None:
                 raise Exception("Scenario has already been run, this case has not been implemented yet. Ask Luca Montanelli why.")
             big_df = pd.concat([big_df,potential_append],axis=1)
-        
+
         big_df.to_pickle(self.pkl_filename)
         if self.verbosity>-1:
             print('\tScenario successfully saved\n')
-        
-            
+
+
     def skopt_run_score(self, mod, new_param_series, s_n):
-        
+
         #run model
         potential_append = self.check_run_append(mod, s_n)
-        
+
         #get scores
         rmse_list, r2_list = self.get_rmse_r2(mod)
-        
+
         #add rmse and r2 score in new_param_series to then be added into rmse_df
         for param, rmse, r2 in zip(self.objective_parameters, rmse_list, r2_list):
             new_param_series.loc[param+' RMSE'] = rmse[0]
-            new_param_series.loc[param+' R2'] = r2[0] 
+            new_param_series.loc[param+' R2'] = r2[0]
         new_param_series = pd.concat([new_param_series],keys=[s_n])
-        
+
         #if we optimise on rmse, return that, else return r2
         if self.use_rmse_not_r2:
             if self.log:
@@ -776,9 +776,9 @@ class Sensitivity():
             else:
                 #we flip the sign because skopt only minimises
                 score = sum(-r[0] for r in r2_list[1:2])
-        
+
         return score, new_param_series, potential_append
-    
+
     def calculate_rmse_r2(self, sim, hist, use_rmse):
         n = len(self.simulation_time)
         x, y = sim.loc[self.simulation_time].astype(float), hist.loc[self.simulation_time].astype(float)
@@ -791,7 +791,7 @@ class Sensitivity():
         else:
             result = r2_score(y, x)
         return result
-    
+
     def save_bayesian_results(self,n_params=1):
         '''
         saves the results of the Bayesian optimization in the
@@ -847,11 +847,11 @@ class Sensitivity():
 
     def get_rmse_r2(self, mod=None):
         #if no mod is provided, use self.mod, otherwise use mod
-        #this is because default model behaviour was to use self.mod but that doesn't work with 
+        #this is because default model behaviour was to use self.mod but that doesn't work with
         #having multiple samples per BO iteration
         if mod is None:
             mod = self.mod
-        
+
         param_variable_map = {'Total demand':'total_demand','Primary demand':'primary_demand',
             'Primary commodity price':'primary_commodity_price','Primary supply':'mine_production',
             'Scrap demand':'scrap_demand'}
@@ -884,12 +884,12 @@ class Sensitivity():
                     if self.normalize_objectives:
                         rmse /= mod.refined_demand.iloc[0] if not hasattr(mod.refined_demand,'columns') else mod.refined_demand['Global'].iloc[0]
                     r2= self.calculate_rmse_r2(mod.refined_supply,mod.refined_demand,False)
-            
+
             rmse_list += [(rmse,0)]
             r2_list+= [(r2,0)]
-            
+
         return rmse_list, r2_list
-    
+
     def historical_sim_check_demand(self, n_scenarios, surrogate_model='ET', log=True):
         '''
         Varies the parameters for demand (sector_specific_dematerialization_tech_growth,
@@ -918,7 +918,7 @@ class Sensitivity():
         self.mod = demandModel(verbosity=0,simulation_time=self.simulation_time)
         params_to_change = ['sector_specific_dematerialization_tech_growth','sector_specific_price_response','region_specific_price_response','intensity_response_to_gdp']
         if not on_luca_pc: print(params_to_change)
-        
+
         opt = Optimizer(
             dimensions=[(0.001, 0.08), (0.001, 0.3), (0.001, 0.3), (0.001, 1.5)],
             base_estimator=surrogate_model,
@@ -929,15 +929,15 @@ class Sensitivity():
             acq_func_kwargs={"kappa": 1.96},
             random_state=np.random.default_rng().integers(0, 1e6)
         )
-        
+
         timer = IterTimer(n_iters=n_scenarios)
 
 
         self.rmse_df = pd.DataFrame()
         for n in np.arange(0,n_scenarios):
-            
+
             timer.start_iter()
-            
+
             if self.verbosity>-1:
                 print(f'Scenario {n+1}/{n_scenarios}')
             self.mod = demandModel(verbosity=0,simulation_time=self.simulation_time)
@@ -958,7 +958,7 @@ class Sensitivity():
             parameters = opt.ask()
             new_param_series = pd.Series(parameters,params_to_change)
             self.mod.hyperparam.loc[params_to_change,'Value'] = new_param_series*np.sign(self.mod.hyperparam.loc[params_to_change,'Value'])
-            self.check_run_append()
+            potential_append = self.check_run_append()
             sim = self.mod.demand.sum(axis=1).loc[self.simulation_time]
             hist = self.historical_data['Total demand'].loc[self.simulation_time]
             rmse = mean_squared_error(hist, sim)**0.5
@@ -968,9 +968,9 @@ class Sensitivity():
             new_param_series.loc['R2'] = r2
             new_param_series = pd.concat([new_param_series],keys=[n])
             self.rmse_df = pd.concat([self.rmse_df,new_param_series])
-            
+
             if self.use_rmse_not_r2:
-                if log: opt.tell(parameters, np.log(rmse))  
+                if log: opt.tell(parameters, np.log(rmse))
                 else: opt.tell(parameters, rmse)
             else:
                 #r2 is [-inf, 4] so we change it to [1, inf] to use in log to that it becomes [0, inf]
@@ -978,7 +978,14 @@ class Sensitivity():
                 if log: opt.tell(parameters, np.log(-r2+5))
                 #we flip the sign because skopt only minimises
                 else: opt.tell(parameters, -r2)
-            
+
+            big_df = pd.read_pickle(self.pkl_filename)
+            if potential_append is None:
+                raise Exception("Scenario has already been run, this case has not been implemented yet. Ask Luca Montanelli why.")
+            big_df = pd.concat([big_df,potential_append],axis=1)
+
+            big_df.to_pickle(self.pkl_filename)
+
             timer.end_iter()
 
         rmse_df = self.rmse_df.copy()
@@ -1007,14 +1014,17 @@ class Sensitivity():
         self.notes = self.notes.split(' check demand')[0]
         self.pkl_filename = self.pkl_filename.split('_DEM')[0]+'.pkl'
 
-        
     def check_hist_demand_convergence(self):
         '''
         Run after historical_sim_check_demand() method to plot
         the results.
         '''
         historical_data = self.historical_data.copy()
-        big_df = pd.read_pickle(self.pkl_filename.split('.pkl')[0]+'_DEM.pkl')
+        if '_DEM' not in self.pkl_filename:
+            big_df = pd.read_pickle(self.pkl_filename.split('.pkl')[0]+'_DEM.pkl')
+        else:
+            big_df = pd.read_pickle(self.pkl_filename)
+
         ind = big_df.loc['results'].dropna().index
         res = pd.concat([big_df.loc['results',i] for i in ind],keys=ind)
         tot_demand = res['Total demand'].unstack(0).loc[self.simulation_time[0]:self.simulation_time[-1]]
@@ -1089,10 +1099,10 @@ class Sensitivity():
 
         if not bayesian_tune:
             n_jobs = 1
-            
+
         self.n_jobs = n_jobs
         self.log = log
-            
+
         self.run_monte_carlo(n_scenarios=n_scenarios,
                              random_state=random_state,
                              sensitivity_parameters=sensitivity_parameters,
@@ -1105,16 +1115,16 @@ class Sensitivity():
         Sets up a pandas series that could be appended to our big dataframe
         that is used for saving, such that we can check whether this
         combination of parameters already exists in the big dataframe or not
-        
+
         mod should be None except as part of a BO loop
         '''
-        
+
         #if no mod is provided, use self.mod, otherwise use mod
-        #this is because default model behaviour was to use self.mod but that doesn't work with 
+        #this is because default model behaviour was to use self.mod but that doesn't work with
         #having multiple samples per BO iteration
         if mod is None:
             mod = self.mod
-        
+
         new_col_name=0 if len(big_df.columns)==0 else max(big_df.columns)+1
         if type(mod)==Integration:
             if initialize:
@@ -1146,15 +1156,15 @@ class Sensitivity():
         Checks whether the proposed set of hyperparameters has already been run and saved
         in the current big result dataframe. If it has, it skips. Otherwise, it runs the
         scenario and appends it to the big dataframe, resaving it.
-        
+
         mod and s_n should be None except as part of a BO loop
         '''
         #if no mod is provided, use self.mod, otherwise use mod
-        #this is because default model behaviour was to use self.mod but that doesn't work with 
+        #this is because default model behaviour was to use self.mod but that doesn't work with
         #having multiple samples per BO iteration
         if mod is None:
             mod = self.mod
-        
+
         big_df = pd.read_pickle(self.pkl_filename)
         potential_append = self.create_potential_append(big_df=big_df,notes=self.notes,reg_results=[],initialize=True)
         if type(mod)==demandModel or self.overwrite or check_equivalence(big_df, potential_append)[0]:
@@ -1196,7 +1206,7 @@ class Sensitivity():
             if type(mod)==Integration: reg_results = create_result_df(mod)
             elif type(mod) == demandModel: reg_results = pd.concat([mod.demand.sum(axis=1),mod.commodity_price_series],axis=1,keys=['Total demand','Primary commodity price'])
             potential_append = self.create_potential_append(big_df=big_df,notes=notes,reg_results=reg_results,initialize=False, mod=mod)
-            
+
             if mod is None:
                 big_df = pd.concat([big_df,potential_append],axis=1)
                 # self.big_df = pd.concat([self.big_df,potential_append],axis=1)
@@ -1208,14 +1218,14 @@ class Sensitivity():
                 #prevents the overwriting of scenarios when having multiple samples at each iteration
                 if s_n is not None:
                     potential_append.columns = [s_n]
-                
+
                 return potential_append
-            
+
         else:
             if mod is None:
                 if self.verbosity>-1:
                     print('\tScenario already exists\n')
-            else:    
+            else:
                 return None
 
 #         direct_melt_elas_scrap_spread

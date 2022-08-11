@@ -12,23 +12,6 @@ import statsmodels.api as sm
 
 from copy import deepcopy
 
-# from ax.service.ax_client import AxClient
-# from ax.service.utils.instantiation import ObjectiveProperties
-
-# from ax.metrics.noisy_function import NoisyFunctionMetric
-# from ax import RangeParameter, ParameterType, SearchSpace, MultiObjective, Objective, ObjectiveThreshold, MultiObjectiveOptimizationConfig, Models, Experiment, Data
-# from ax.runners.synthetic import SyntheticRunner
-# from ax.modelbridge.factory import get_MOO_EHVI
-# from ax.modelbridge.modelbridge_utils import observed_hypervolume
-# from ax.service.utils.report_utils import exp_to_df
-
-# import torch
-# from botorch.test_functions.multi_objective import BraninCurrin
-# branin_currin = BraninCurrin(negate=True).to(
-#     dtype=torch.double,
-#     device= torch.device("cuda" if torch.cuda.is_available() else "cpu"),
-# )
-
 from skopt import Optimizer
 from joblib import Parallel, delayed
 from sklearn.metrics import mean_squared_error, r2_score
@@ -735,26 +718,7 @@ class Sensitivity():
             runner=SyntheticRunner(),
         )
         return experiment
-
-    def get_bayesian_trial(self):
-        if not self.using_thresholds:
-            parameters, self.trial_index = self.ax_client.get_next_trial()
-#                         trial_index = n+enum
-            new_param_series = pd.Series(parameters,self.sensitivity_param)
-        else:
-            if self.scenario_number==0:
-                self.experiment = self.build_experiment()
-                self.sobol = Models.SOBOL(search_space=self.experiment.search_space, seed=self.random_state)
-                self.ehvi_hv_list = []
-            if self.scenario_number<self.N_INIT:
-                self.trial = self.experiment.new_trial(self.sobol.gen(1))
-            else:
-                self.ehvi_data = self.experiment.fetch_data()
-                self.ehvi_model = get_MOO_EHVI(experiment=self.experiment, data=self.ehvi_data)
-                self.trial = self.experiment.new_trial(generator_run=self.ehvi_model.gen(1))
-            new_param_series = self.experiment.arms_by_name[str(self.scenario_number)+'_0'].parameters
-            new_param_series = pd.Series(new_param_series)
-        return new_param_series
+    
         
     def complete_bayesian_trial(self, mods, new_param_series_all, next_parameters, scenario_numbers):
         '''
@@ -806,7 +770,9 @@ class Sensitivity():
                 score = sum(r[0] for r in rmse_list[1:2])
         else:
             if self.log:
-                score = sum(np.log(-r[0]+4+1) for r in r2_list[1:2])
+                #r2 is [-inf, 4] so we change it to [1, inf] to use in log to that it becomes [0, inf]
+                #+4 intead of +5 would have made it into [-inf, inf]; not good
+                score = sum(np.log(-r[0]+5) for r in r2_list[1:2])
             else:
                 #we flip the sign because skopt only minimises
                 score = sum(-r[0] for r in r2_list[1:2])
@@ -923,8 +889,8 @@ class Sensitivity():
             r2_list+= [(r2,0)]
             
         return rmse_list, r2_list
-            
-    def historical_sim_check_demand(self, n_scenarios):
+    
+    def historical_sim_check_demand(self, n_scenarios, surrogate_model='ET', log=True):
         '''
         Varies the parameters for demand (sector_specific_dematerialization_tech_growth,
         sector_specific_price_response, region_specific_price_response, and
@@ -951,43 +917,27 @@ class Sensitivity():
 
         self.mod = demandModel(verbosity=0,simulation_time=self.simulation_time)
         params_to_change = ['sector_specific_dematerialization_tech_growth','sector_specific_price_response','region_specific_price_response','intensity_response_to_gdp']
-        print(params_to_change)
-
-        ax_client = AxClient(random_seed=self.random_state)
-        ax_client.create_experiment(
-            name="minimize_RMSE_with_real",
-            parameters=[
-                {
-                    "name": "sector_specific_dematerialization_tech_growth",
-                    "type": "range",
-                    "bounds": [0.001, 0.08],
-                    "value_type": "float",  # Optional, defaults to inference from type of "bounds".
-                    "log_scale": False,  # Optional, defaults to False.
-                },
-                {
-                    "name": "sector_specific_price_response",
-                    "type": "range",
-                    "value_type": "float",
-                    "bounds": [0.001, 0.3],
-                },
-                {
-                    "name": "region_specific_price_response",
-                    "type": "range",
-                    "value_type": "float",
-                    "bounds": [0.001, 0.3],
-                },
-                {
-                    "name": "intensity_response_to_gdp",
-                    "type": "range",
-                    "value_type": "float",
-                    "bounds": [0.001, 1.5],
-                },
-            ],
-            objective_name="RMSE",
-            minimize=True, # default False
+        if not on_luca_pc: print(params_to_change)
+        
+        opt = Optimizer(
+            dimensions=[(0.001, 0.08), (0.001, 0.3), (0.001, 0.3), (0.001, 1.5)],
+            base_estimator=surrogate_model,
+            n_initial_points=15,
+            initial_point_generator='lhs',
+            acq_func='gp_hedge',
+            acq_optimizer='auto',
+            acq_func_kwargs={"kappa": 1.96},
+            random_state=np.random.default_rng().integers(0, 1e6)
         )
+        
+        timer = IterTimer(n_iters=n_scenarios)
+
+
         self.rmse_df = pd.DataFrame()
         for n in np.arange(0,n_scenarios):
+            
+            timer.start_iter()
+            
             if self.verbosity>-1:
                 print(f'Scenario {n+1}/{n_scenarios}')
             self.mod = demandModel(verbosity=0,simulation_time=self.simulation_time)
@@ -1005,16 +955,31 @@ class Sensitivity():
             self.hyperparam_copy = self.mod.hyperparam.copy()
 
             ###### UPDATING PARAMETERS ######
-            parameters, trial_index = ax_client.get_next_trial()
+            parameters = opt.ask()
             new_param_series = pd.Series(parameters,params_to_change)
             self.mod.hyperparam.loc[params_to_change,'Value'] = new_param_series*np.sign(self.mod.hyperparam.loc[params_to_change,'Value'])
             self.check_run_append()
-            rmse = ((self.mod.demand.sum(axis=1)-self.historical_data['Total demand'])**2).loc[self.simulation_time].astype(float).sum()**0.5
+            sim = self.mod.demand.sum(axis=1).loc[self.simulation_time]
+            hist = self.historical_data['Total demand'].loc[self.simulation_time]
+            rmse = mean_squared_error(hist, sim)**0.5
+            r2 = r2_score(hist, sim)
+            # ((self.mod.demand.sum(axis=1)-self.historical_data['Total demand'])**2).loc[self.simulation_time].astype(float).sum()**0.5
             new_param_series.loc['RMSE'] = rmse
+            new_param_series.loc['R2'] = r2
             new_param_series = pd.concat([new_param_series],keys=[n])
             self.rmse_df = pd.concat([self.rmse_df,new_param_series])
-
-            ax_client.complete_trial(trial_index=trial_index, raw_data=rmse)
+            
+            if self.use_rmse_not_r2:
+                if log: opt.tell(parameters, np.log(rmse))  
+                else: opt.tell(parameters, rmse)
+            else:
+                #r2 is [-inf, 4] so we change it to [1, inf] to use in log to that it becomes [0, inf]
+                #+4 intead of +5 would have made it into [-inf, inf]; not good
+                if log: opt.tell(parameters, np.log(-r2+5))
+                #we flip the sign because skopt only minimises
+                else: opt.tell(parameters, -r2)
+            
+            timer.end_iter()
 
         rmse_df = self.rmse_df.copy()
         rmse_df.index = pd.MultiIndex.from_tuples(rmse_df.index)
@@ -1042,6 +1007,7 @@ class Sensitivity():
         self.notes = self.notes.split(' check demand')[0]
         self.pkl_filename = self.pkl_filename.split('_DEM')[0]+'.pkl'
 
+        
     def check_hist_demand_convergence(self):
         '''
         Run after historical_sim_check_demand() method to plot

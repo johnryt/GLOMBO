@@ -4,11 +4,6 @@ import pandas as pd
 idx = pd.IndexSlice
 from matplotlib import pyplot as plt
 
-#check if we are on Luca's computer or not
-import os
-if os.path.exists("F:/Code/luca_utils.py"): on_luca_pc = True
-else: on_luca_pc = False
-
 class demandModel():
     '''
     collection_rate refers to both collection rate and sorting efficiency for simplicity.
@@ -443,7 +438,7 @@ class demandModel():
             self.old_scrap_collected.loc[idx[i,:],:] = self.eol.loc[idx[i,:],:]*temp_collection_rate.loc[idx[i,:],:].rename({i-1:i})
             self.old_scrap_collected.loc[idx[i-1:i,:],:] += self.additional_scrap.loc[idx[i-1:i,:],:]
             self.collection_rate.loc[idx[:i,:],:] = self.old_scrap_collected.loc[idx[:i,:],:]/self.eol.loc[idx[:i,:],:]         
-            if (self.collection_rate.loc[i]>max_cr).any().any() and not on_luca_pc:
+            if (self.collection_rate.loc[i]>max_cr).any().any() and self.verbosity>0:
                 print('WARNING {}: {}/10 sector-region collection rates (max. {:.3f}) exceed maximum allowable ({:.3f})'.format(i,(self.collection_rate.loc[i]>max_cr).sum().sum(),self.collection_rate.loc[i].max().max(), max_cr))
         
         self.new_scrap_collected = self.demand*self.new_scrap_fraction

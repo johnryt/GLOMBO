@@ -16,25 +16,6 @@ from skopt import Optimizer
 from joblib import Parallel, delayed
 from sklearn.metrics import mean_squared_error, r2_score
 
-#check if we are on Luca's computer or not
-if os.path.exists("F:/Code/luca_utils.py"):
-    on_luca_pc = True
-    #if we are, import IterTimer to give time information
-    import sys
-    sys.path.append("F:/Code")
-    from luca_utils import IterTimer
-else:
-    on_luca_pc = False
-    #if not, we create a dummy IterTimer that won't crash the code but doesn't do anything
-    class IterTimer():
-        def __init__(self, n_iters=None):
-            pass
-
-        def start_iter(self):
-            pass
-
-        def end_iter(self):
-            pass
 
 def create_result_df(integ):
     '''
@@ -253,7 +234,8 @@ class Sensitivity():
                  N_INIT=3,
                  normalize_objectives=False,
                  use_alternative_gold_volumes=True,
-                 historical_price_rolling_window=1):
+                 historical_price_rolling_window=1,
+                 timer=None):
         '''
         Initializing Sensitivity class.
 
@@ -326,6 +308,10 @@ class Sensitivity():
         use_alternative_gold_volumes: bool, if True uses the alternative gold volume drivers since industrial
             represents bar and coin, and transport represents jewelry. False uses the default, which fails to
             capture the plateau seen in gold demand 2010-2019.
+        historical_price_rolling_window: int, window size for rolling mean of historical price, if 1, no rolling mean
+            is done.
+        timer: callback, if provided, use this function to measure time and print mean iteration time as well as ETA,
+            if interested, ask Luca Montanelli for his function.
         '''
         self.simulation_time = simulation_time
         self.changing_base_parameters_series = changing_base_parameters_series
@@ -354,8 +340,10 @@ class Sensitivity():
         self.using_thresholds = using_thresholds
         self.N_INIT = N_INIT
         self.normalize_objectives = normalize_objectives
+        
+        self.timer = timer
 
-        if self.overwrite and not on_luca_pc: print('WARNING, YOU ARE OVERWRITING AN EXISTING FILE')
+        if self.overwrite and self.verbosity>0: print('WARNING, YOU ARE OVERWRITING AN EXISTING FILE')
 
     def initialize_big_df(self):
         '''
@@ -577,11 +565,9 @@ class Sensitivity():
         if bayesian_tune:
             self.setup_bayesian_tune(n_params=n_params, surrogate_model=surrogate_model)
 
-        timer = IterTimer(n_iters=n_scenarios-1)
-
         for n in np.arange(1,n_scenarios):
 
-            timer.start_iter()
+            if self.timer is not None: self.timer.start_iter()
 
             self.scenario_number = n-1
             if self.verbosity>-1:
@@ -659,7 +645,7 @@ class Sensitivity():
                                              scenario_numbers=range(self.n_jobs*(n-1)+1, self.n_jobs*n+1),
                                              next_parameters=next_parameters)
 
-            timer.end_iter()
+            if self.timer is not None: self.timer.end_iter()
 
         if bayesian_tune:
             self.save_bayesian_results(n_params=n_params)
@@ -710,15 +696,6 @@ class Sensitivity():
 
         self.rmse_df = pd.DataFrame()
 
-    def build_experiment(self):
-        experiment = Experiment(
-            name="pareto_experiment",
-            search_space=self.search_space,
-            optimization_config=self.optimization_config,
-            runner=SyntheticRunner(),
-        )
-        return experiment
-
 
     def complete_bayesian_trial(self, mods, new_param_series_all, next_parameters, scenario_numbers):
         '''
@@ -765,17 +742,17 @@ class Sensitivity():
         #if we optimise on rmse, return that, else return r2
         if self.use_rmse_not_r2:
             if self.log:
-                score = sum(np.log(r[0]) for r in rmse_list[1:2])
+                score = sum(np.log(r[0]) for r in rmse_list)
             else:
-                score = sum(r[0] for r in rmse_list[1:2])
+                score = sum(r[0] for r in rmse_list)
         else:
             if self.log:
                 #r2 is [-inf, 4] so we change it to [1, inf] to use in log to that it becomes [0, inf]
                 #+4 intead of +5 would have made it into [-inf, inf]; not good
-                score = sum(np.log(-r[0]+5) for r in r2_list[1:2])
+                score = sum(np.log(-r[0]+5) for r in r2_list)
             else:
                 #we flip the sign because skopt only minimises
-                score = sum(-r[0] for r in r2_list[1:2])
+                score = sum(-r[0] for r in r2_list)
 
         return score, new_param_series, potential_append
 
@@ -915,9 +892,9 @@ class Sensitivity():
             raise ValueError('require a price input in primary commodity price for historical_sim_check_demand to work properly')
         self.update_changing_base_parameters_series()
 
-        self.mod = demandModel(verbosity=0,simulation_time=self.simulation_time)
+        self.mod = demandModel(verbosity=self.verbosity, simulation_time=self.simulation_time, data_folder=self.data_folder)
         params_to_change = ['sector_specific_dematerialization_tech_growth','sector_specific_price_response','region_specific_price_response','intensity_response_to_gdp']
-        if not on_luca_pc: print(params_to_change)
+        if self.verbosity>0: print(params_to_change)
 
         opt = Optimizer(
             dimensions=[(0.001, 0.08), (0.001, 0.3), (0.001, 0.3), (0.001, 1.5)],
@@ -930,17 +907,14 @@ class Sensitivity():
             random_state=np.random.default_rng().integers(0, 1e6)
         )
 
-        timer = IterTimer(n_iters=n_scenarios)
-
-
         self.rmse_df = pd.DataFrame()
         for n in np.arange(0,n_scenarios):
 
-            timer.start_iter()
+            if self.timer is not None: self.timer.start_iter()
 
             if self.verbosity>-1:
                 print(f'Scenario {n+1}/{n_scenarios}')
-            self.mod = demandModel(verbosity=0,simulation_time=self.simulation_time)
+            self.mod = demandModel(verbosity=self.verbosity, simulation_time=self.simulation_time, data_folder=self.data_folder)
             self.mod.commodity_price_series = self.historical_data['Primary commodity price']
             self.mod.commodity_price_series = pd.concat([pd.Series(self.mod.commodity_price_series.iloc[0],np.arange(1900,self.simulation_time[0])),
                                                     self.mod.commodity_price_series])
@@ -986,7 +960,7 @@ class Sensitivity():
 
             big_df.to_pickle(self.pkl_filename)
 
-            timer.end_iter()
+            if self.timer is not None: self.timer.end_iter()
 
         rmse_df = self.rmse_df.copy()
         rmse_df.index = pd.MultiIndex.from_tuples(rmse_df.index)

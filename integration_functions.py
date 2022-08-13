@@ -340,10 +340,13 @@ class Sensitivity():
         self.using_thresholds = using_thresholds
         self.N_INIT = N_INIT
         self.normalize_objectives = normalize_objectives
-        
+
         self.timer = timer
 
         if self.overwrite and self.verbosity>0: print('WARNING, YOU ARE OVERWRITING AN EXISTING FILE')
+
+        self.demand_params = ['sector_specific_dematerialization_tech_growth','sector_specific_price_response','region_specific_price_response','intensity_response_to_gdp']
+
 
     def initialize_big_df(self):
         '''
@@ -354,7 +357,12 @@ class Sensitivity():
         else:
             self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct,scenario_name='')
             for base in self.changing_base_parameters_series.index:
-                self.mod.hyperparam.loc[base,'Value'] = self.changing_base_parameters_series[base]
+                if base in self.demand_params:
+                    self.mod.hyperparam.loc[base,'Value'] = abs(self.changing_base_parameters_series[base])*np.sign(self.mod.hyperparam.loc[base,'Value'])
+                else:
+                    self.mod.hyperparam.loc[base,'Value'] = self.changing_base_parameters_series[base]
+
+            self.mod.historical_data = self.historical_data.copy()
             self.mod.run()
             big_df = pd.DataFrame(np.nan,index=[
                 'version','notes','hyperparam','mining.hyperparam','refine.hyperparam','demand.hyperparam','results','mine_data'
@@ -388,7 +396,7 @@ class Sensitivity():
         if type(changing_base_parameters_series)==str:
             self.material = changing_base_parameters_series
             input_file = pd.read_excel(self.case_study_data_file_path,index_col=0)
-            commodity_inputs = input_file[changing_base_parameters_series].dropna()
+            commodity_inputs = input_file[changing_base_parameters_series]
             commodity_inputs.loc['incentive_require_tune_years'] = 10
             commodity_inputs.loc['presimulate_n_years'] = 10
             commodity_inputs.loc['end_calibrate_years'] = 10
@@ -397,9 +405,10 @@ class Sensitivity():
             commodity_inputs = commodity_inputs.dropna()
 
             history_file = pd.read_excel(self.case_study_data_file_path,index_col=0,sheet_name=changing_base_parameters_series)
-            historical_data = history_file.loc[simulation_time[0]:].dropna(axis=1)
+            historical_data = history_file.loc[simulation_time[0]:].dropna(axis=1).astype(float)
+            historical_data.index = historical_data.index.astype(int)
             if 'Primary commodity price' in historical_data.columns:
-                historical_data.loc[:,'Primary commodity price'] = historical_data.loc[:,'Primary commodity price'].rolling(self.historical_price_rolling_window,min_periods=1,center=True).mean()
+                historical_data.loc[historical_data.index,'Primary commodity price'] = historical_data['Primary commodity price'].rolling(self.historical_price_rolling_window,min_periods=1,center=True).mean()
 
             original_demand = commodity_inputs['initial_demand']
             original_primary_production = commodity_inputs['primary_production']
@@ -468,7 +477,11 @@ class Sensitivity():
         if type(self.params_to_change)==int:
             self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct)
             for base in self.changing_base_parameters_series.index:
-                self.mod.hyperparam.loc[base,'Value'] = self.changing_base_parameters_series[base]
+                if base in self.demand_params:
+                    self.mod.hyperparam.loc[base,'Value'] = abs(self.changing_base_parameters_series[base])*np.sign(self.mod.hyperparam.loc[base,'Value'])
+                else:
+                    self.mod.hyperparam.loc[base,'Value'] = self.changing_base_parameters_series[base]
+
             self.params_to_change = pd.concat([
                 self.mod.hyperparam.loc['price elasticities':'determining model structure'].dropna(),
                 self.mod.hyperparam.loc['mining only':].dropna(how='all')])
@@ -509,7 +522,7 @@ class Sensitivity():
                 ###### CHANGING BASE PARAMETERS ######
                 for base in changing_base_parameters_series.index:
                     self.mod.hyperparam.loc[base,'Value'] = changing_base_parameters_series[base]
-                    if count==0:
+                    if count==0 and self.verbosity>0:
                         print(base,changing_base_parameters_series[base])
 
                 ###### UPDATING FROM params_to_change_ind ######
@@ -554,6 +567,9 @@ class Sensitivity():
         self.update_changing_base_parameters_series()
         self.initialize_big_df()
         self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct)
+
+        self.mod.historical_data = self.historical_data.copy()
+
         scenario_params_dont_change = ['collection_rate_price_response','direct_melt_price_response','secondary_refined_price_response','refinery_capacity_growth_lag']
 #         params_to_change = [i for i in self.mod.hyperparam.dropna(how='all').index if ('elas' in i or 'response' in i or 'growth' in i or 'improvements' in i) and i not in scenario_params_dont_change]
         params_to_change = [i for i in self.mod.hyperparam.dropna(how='all').index if np.any([j in i for j in sensitivity_parameters]) and i not in scenario_params_dont_change]
@@ -583,13 +599,17 @@ class Sensitivity():
                     if self.verbosity>-1:
                         print(f'\tSub-scenario {enum+1}/{len(self.scenarios)}: {scenario_name} checking if exists...')
                     self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct,scenario_name=scenario_name)
+                    self.mod.historical_data = self.historical_data.copy()
                     self.notes = scenario_name
 
                     ###### CHANGING BASE PARAMETERS ######
                     changing_base_parameters_series = self.changing_base_parameters_series.copy()
                     if self.verbosity>0: print('parameters getting updated from outside using changing_base_parameters_series input:\n',changing_base_parameters_series.index)
                     for base in changing_base_parameters_series.index:
-                        self.mod.hyperparam.loc[base,'Value'] = changing_base_parameters_series[base]
+                        if base in self.demand_params:
+                            self.mod.hyperparam.loc[base,'Value'] = abs(self.changing_base_parameters_series[base])*np.sign(self.mod.hyperparam.loc[base,'Value'])
+                        else:
+                            self.mod.hyperparam.loc[base,'Value'] = self.changing_base_parameters_series[base]
                         if n==0 and self.verbosity>0:
                             print(base,changing_base_parameters_series[base])
                     self.hyperparam_copy = self.mod.hyperparam.copy()
@@ -917,13 +937,17 @@ class Sensitivity():
             self.mod = demandModel(verbosity=self.verbosity, simulation_time=self.simulation_time, data_folder=self.data_folder)
             self.mod.commodity_price_series = self.historical_data['Primary commodity price']
             self.mod.commodity_price_series = pd.concat([pd.Series(self.mod.commodity_price_series.iloc[0],np.arange(1900,self.simulation_time[0])),
-                                                    self.mod.commodity_price_series])
+                                                    self.mod.commodity_price_series]).sort_index()
             self.mod.version = '220620'
 
             ###### CHANGING BASE PARAMETERS ######
             changing_base_parameters_series = self.changing_base_parameters_series.copy()
             for base in np.intersect1d(self.mod.hyperparam.index, changing_base_parameters_series.index):
-                self.mod.hyperparam.loc[base,'Value'] = changing_base_parameters_series[base]
+                if base in self.demand_params:
+                    self.mod.hyperparam.loc[base,'Value'] = abs(self.changing_base_parameters_series[base])*np.sign(self.mod.hyperparam.loc[base,'Value'])
+                else:
+                    self.mod.hyperparam.loc[base,'Value'] = self.changing_base_parameters_series[base]
+
                 if n==0 and self.verbosity>-1:
                     print(base,changing_base_parameters_series[base])
             self.hyperparam_copy = self.mod.hyperparam.copy()
@@ -931,7 +955,8 @@ class Sensitivity():
             ###### UPDATING PARAMETERS ######
             parameters = opt.ask()
             new_param_series = pd.Series(parameters,params_to_change)
-            self.mod.hyperparam.loc[params_to_change,'Value'] = new_param_series*np.sign(self.mod.hyperparam.loc[params_to_change,'Value'])
+            self.mod.hyperparam.loc[params_to_change,'Value'] = abs(new_param_series)*np.sign(self.mod.hyperparam.loc[params_to_change,'Value'])
+            new_param_series = abs(new_param_series)*np.sign(self.mod.hyperparam.loc[params_to_change,'Value'])
             potential_append = self.check_run_append()
             sim = self.mod.demand.sum(axis=1).loc[self.simulation_time]
             hist = self.historical_data['Total demand'].loc[self.simulation_time]
@@ -941,7 +966,7 @@ class Sensitivity():
             new_param_series.loc['RMSE'] = rmse
             new_param_series.loc['R2'] = r2
             new_param_series = pd.concat([new_param_series],keys=[n])
-            self.rmse_df = pd.concat([self.rmse_df,new_param_series])
+            self.rmse_df = pd.concat([self.rmse_df,new_param_series]).astype(float)
 
             if self.use_rmse_not_r2:
                 if log: opt.tell(parameters, np.log(rmse))
@@ -967,15 +992,21 @@ class Sensitivity():
         rmse_df = rmse_df[0]
         rmse_df = rmse_df.unstack()
         self.rmse_df = rmse_df.copy()
-        best_params = pd.DataFrame(rmse_df.loc[rmse_df.where(rmse_df!=0).dropna()['RMSE'].idxmin()].drop('RMSE'))
+        best_params = pd.DataFrame(rmse_df.loc[rmse_df.where(rmse_df!=0).dropna()['RMSE'].idxmin()])
+        if 'RMSE' in best_params.index:
+            best_params.drop('RMSE',inplace=True)
+        if 'R2' in best_params.index:
+            best_params.drop('R2',inplace=True)
         best_params = best_params.rename(columns={best_params.columns[0]:self.material})
         if os.path.exists('data/updated_commodity_inputs.pkl'):
             self.updated_commodity_inputs = pd.read_pickle('data/updated_commodity_inputs.pkl')
-            self.updated_commodity_inputs.loc[:,self.material] = best_params[self.material]
+            for param in best_params.index:
+                self.updated_commodity_inputs.loc[param,self.material] = best_params[self.material][param]
             self.updated_commodity_inputs.to_pickle('data/updated_commodity_inputs.pkl')
         elif os.path.exists('updated_commodity_inputs.pkl'):
             self.updated_commodity_inputs = pd.read_pickle('updated_commodity_inputs.pkl')
-            self.updated_commodity_inputs.loc[:,self.material] = best_params[self.material]
+            for param in best_params.index:
+                self.updated_commodity_inputs.loc[param,self.material] = best_params[self.material][param]
             self.updated_commodity_inputs.to_pickle('updated_commodity_inputs.pkl')
         else:
             self.updated_commodity_inputs = best_params.copy()

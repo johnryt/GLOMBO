@@ -211,12 +211,12 @@ class Integration():
         for param in np.intersect1d(ref.ref_hyper_param.index, h.index):
             ref.ref_hyper_param.loc[param,:] = h[param]
             if self.verbosity>1:
-                print('   rhp',param)
+                print('   rhp',param, h[param])
 
         for param in np.intersect1d(dem.hyperparam.index, h.index):
             dem.hyperparam.loc[param,'Value'] = h[param]
             if self.verbosity>1:
-                print('   demand',param)
+                print('   demand',param, h[param])
 
         self.demand = dem
         self.refine = ref
@@ -340,6 +340,9 @@ class Integration():
         self.refined_demand = self.refined_demand.where(self.refined_demand>1e-9).fillna(1e-9)
         self.primary_commodity_price.loc[i] = self.primary_commodity_price.loc[i-1]*(self.refined_supply['Global'][i-1]/self.refined_demand['Global'][i-1])**h['primary_commodity_price_elas_sd']
         self.primary_commodity_price = self.primary_commodity_price.where(self.primary_commodity_price>1e-9).fillna(1e-9)
+
+        # if hasattr(self,'historical_data'):
+        #     self.primary_commodity_price.loc[i] = self.historical_data['Primary commodity price'][i]
 
         # tcrc
         self.concentrate_supply = self.concentrate_supply.where(self.concentrate_supply>1e-9).fillna(1e-9)

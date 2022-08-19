@@ -6,22 +6,21 @@ from scipy import stats
 from integration import Integration
 from random import seed, sample, shuffle
 from demand_class import demandModel
-from mining_class import miningModel
 import os
+
+from itertools import combinations
+from matplotlib.lines import Line2D
 
 from useful_functions import easy_subplots
 import seaborn as sns
 import statsmodels.api as sm
-
-from itertools import combinations
-from matplotlib.lines import Line2D
 
 def is_pareto_efficient_simple(costs):
     """
     Find the pareto-efficient points
     :param costs: An (n_points, n_costs) array
     :return: A (n_points, ) boolean array, indicating whether each point is Pareto efficient
-
+    
     from Peter at https://stackoverflow.com/questions/32791911/fast-calculation-of-pareto-front-in-python
     """
     is_efficient = np.ones(costs.shape[0], dtype = bool)
@@ -44,9 +43,9 @@ class Individual():
     - drop_no_price_elasticitiy: bool, True means that the price elasticity to SD must be nonzero and all scenarios where price elasticity to SD (primary_commodity_price_elas_sd in hyperparam) are dropped. False means we leave them in.
     - weight_price: float, allows scaling of the normalized Primary commodity price RMSE/MAE such that NORM SUM and NORM SUM OBJ ONLY rows will consider price error more or less heavily. Is in exponential form.
     - dpi: int, dots per inch controls the resolution of the figures displayed.
-
+    
     -------------------------------------------
-
+    
     After initialization, if the instance of Individual() is called indiv,
     use the following variable names and methods/functions:
     - if using a file after running Sensitivity().historical_sim_check_demand():
@@ -65,38 +64,32 @@ class Individual():
         - func indiv.normalize_rmses(): adds the NORM SUM and NORM SUM OBJ ONLY rows to the indiv.hyperparam dataframe
         - func indiv.plot_results(): produces many different plots you can use to try and understand the model outputs. Plots the best overall scenario over time (using NORM SUM or NORM SUM OBJ ONLY) for each objective to allow comparison, plots a heatmap of the hyperparameter values for the best n scenarios, plots the hyperparameter distributions, plots the hyperparameter values vs the error value
     '''
-
-    def __init__(self,material='Al',n_params=3,filename='',historical_data_filename='',rmse_not_mae=True, drop_no_price_elasticity=True, weight_price=1, dpi=50, price_rolling=1):
+    
+    def __init__(self,material='Al',n_params=3,filename='',historical_data_filename='',rmse_not_mae=True, drop_no_price_elasticity=True, weight_price=1, dpi=50, historical_price_rolling_window=1):
         self.material = material
-        self.price_rolling = price_rolling
         self.n_params = n_params
         self.filename = filename
         self.historical_data_filename = historical_data_filename
         self.rmse_not_mae = rmse_not_mae
         self.drop_no_price_elasticity = drop_no_price_elasticity
         self.weight_price = weight_price
-        self.get_results()
+        self.historical_price_rolling_window = historical_price_rolling_window
+        self.get_results()            
         self.dpi = dpi
-
-
+        
     def get_results(self):
         '''
         Handles the FileNotFound error for pickle files so the possible files available get printed out, while calling get_results_hyperparam_history for Integration() based models and getting the right variables for demandModel() based models.
         '''
         try:
-            if '_DEM' in self.filename or '_mining' in self.filename:
+            if '_DEM' in self.filename:
                 self.big_df = pd.read_pickle(self.filename)
                 big_df = self.big_df.copy()
                 if self.historical_data_filename=='':
                     self.historical_data_filename='generalization/data/case study data.xlsx'
                 self.historical_data = pd.read_excel(self.historical_data_filename,sheet_name=self.material,index_col=0).loc[2001:].astype(float)
-                self.historical_data.index = self.historical_data.index.astype(int)
-                if 'Primary commodity price' in self.historical_data.columns:
-                    self.historical_data.loc[:,'Primary commodity price'] = self.historical_data.loc[:,'Primary commodity price'].rolling(self.price_rolling,min_periods=1,center=True).mean()
                 self.simulated_demand = pd.concat([big_df.loc['results'][i]['Total demand'] for i in big_df.columns],keys=big_df.columns,axis=1).loc[2001:2019]
                 self.price =  pd.concat([big_df.loc['results'][i]['Primary commodity price'] for i in big_df.columns],keys=big_df.columns,axis=1).loc[2001:2019]
-                if 'Primary supply' in big_df.loc['results'][big_df.columns[0]].columns:
-                    self.mine_supply = pd.concat([big_df.loc['results'][i]['Primary supply'] for i in big_df.columns],keys=big_df.columns,axis=1).loc[2001:2019]
             else:
                 self.results, self.hyperparam, self.historical_data = self.get_results_hyperparam_history()
         except Exception as e:
@@ -106,7 +99,7 @@ class Individual():
                 print('Files within folder ['+i+'/] specified:')
                 self.check_available_files(i)
             raise e
-
+        
     def check_available_files(self,path=None):
         '''
         displays the available files for the path given, or for the current directory if no path given.
@@ -117,7 +110,7 @@ class Individual():
         '''
         gets all the relevant parameters for Integration() based models, and calculates the RMSE/MAE between scenario results and historical values, in both cases saving them as RMSE+objective name in the self.hyperparam dataframe
         '''
-
+            
         material = self.material
         n_params = self.n_params
         filename = self.filename
@@ -141,13 +134,13 @@ class Individual():
             cols = cols[cols].index
             results = results.loc[idx[cols,:],:].copy()
             hyperparameters = hyperparameters[cols].copy()
-
+        
         if historical_data_filename=='':
             historical_data_filename='generalization/data/case study data.xlsx'
         historical_data = pd.read_excel(historical_data_filename,sheet_name=material,index_col=0).loc[2001:].astype(float)
-        historical_data.index = historical_data.index.astype(int)
+        
         if 'Primary commodity price' in historical_data.columns:
-            historical_data.loc[:,'Primary commodity price'] = historical_data.loc[:,'Primary commodity price'].rolling(self.price_rolling,min_periods=1,center=True).mean()
+                historical_data.loc[:,'Primary commodity price'] = historical_data.loc[:,'Primary commodity price'].rolling(self.historical_price_rolling_window,min_periods=1,center=True).mean()
 
         self.objective_params = historical_data.columns[:n_params]
         self.objective_results_map = {'Total demand':'Total demand','Primary commodity price':'Refined price',
@@ -159,33 +152,44 @@ class Individual():
         if 'Conc. SD' not in self.objective_params:
             self.all_params = np.append(self.objective_params,self.sd_ind)
         for obj in self.all_params:
+            r2s = None
             simulated = results[self.objective_results_map[obj]].unstack(0).loc[2001:2019].astype(float)
             if self.rmse_not_mae:
                 if 'SD' in obj:
                     rmses = (simulated**2).sum().div(simulated.shape[0])**0.5
                 else:
                     rmses = (simulated.apply(lambda x: x-historical_data[obj])**2).sum().div(simulated.shape[0])**0.5
+                    r2s = []
+                    for scenario in simulated.columns:
+                        m = sm.GLS(simulated[scenario].values,sm.add_constant(historical_data[obj].values)).fit(cov_type='HC3')
+                        r2s.append(m.rsquared)
             else:
                 if 'SD' in obj:
                     rmses = abs(simulated).sum()
                 else:
                     rmses = abs(simulated.apply(lambda x: x-historical_data[obj])).sum()
-            hyperparameters.loc['RMSE '+obj] = rmses
+            hyperparameters.loc['RMSE '+obj] = rmses 
+            if r2s is not None:
+                hyperparameters.loc['R2 '+obj] = r2s 
 
+        hyperparameters.loc['RMSE SUM'] = hyperparameters.loc[[f'RMSE {obj}' for obj in self.objective_params]].sum()
+        if f'R2 {self.objective_params[0]}' in hyperparameters.index:
+            hyperparameters.loc['R2 SUM INVERSE'] = -hyperparameters.loc[[f'R2 {obj}' for obj in self.objective_params]].sum() 
+        
         self.big_df = big_df.copy()
-
-        if 'mine_data' in big_df.index:
+        
+        if 'mine_data' in big_df.index: 
             self.mine_data = pd.concat([big_df[i]['mine_data'] for i in big_df.columns],keys=big_df.columns)
             self.mine_data.index.set_names(['scenario','year','mine_id'],inplace=True)
         return results.astype(float), hyperparameters, historical_data.astype(float)
-
+    
     def plot_best_all(self):
         '''
         plots the scenario results for each objective given, with historical and the best-case scenario given thicker outlines. Also does a regression of the best and historical to give statistical measure of fit
         '''
         if not hasattr(self,'results'):
             self.get_results()
-
+            
         hyperparam = self.hyperparam.copy()
         results = self.results.copy()
         historical_data = self.historical_data.copy()
@@ -193,7 +197,7 @@ class Individual():
         for obj in self.objective_params:
             simulated = results[self.objective_results_map[obj]].unstack(0).loc[2001:2019]
             best = simulated[(simulated.astype(float).apply(lambda x: x-historical_data[obj])**2).sum().astype(float).idxmin()]
-
+            
             fig,ax = easy_subplots(3,dpi=self.dpi)
             for i,a in enumerate(ax[:2]):
                 if i==0:
@@ -203,16 +207,16 @@ class Individual():
                 if i==1:
                     a.legend()
                 a.set(title=obj+' over time',xlabel='Year',ylabel=obj)
-
+            
             do_a_regress(best.astype(float),historical_data[obj].astype(float),ax=ax[2],xlabel='Simulated',ylabel='Historical')
             ax[-1].set(title='Historical regressed on simulated')
             plt.suptitle(obj+', varying demand parameters (historical sensitivity result)',fontweight='bold')
             fig.tight_layout()
-
+            
     def find_pareto(self, plot=False, log=True, plot_non_pareto=True):
         '''
         adds the is_pareto row to the indiv.hyperparam dataframe, which gives True for all scenarios on the pareto front. Can plot the pareto front for each objective
-
+        
         Inputs:
         - plot: bool, whether to plot the pareto result
         - log: bool, whether to use log scaling while plotting the pareto result
@@ -235,7 +239,7 @@ class Individual():
                     no.plot.scatter(x='RMSE '+c[0],y='RMSE '+c[1],loglog=log,ax=a,color='tab:blue')
                 yes.plot.scatter(x='RMSE '+c[0],y='RMSE '+c[1],loglog=log,ax=a,color='tab:orange')
             fig.tight_layout()
-
+    
     def normalize_rmses(self):
         '''
         adds the NORM SUM and NORM SUM OBJ ONLY rows to the indiv.hyperparam dataframe
@@ -248,16 +252,14 @@ class Individual():
         normed_obj = [i for i in self.hyperparam.index if 'NORM' in i and np.any([j in i for j in self.objective_params])]
         self.hyperparam.loc['NORM SUM'] = self.hyperparam.loc[normed].sum()
         self.hyperparam.loc['NORM SUM OBJ ONLY'] = self.hyperparam.loc[normed_obj].sum()
-
+        
     def plot_results(self, plot_over_time=True, n_best=0, include_sd=False,
-                     plot_best_indiv_over_time=True,
                     plot_hyperparam_heatmap=True,
                     plot_hyperparam_distributions=True, n_per_plot=3,
-                    plot_hyperparam_vs_error=True, flip_yx=False,
-                    plot_best_params=True, plot_supply_demand_stack=True, best_ind=-1):
+                    plot_hyperparam_vs_error=True, flip_yx=False, obj_plot=None):
         '''
         produces many different plots you can use to try and understand the model outputs. More info is given with each model input bool description below.
-
+        
         Inputs:
         plot_over_time: bool, True plots the best overall scenario over time (using NORM SUM or NORM SUM OBJ ONLY) for each objective to allow comparison
         n_best: int, the number of scenarios to include in plot_over_time or in plot_hyperparam_distributions
@@ -269,7 +271,8 @@ class Individual():
         flip_yx: bool, False means plot hyperparam value vs error, while True means plot error vs hyperparam value
         '''
         self.normalize_rmses()
-        norm_sum = 'NORM SUM' if include_sd else 'NORM SUM OBJ ONLY'
+        if obj_plot is None:
+            obj_plot = 'NORM SUM' if include_sd else 'NORM SUM OBJ ONLY'
         if plot_over_time:
             fig,ax = easy_subplots(self.all_params,dpi=self.dpi)
             for i,a in zip(self.all_params, ax):
@@ -278,90 +281,63 @@ class Individual():
                     historical_data = self.historical_data.copy()[i]
                 else:
                     historical_data = pd.Series(results.min(),[0])
-
+                
                 n_best = n_best if n_best>1 else 2
-                simulated = self.hyperparam.loc[norm_sum].astype(float).sort_values().head(n_best).index
+                simulated = self.hyperparam.loc[obj_plot].astype(float).sort_values().head(n_best).index
                 results = results.loc[idx[simulated,:]]
 
                 results, historical_data, unit = self.get_unit(results, historical_data, i)
-                best = self.hyperparam.loc[norm_sum].astype(float).idxmin()
+                best = self.hyperparam.loc[obj_plot].astype(float).idxmin()
                 best = results.loc[best]
                 best.plot(ax=a,label='Simulated',color='blue')
                 if 'SD' not in i:
                     historical_data.plot(ax=a,label='Historical',color='k')
                 if n_best>1:
                     results.unstack(0).plot(ax=a,linewidth=1,alpha=0.5,zorder=0,legend=False)
-                a.set(title='Best '+i,ylabel=i+' ('+unit+')',xlabel='Year')
+                a.set(title=i,ylabel=i+' ('+unit+')',xlabel='Year')
                 a.legend(['Simulated','Historical'])
-
+                
             fig.tight_layout()
-        cols = self.hyperparam.loc[norm_sum].sort_values().head(n_best).index
+        cols = self.hyperparam.loc[obj_plot].sort_values().head(n_best).index
         ind = [i for i in self.hyperparam.index if type(self.hyperparam.loc[i].iloc[0]) in [float,int]]
-        ind = [i for i in ind if 'RMSE' not in i and 'NORM' not in i]
+        ind = [i for i in ind if 'RMSE' not in i and 'NORM' not in i and 'R2' not in i]
         ind = self.hyperparam.loc[ind].loc[(self.hyperparam.loc[ind].std(axis=1)>1e-3)].index
         self.hyperparams_changing = ind
         best_hyperparam = self.hyperparam.copy().loc[ind,cols].astype(float)
         if 'close_years_back' in best_hyperparam.index:
             best_hyperparam.loc['close_years_back'] /= 10
-
-        if plot_best_indiv_over_time:
-            fig,ax = easy_subplots(self.objective_params,dpi=self.dpi)
-            for i,a in zip(self.objective_params, ax):
-                results = self.results.copy()[self.objective_results_map[i]].loc[idx[:,2001:]]
-                if 'SD' not in i:
-                    historical_data = self.historical_data.copy()[i]
-                else:
-                    historical_data = pd.Series(results.min(),[0])
-
-                n_best = n_best if n_best>1 else 2
-                simulated = self.hyperparam.loc['RMSE '+i].astype(float).sort_values().head(n_best).index
-                results = results.loc[idx[simulated,:]]
-
-                results, historical_data, unit = self.get_unit(results, historical_data, i)
-                best_ind = self.hyperparam.loc['RMSE '+i].astype(float).idxmin()
-                best = results.loc[best_ind]
-                best.plot(ax=a,label='Simulated',color='blue')
-                if 'SD' not in i:
-                    historical_data.plot(ax=a,label='Historical',color='k')
-                if n_best>1:
-                    results.unstack(0).plot(ax=a,linewidth=1,alpha=0.5,zorder=0,legend=False)
-                a.set(title=i+f' ({best_ind})',ylabel=i+' ('+unit+')',xlabel='Year')
-                a.legend(['Simulated','Historical'])
-
+        
         if plot_hyperparam_heatmap:
             plt.figure(figsize=(1.2*n_best,10),dpi=self.dpi)
             sns.heatmap(best_hyperparam,yticklabels=True,annot=True)
-
+        
         if plot_hyperparam_distributions:
             breaks = np.arange(0,int(np.ceil(len(ind)/n_per_plot)))
             fig,ax = easy_subplots(breaks,dpi=self.dpi)
             for a,b in zip(ax,breaks):
                 best_hyperparam.iloc[b*n_per_plot:(b+1)*n_per_plot].T.plot(kind='kde',bw_method=0.1,ax=a)
                 a.legend(fontsize=16)
-
+        
         if plot_hyperparam_vs_error:
             fig,ax=easy_subplots(self.hyperparams_changing,dpi=self.dpi)
             for a,i in zip(ax,self.hyperparams_changing):
                 if flip_yx:
                     v = self.hyperparam.sort_values(by=i,axis=1).T.reset_index(drop=True).T
                 else:
-                    v = self.hyperparam.sort_values(by=norm_sum,axis=1).T.reset_index(drop=True).T
+                    v = self.hyperparam.sort_values(by=obj_plot,axis=1).T.reset_index(drop=True).T
                 x = v.copy().loc[i]
-                y = v.copy().loc[norm_sum]
+                y = v.copy().loc[obj_plot]
                 y = y.where(y<y.quantile(0.7)).dropna()
-
+                
                 if flip_yx:
                     a.plot(x[y.index],y)
                     a.set(title=i,xlabel='Hyperparameter value',ylabel='Normalized error')
                 else:
                     a.plot(y,x[y.index])
                     a.set(title=i,ylabel='Hyperparameter value',xlabel='Normalized error')
-
+                    
             fig.tight_layout()
-
-        if plot_best_params:
-            self.plot_best_scenario_sd(include_sd=include_sd, plot_supply_demand_stack=plot_supply_demand_stack, best=best_ind)
-
+            
     def plot_demand_results(self):
         '''
         plots the demand results, with historical and best-fit scenarios using thicker lines and all others semi-transparent thin lines
@@ -381,7 +357,7 @@ class Individual():
         custom_lines = [Line2D([0], [0], color='k', lw=4),
                         Line2D([0], [0], color='blue', lw=4)]
         ax[0].legend(custom_lines,['Historical','Simulated'],loc='upper left')
-
+        
     def get_unit(self, simulated_demand, historical_demand, param):
         if 'price' in param.lower():
             unit = 'USD/t'
@@ -404,7 +380,7 @@ class Individual():
         maxx, minn = abs(res).max().max(), abs(res).min().min()
         if np.any([i in res.columns[0].lower() for i in ['price','cost','tcrc','spread']]):
             unit = ' (USD/t)'
-        elif 'CU' in res.columns[0] or 'SR' in res.columns[0]:
+        elif 'CU' in res.columns[0]:
             unit = ''
         elif 'grade' in res.columns[0]:
             unit = ' (%)'
@@ -417,27 +393,26 @@ class Individual():
         else:
             unit=' (kt)'
         return res, unit
-
-    def plot_best_scenario_sd(self, include_sd=False, plot_supply_demand_stack=True, best=-1):
+        
+    def plot_best_scenario_sd(self, include_sd=False, plot_supply_demand_stack=True):
         self.normalize_rmses()
         norm_sum = 'NORM SUM' if include_sd else 'NORM SUM OBJ ONLY'
-        if best==-1:
-            best = self.hyperparam.loc[norm_sum].astype(float).idxmin()
+        best = self.hyperparam.loc[norm_sum].astype(float).idxmin()
         print(f'Best scenario is scenario number: {best}')
         results = self.results.loc[best].copy().dropna(how='all')
         variables = ['Total','Conc','Ref.','Scrap','Spread','TCRC','Refined','CU','SR','Direct','Mean total','mine grade','Conc. SD','Ref. SD','Scrap SD']
         fig,ax=easy_subplots(variables)
         for var,a in zip(variables,ax):
             parameters = [i for i in results.columns if var in i and ('SD' not in i or 'SD' in var)]
-            res = results[parameters].loc[2001:]
+            res = results[parameters]
             res, unit = self.get_unit_df(res)
             param_str = ', '.join(parameters) if len(', '.join(parameters))<30 else ',\n'.join(parameters)
             res.plot(ax=a,title=param_str+unit)
         fig.tight_layout()
-
+        
         if plot_supply_demand_stack:
             plt.figure()
-            res = results[['Pri. ref. prod.','Sec. ref. prod.','Direct melt','Total demand']].loc[2001:]
+            res = results[['Pri. ref. prod.','Sec. ref. prod.','Direct melt','Total demand']]
             res = res.replace(0,np.nan)
             res, unit = self.get_unit_df(res)
             res = res.fillna(0)

@@ -35,10 +35,8 @@ class miningModel():
 #         self.simulate_history_bool = self.hyperparam['Value']['simulate_history_bool']
 #         self.incentive_tuning_option = self.hyperparam['Value']['incentive_tuning_option']
 
-    def plot_relevant_params(self,include=0,exclude=[],plot_recovery_grade_correlation=True,
-                             plot_minesite_supply_curve=True, plot_margin_supply_curve=True,
-                             plot_primary_minesite_supply_curve=False, plot_primary_margin_supply_curve=False,
-                             log_scale=False,dontplot=False,byproduct=False):
+    def plot_relevant_params(self,include=0,exclude=[],plot_recovery_grade_correlation=True,plot_minesite_supply_curve=True, plot_margin_supply_curve=True,plot_primary_minesite_supply_curve=False, plot_primary_margin_supply_curve=False,log_scale=False,dontplot=False,byproduct=False):
+
         mines = self.mines.copy()
         if type(include)==int:
             cols = [i for i in mines.columns if i not in exclude and mines.dtypes[i] not in [object,str]]
@@ -210,6 +208,7 @@ class miningModel():
                 hyperparameters = self.add_minesite_cost_regression_params(hyperparameters)
 
             if 'parameters for mine life simulation':
+                hyperparameters.loc['commodity','Value'] = 'notAu'
                 hyperparameters.loc['primary_oge_s','Value'] = 0.3320346
                 hyperparameters.loc['primary_oge_loc','Value'] = 0
                 hyperparameters.loc['primary_oge_scale','Value'] = 0.399365
@@ -228,7 +227,7 @@ class miningModel():
                 hyperparameters.loc['byproduct_ramp_down_rr','Value'] = 0.4
                 hyperparameters.loc['byproduct_ramp_up_rr','Value'] = 0.4
                 hyperparameters.loc['byproduct_ramp_up_years','Value'] = 1
-                hyperparameters.loc['close_price_method','Value']='mean'
+                hyperparameters.loc['close_price_method','Value']='probabilistic'
                 hyperparameters.loc['close_years_back','Value']=3
                 hyperparameters.loc['close_probability_split_max','Value']=0.3
                 hyperparameters.loc['close_probability_split_mean','Value']=0.5
@@ -405,9 +404,9 @@ class miningModel():
                 hyperparameters.loc['opening_flag_for_cu0',:] = False, 'whether or not opening is currently happening and we have to suppress the recalculation of cu0'
                 hyperparameters.loc['incentive_subsample_init',:] = 1000, 'initial value for incentive_subsample_series'
 
-                hyperparameters.loc['annual_reserves_ratio_with_initial_production',:] = 1.1, 'multiplies by annual demand to determine initial reserves used for incentive pool size'
+                hyperparameters.loc['annual_reserves_ratio_with_initial_production_const',:] = 1.1, 'multiplies by annual demand to determine initial reserves used for incentive pool size'
                 hyperparameters.loc['annual_reserves_ratio_with_initial_production_slope',:] = 0, 'linear change per year of annual demand to determine initial reserves used for incentive pool size'
-                hyperparameters.loc['incentive_resources_contained_series',:] = np.array([pd.Series(hyperparameters['Value']['primary_production']*hyperparameters['Value']['annual_reserves_ratio_with_initial_production'],self.simulation_time), 'the contained metal in the assumed resources, currently set to be a series with each year having contained metal in resources equal to one year of production'],dtype=object)
+                hyperparameters.loc['incentive_resources_contained_series',:] = np.array([pd.Series(hyperparameters['Value']['primary_production']*hyperparameters['Value']['annual_reserves_ratio_with_initial_production_const'],self.simulation_time), 'the contained metal in the assumed resources, currently set to be a series with each year having contained metal in resources equal to one year of production'],dtype=object)
                 hyperparameters.loc['incentive_use_resources_contained_series',:] = True, 'whether to use the incentive_resources_contained_series series for determining incentive pool size or to use the incentive_subsample_series series for the number of mines in each year'
                 hyperparameters.loc['resources_contained_elas_primary_price',:] = 0.5, 'percent increase in the resources conatined/incentive pool size when price rises by 1%'
                 hyperparameters.loc['resources_contained_elas_byproduct_price',:] = 0.05, 'percent increase in the resources conatined/incentive pool size when price rises by 1%'
@@ -437,7 +436,7 @@ class miningModel():
                 hyperparameters.loc['reserve_frac_region4','Value'] = 0.24350115
                 hyperparameters.loc['reserve_frac_region5','Value'] = 0.44060546
 
-                hyperparameters.loc['internal_price_formation',:] = True, 'whether to use the supply-demand balance to determine price evolution internally or to use external inputs'
+                hyperparameters.loc['internal_price_formation',:] = False, 'whether to use the supply-demand balance to determine price evolution internally or to use external inputs'
                 hyperparameters.loc['tcrc_sd_elas',:] = 0.1, 'TCRC elasticity to supply divided by demand'
                 hyperparameters.loc['price_sd_elas',:]= -0.1, 'Commodity price elasticity to supply divided by demand'
                 hyperparameters.loc['simulate_history_bool',:] = False, 'Simulate some years beforehand, for particular use with incentive_opening_method==unconstrained, such that TCRC or commodity price can have a chance to equilibrate. The number of years needed to be simulated beforehand is determined by the demand_series_pct_change, as values close to zero need more years'
@@ -538,7 +537,7 @@ class miningModel():
                 hyperparameters.loc['demand_series',:] = np.array([pd.Series(np.linspace(initial_demand,initial_demand*change,len(sim_time)),sim_time),hyperparameters['Notes']['demand_series']],dtype=object)
             self.demand_series = hyperparameters['Value']['demand_series']
 
-            incent_series = [i*(hyperparameters['Value']['annual_reserves_ratio_with_initial_production']+j)
+            incent_series = [i*(hyperparameters['Value']['annual_reserves_ratio_with_initial_production_const']+j)
                              for i,j in zip(self.demand_series.values,
                             [hyperparameters['Value']['annual_reserves_ratio_with_initial_production_slope']*(y-self.simulation_time[0]) for y in self.simulation_time])]
             hyperparameters.loc['incentive_resources_contained_series',:] = np.array([pd.Series(incent_series,self.simulation_time), 'the contained metal in the assumed resources, currently set to be a series with each year having contained metal in resources equal to one year of production'],dtype=object)
@@ -575,6 +574,8 @@ class miningModel():
             for i in np.arange(1,4):
                 hyperparameters.loc['byproduct'+str(i)+'_rr0','Value'] = mines.loc[(mines['Byproduct ID']==i)&(mines[byp+'Total cash margin (USD/t)']>0),'Recovery rate (%)'].median()
                 hyperparameters.loc['byproduct'+str(i)+'_mine_tcm0','Value'] = mines.loc[(mines['Byproduct ID']==i)&(mines[byp+'Total cash margin (USD/t)']>0),byp+'Total cash margin (USD/t)'].median()
+        # if hyperparameters['Value']['commodity']!='Au':
+        #     hyperparameters.loc['annual_reserves_ratio_with_initial_production_const','Value'] = 8
         self.hyperparam = hyperparameters.copy()
         if (hyperparameters['Value']['primary_sxew_fraction_series']==0).all():
             self.sxew_fraction_series = pd.Series(hyperparameters['Value']['primary_sxew_fraction']+hyperparameters['Value']['primary_sxew_fraction_change']*(self.simulation_time-self.i),self.simulation_time)
@@ -751,7 +752,7 @@ class miningModel():
             hyperparameters.loc['demand_series',:] = np.array([pd.Series(np.linspace(initial_demand,initial_demand*change,len(sim_time)),sim_time),hyperparameters['Notes']['demand_series']],dtype=object)
             self.demand_series = hyperparameters['Value']['demand_series']
 
-        incent_series = [i*(hyperparameters['Value']['annual_reserves_ratio_with_initial_production']+j)
+        incent_series = [i*(hyperparameters['Value']['annual_reserves_ratio_with_initial_production_const']+j)
                          for i,j in zip(self.demand_series.values,
                         [hyperparameters['Value']['annual_reserves_ratio_with_initial_production_slope']*(y-self.simulation_time[0]) for y in self.simulation_time])]
         hyperparameters.loc['incentive_resources_contained_series',:] = np.array([pd.Series(incent_series,self.simulation_time), 'the contained metal in the assumed resources, currently set to be a series with each year having contained metal in resources equal to one year of production'],dtype=object)
@@ -1650,8 +1651,8 @@ class miningModel():
         grade[grade>80] = 80
         return grade
 
-    def calculate_minesite_cost(self, minesite_cost_last, grade, initial_grade, price, initial_price,
-                                ore_treated, sim_start_ore_treated, year_i):
+    def calculate_minesite_cost(self, minesite_cost_last, grade, initial_grade, price, initial_price, ore_treated, sim_start_ore_treated, year_i):
+
         h = self.hyperparam.copy()
         if h['Value']['minesite_cost_response_to_grade_price']:
             minesite_cost_expect = minesite_cost_last * (grade/initial_grade)**h['Value']['mine_cost_og_elas'] \
@@ -1853,9 +1854,8 @@ class miningModel():
             ml_yr.loc[byp,'Cash flow ($M)'] = ml_yr['Primary Paid metal production (kt)']*ml_yr['Primary Total cash margin (USD/t)'] - ml_yr['Overhead ($M)'] - ml_yr['Primary Sustaining CAPEX ($M)'] - ml_yr['Development CAPEX ($M)']
         return ml_yr
 
-    def get_cash_flow(self, ml_yr_, cumu_ot_expect, ot_expect, initial_ore_treated, initial_grade, price_expect,
-                      tcrc_expect, initial_price, overhead, sustaining_capex, development_capex,
-                      pri_initial_price, pri_price_expect, pri_tcrc_expect, neg_cash_flow):
+    def get_cash_flow(self, ml_yr_, cumu_ot_expect, ot_expect, initial_ore_treated, initial_grade, price_expect, tcrc_expect, initial_price, overhead, sustaining_capex, development_capex, pri_initial_price, pri_price_expect, pri_tcrc_expect, neg_cash_flow):
+
         by_cash_flow_expect = 0
         by_tcm_expect = 0
         ml_yr = ml_yr_.copy()
@@ -1948,14 +1948,14 @@ class miningModel():
         incentive_mines.loc[:,'Minesite cost (USD/t)'] *= h['Value']['ramp_up_cu']/incentive_mines['Capacity utilization']*cost_improve
         incentive_mines.loc[:,'Capacity utilization'] = h['Value']['ramp_up_cu']
         if self.verbosity>4:
-            print(1907,incentive_mines['TCRC (USD/t)'].mean())
+            print(1951,'incentive tcrc mean',incentive_mines['TCRC (USD/t)'].mean())
         if incentive_mines['TCRC (USD/t)'].mean()!=0:
             incentive_mines.loc[:,'TCRC (USD/t)'] *= tcrc_expect.mean()/incentive_mines['TCRC (USD/t)'].mean()
 #         incentive_mines.loc[:,'TCRC (USD/t)'] *= self.ml['TCRC (USD/t)'].unstack(0)[i].mean()/incentive_mines['TCRC (USD/t)'].mean()
         incentive_mines.loc[:,'Commodity price (USD/t)'] *= price_expect.mean()/incentive_mines['Commodity price (USD/t)'].mean()
 #         incentive_mines.loc[:,'Commodity price (USD/t)'] *= self.ml['Commodity price (USD/t)'].unstack(0)[i].mean()/incentive_mines['Commodity price (USD/t)'].mean()
         if self.verbosity>4:
-            print(1910,incentive_mines['TCRC (USD/t)'].mean())
+            print(1958,'incentive tcrc mean',incentive_mines['TCRC (USD/t)'].mean())
         if self.byproduct:
             incentive_mines.loc[:,'Primary Head grade (%)'] = incentive_mines['Primary Initial head grade (%)'] * grade_decline
             incentive_mines.loc[incentive_mines['Primary Head grade (%)']>80,'Primary Head grade (%)'] = 80
@@ -1980,7 +1980,7 @@ class miningModel():
                 self.demand_series = pd.Series(np.linspace(initial_demand,initial_demand*change,len(sim_time)),sim_time)
 
         self.resources_contained_series.loc[i] = self.demand_series[i-1]*\
-             (h['Value']['annual_reserves_ratio_with_initial_production']+
+             (h['Value']['annual_reserves_ratio_with_initial_production_const']+
               h['Value']['annual_reserves_ratio_with_initial_production_slope']*(i-self.simulation_time[0]))
         if i>self.simulation_time[0]:
             lag = min([h['Value']['reserves_ratio_price_lag'],i-self.simulation_time[0]-1])
@@ -1988,7 +1988,7 @@ class miningModel():
             self.resources_contained_series.loc[i] *= (self.primary_price_series[i-lag]/self.primary_price_series[i-lag-1])**h['Value']['resources_contained_elas_primary_price']
             if self.byproduct:
                 self.resources_contained_series.loc[i] *= (self.byproduct_price_series[i-lag]/self.byproduct_price_series[i-lag-1])**h['Value']['resources_contained_elas_byproduct_price']
-        max_res = self.demand_series[self.simulation_time[0]]*h['Value']['annual_reserves_ratio_with_initial_production']*100
+        max_res = self.demand_series[self.simulation_time[0]]*h['Value']['annual_reserves_ratio_with_initial_production_const']*100
         self.resources_contained_series.loc[self.resources_contained_series>max_res] = max_res
         self.reserves_ratio_with_demand_series = self.resources_contained_series/self.demand_series
         self.inc = inc

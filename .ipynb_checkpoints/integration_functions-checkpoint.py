@@ -740,19 +740,20 @@ class Sensitivity():
         new_param_series = pd.concat([new_param_series],keys=[s_n])
 
         #if we optimise on rmse, return that, else return r2
+        n = len(rmse_list)
         if self.use_rmse_not_r2:
             if self.log:
-                score = sum(np.log(r[0]) for r in rmse_list)
+                score = np.log(sum(r[0]/n for r in rmse_list))
             else:
-                score = sum(r[0] for r in rmse_list)
+                score = sum(r[0]/n for r in rmse_list)
         else:
             if self.log:
-                #r2 is [-inf, 4] so we change it to [1, inf] to use in log to that it becomes [0, inf]
-                #+4 intead of +5 would have made it into [-inf, inf]; not good
-                score = sum(np.log(-r[0]+5) for r in r2_list)
+                #r2 is [-inf, 1] so we change it to [1, inf] to use in log, it then becomes [0, inf]
+                #+1 intead of +2 would have made it into [-inf, inf]; not good
+                score = np.log(sum(-r[0]/n+2 for r in r2_list))
             else:
                 #we flip the sign because skopt only minimises
-                score = sum(-r[0] for r in r2_list)
+                score = sum(-r[0]/n for r in r2_list)
 
         return score, new_param_series, potential_append
 

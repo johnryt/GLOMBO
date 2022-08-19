@@ -799,14 +799,10 @@ class Sensitivity():
                 score = np.log(sum(-r[0]/n+2 for r in r2_list))
             else:
                 #we flip the sign because skopt only minimises
-<<<<<<< Updated upstream
                 score = sum(-r[0]/n for r in r2_list)
 
-=======
-                score = sum(-r[0] for r in r2_list)
         new_param_series.loc['score'] = score
         new_param_series = pd.concat([new_param_series],keys=[s_n])
->>>>>>> Stashed changes
         return score, new_param_series, potential_append
 
     def calculate_rmse_r2(self, sim, hist, use_rmse):

@@ -3,6 +3,9 @@ import pandas as pd
 import statsmodels.api as sm
 idx = pd.IndexSlice
 from matplotlib import pyplot as plt
+import seaborn as sns
+from cycler import cycler
+from datetime import datetime
 
 def get_sheet_details(file_path):
     sheets = []
@@ -51,21 +54,21 @@ def get_sheet_details(file_path):
                 sheet_names.append(sheet['@name'])
     return sheet_names
 
-def init_plot2(fontsize=20,figsize=(8,5.5),font='Calibri',font_family='sans-serif',linewidth=4,font_style='bold',have_axes=True,dpi=50,marker=None,markersize=6,markeredgewidth=1.0,markeredgecolor=None,markerfacecolor=None, **kwargs):
-    '''Sets default plot formats. 
+def init_plot2(fontsize=20,figsize=(8,5.5),font='Arial',font_family='sans-serif',linewidth=4,font_style='bold',have_axes=True,dpi=50,marker=None,markersize=12,markeredgewidth=1.0,markeredgecolor=None,markerfacecolor=None, markercycler=False, cmap='Dark2', n_colors=8, **kwargs):
+    '''Sets default plot formats.
     Potential inputs: fontsize, figsize, font,
     font_family, font_style, linewidth, have_axes,
     dpi, marker, markersize, markeredgewidth,
-    markeredgecolor, markerfacecolor. 
+    markeredgecolor, markerfacecolor.
     have_axes: determines whether there is a border
     on the plot. Also has **kwargs so that any other
     arguments that can be passed to mpl.rcParams.update
-    that were not listed above.'''
+    that were not listed above.
+
+    cmap can take any matplotlib colormap string.'''
     import matplotlib as mpl
     params = {
         'axes.labelsize': fontsize,
-        'axes.labelweight': font_style,
-        'axes.titleweight': font_style,
         'font.size': fontsize,
         'axes.titlesize':fontsize+1,
         'figure.titlesize':fontsize+1,
@@ -90,13 +93,17 @@ def init_plot2(fontsize=20,figsize=(8,5.5),font='Calibri',font_family='sans-seri
         'ytick.major.size': 7,
         'ytick.major.width': 2,
         'ytick.major.pad': 3.5,
+        'font.family': font_family,
         'font.'+font_family: font,
         'figure.dpi': dpi,
         'lines.marker': marker,
         'lines.markersize':markersize,
-        'lines.markeredgewidth':markeredgewidth
-        }  
-
+        'lines.markeredgewidth':markeredgewidth,
+        'pdf.fonttype': 42,
+        'ps.fonttype': 42,
+        'savefig.transparent': True,
+        'savefig.bbox': 'tight',
+        }
 
     mpl.rcParams.update(params)
     mpl.rcParams.update(**kwargs)
@@ -110,11 +117,22 @@ def init_plot2(fontsize=20,figsize=(8,5.5),font='Calibri',font_family='sans-seri
     mpl.rcParams['grid.color'] = '0.9'
     mpl.rcParams['grid.linewidth'] = 1
     mpl.rcParams['grid.linestyle'] = '-'
+    mpl.rcParams['axes.labelweight'] = font_style
+    mpl.rcParams['font.weight'] = font_style
+
+    sns.set_palette(cmap)
 
     if markeredgecolor != None:
         mpl.rcParams['lines.markeredgecolor'] = markeredgecolor
     if markerfacecolor != None:
         mpl.rcParams['lines.markerfacecolor'] = markerfacecolor
+    if markercycler:
+        cmap_colors = mpl.cm.get_cmap(cmap)
+        colors = [cmap_colors(i) for i in np.linspace(0,1,n_colors)]
+        markers = ["o","s","^","v","p","8","P","X"]
+        if n_colors>8: markers = np.tile(markers,int(np.floor(n_colors/8)+1))
+        markers = markers[:n_colors]
+        mpl.rcParams['axes.prop_cycle'] =  cycler('color',colors) + cycler('marker',markers)
 
 def reduce_mem_usage(df,inplace=False):
     '''Returns dataframe with columns changed to have dtypes of minimum
@@ -125,9 +143,9 @@ def reduce_mem_usage(df,inplace=False):
     else:
         props = df.copy()
     props = props.drop_duplicates().T.drop_duplicates().T
-    start_mem_usg = props.memory_usage().sum() / 1024**2 
+    start_mem_usg = props.memory_usage().sum() / 1024**2
     print("Memory usage of properties dataframe is :",start_mem_usg," MB")
-    NAlist = [] # Keeps track of columns that have missing values filled in. 
+    NAlist = [] # Keeps track of columns that have missing values filled in.
     progress = int(np.floor(len(props.columns)/10))
     n = 1
     for num, col in enumerate(props.columns):
@@ -138,15 +156,15 @@ def reduce_mem_usage(df,inplace=False):
 #             print(e)
             if 'numpy.dtype[' in str(e):
                 col_type = prop_col.dtypes
-            
-            
+
+
         if col_type != object:  # Exclude strings
-            
+
             # Print current column type
 #             print("******************************")
 #             print("Column: ",col)
 #             print("dtype before: ",col_type)
-            
+
             # make variables for Int, max and min
             IsInt = False
             try:
@@ -155,13 +173,13 @@ def reduce_mem_usage(df,inplace=False):
             except:
                 mx = prop_col.max()
                 mn = prop_col.min()
-                
-            
+
+
             # Integer does not support NA, therefore, NA needs to be filled
-            if not np.isfinite(prop_col).all().all(): 
+            if not np.isfinite(prop_col).all().all():
                 NAlist.append(col)
-                props[col].fillna(mn-1,inplace=True)  
-                   
+                props[col].fillna(mn-1,inplace=True)
+
             # test if column can be converted to an integer
             asint = prop_col.fillna(0).astype(np.int64)
             result = (prop_col - asint)
@@ -169,7 +187,7 @@ def reduce_mem_usage(df,inplace=False):
             if result > -0.01 and result < 0.01:
                 IsInt = True
 
-            
+
             # Make Integer/unsigned Integer datatypes
             if IsInt:
                 if mn >= 0:
@@ -189,12 +207,12 @@ def reduce_mem_usage(df,inplace=False):
                     elif mn > np.iinfo(np.int32).min and mx < np.iinfo(np.int32).max:
                         props[col] = props[col].astype(np.int32)
                     elif mn > np.iinfo(np.int64).min and mx < np.iinfo(np.int64).max:
-                        props[col] = props[col].astype(np.int64)    
-            
+                        props[col] = props[col].astype(np.int64)
+
             # Make float datatypes 32 bit
             else:
                 props[col] = props[col].astype(np.float32)
-            
+
             # Print new column type
             try:
                 col_type = props[col].dtypes.values[0]
@@ -207,10 +225,10 @@ def reduce_mem_usage(df,inplace=False):
         if num == progress*n:
             print('{}0% complete'.format(n))
             n+=1
-    
+
     # Print final result
     print("___MEMORY USAGE AFTER COMPLETION:___")
-    mem_usg = props.memory_usage().sum() / 1024**2 
+    mem_usg = props.memory_usage().sum() / 1024**2
     print("Memory usage is: ",mem_usg," MB")
     print("This is ",100*mem_usg/start_mem_usg,"% of the initial size")
     return props
@@ -288,13 +306,13 @@ def do_a_regress(x,y,ax=0,intercept=True,scatter_color='tab:blue',line_color='k'
             print(f'{len(x.index)-len(ind)} x values lost, {len(y.index)-len(ind)} y values lost to unaligned indices')
         x,y = np.log(x.loc[ind]), np.log(y.loc[ind])
         x.name, y.name = 'log('+str(x.name)+')', 'log('+str(y.name)+')'
-        
+
     if intercept:
         x_i = sm.add_constant(x)
     else:
         x_i = x.copy()
     m = sm.GLS(y,x_i,missing='drop').fit(cov_type='HC3')
-    
+
     if plot and not force_predict_v_actual:
         if type(ax) == int:
             fig,ax = plt.subplots()
@@ -309,11 +327,11 @@ def do_a_regress(x,y,ax=0,intercept=True,scatter_color='tab:blue',line_color='k'
             ax.plot(x, m.params['const'] + m.params[x.name]*x,label='Best-fit line',color=line_color)
         else:
             ax.plot(x, m.params[x.name]*x,label='Best-fit line',color=line_color)
-        
+
         add_regression_text(m,x,y,loc=loc,ax=ax)
-        
+
         ax.set(xlabel=x.name, ylabel=y.name)
-            
+
     elif force_predict_v_actual:
         y_predicted = m.predict(x_i)
         if plot:
@@ -325,19 +343,19 @@ def do_a_regress(x,y,ax=0,intercept=True,scatter_color='tab:blue',line_color='k'
                                               scatter_color=scatter_color,line_color=line_color,
                                               xlabel='Actual',ylabel='Predicted',plot=plot,loc=loc,
                                               add_labels_bool=add_labels_bool,force_predict_v_actual=False)[1]
-        
-        
+
+
     if force_predict_v_actual:
         return pd.Series(m.params).rename({x.name:'slope','x1':'slope'}),m_predict_v_actual,m
     else:
         return pd.Series(m.params).rename({x.name:'slope','x1':'slope'}),m
-            
+
 def easy_subplots(nplots, ncol=4, height_scale=1,width_scale=1,use_subplots=False,**kwargs):
-    '''sets up plt.subplots with the correct number of rows and columns and figsize, 
-    given number of plots (nplots) and the number of columns (ncol). 
+    '''sets up plt.subplots with the correct number of rows and columns and figsize,
+    given number of plots (nplots) and the number of columns (ncol).
     Option to make figures taller or shorter by changing the height_scale.
     Can also give additional arguments to either plt.figure or plt.subplots.
-    use_subplots: True to use plt.subplots to create axes, False to use 
+    use_subplots: True to use plt.subplots to create axes, False to use
       plt.figure, which then allows dpi to be specified.'''
     if type(nplots) != int:
         nplots = len(nplots)
@@ -345,7 +363,7 @@ def easy_subplots(nplots, ncol=4, height_scale=1,width_scale=1,use_subplots=Fals
         ncol = nplots
     if nplots%3==0 and ncol==4:
         ncol=3
-    
+
     nrows = int(np.ceil(nplots/ncol))
     figsize = (7*ncol*width_scale,height_scale*6*int(np.ceil(nplots/ncol)))
     regular_version = False
@@ -363,9 +381,9 @@ def add_labels(x,y,ax):
     '''Add labels to scatter plot for each common index in series x and y.'''
     for i in np.intersect1d(x.index,y.index):
         ax.text(x.loc[i],y.loc[i],i,ha='center',va='top')
-        
+
 def twinx2(ax1,tw,n=2):
-    '''Primary axis, secondary axis, number of digits to round to (default 2), 
+    '''Primary axis, secondary axis, number of digits to round to (default 2),
     does not return anything.'''
     l = ax1.get_ylim()
     l2 = tw.get_ylim()
@@ -374,9 +392,9 @@ def twinx2(ax1,tw,n=2):
     tw.yaxis.set_major_locator(mpl.ticker.FixedLocator(ticks))
     tw.grid(None)
     tw.yaxis.set_major_formatter(mpl.ticker.FormatStrFormatter('%.'+str(n)+'f'))
-        
+
 def kstest100(x):
-    '''Takes in series, creates 100 simulated normal 
+    '''Takes in series, creates 100 simulated normal
     distributions from the series mean, std, and length,
     and returns the mean coefficient and p-value of the
     Kolmogorov-Smirnov test of the series x and its
@@ -402,7 +420,7 @@ def add_regression_text(m,x,y,loc='bottom right',ax=0):
     if len(m.params.index) > 1:
         n1 = 'e' if abs(m.params[1]) < 1e-2 else 'f'
         plus_or_minus = '+' if m.params['const'] > 0 else '-'
-    
+
     if type(ax)==int:
         if 'const' in m.params.index:
             if loc=='bottom right':
@@ -475,7 +493,7 @@ def add_regression_text(m,x,y,loc='bottom right',ax=0):
                      ha='right',va='top')
 
 def find_best_dist(stacked_df, plot=True, print_chi_squared=False, bins=40, ax=0, density=False):
-    '''takes a stacked dataframe and outputs a list 
+    '''takes a stacked dataframe and outputs a list
     of distributions that best fits that data (descending).
     stacked_df: pandas dataframe or series
     plot: bool, whether to plot the given data and
@@ -493,7 +511,7 @@ def find_best_dist(stacked_df, plot=True, print_chi_squared=False, bins=40, ax=0
 #     y = y[y>0]
     dist_names = ['weibull_min','norm','weibull_max','beta','invgauss','uniform','gamma','expon','lognorm','pearson3','triang','powerlognorm','logistic']
     chi_square_statistics = []
-    # 11 equi-distant bins of observed Data 
+    # 11 equi-distant bins of observed Data
     percentile_bins = np.linspace(0,100,11)
     percentile_cutoffs = np.percentile(y, percentile_bins)
     observed_frequency, hist_bins = (np.histogram(y, bins=percentile_cutoffs))
@@ -532,7 +550,7 @@ def find_best_dist(stacked_df, plot=True, print_chi_squared=False, bins=40, ax=0
         print ('\nDistributions listed by goodness of fit:')
         print ('.'*40)
         print (results)
-        
+
     if results.notna().any():
         best_dist = getattr(stats,results.idxmin())
     else:
@@ -540,14 +558,14 @@ def find_best_dist(stacked_df, plot=True, print_chi_squared=False, bins=40, ax=0
 #     print(results.idxmin())
     best_params = best_dist.fit(y)
 #     print(best_params)
-    best_sim_size = 1000 if density else len(y) 
+    best_sim_size = 1000 if density else len(y)
     if len(best_params)==2:
         best_sim = best_dist.rvs(best_params[0],best_params[1],size=len(y),random_state=0)
     elif len(best_params)==3:
         best_sim = best_dist.rvs(best_params[0],best_params[1],best_params[2],size=len(y),random_state=0)
     elif len(best_params)==4:
         best_sim = best_dist.rvs(best_params[0],best_params[1],best_params[2],best_params[3],size=len(y),random_state=0)
-    
+
     if plot:
         if type(ax)==int:
             fig,ax = easy_subplots(1,1)
@@ -557,5 +575,28 @@ def find_best_dist(stacked_df, plot=True, print_chi_squared=False, bins=40, ax=0
         ax.set(title=results.index[0])
 #         ax[1].plot(y,best_dist.pdf(y,))
     return results.index
-    
+
+def year_decimal_to_datetime(year_decimal):
+    '''
+    Takes in any year-as-decimal value and returns
+    the equivalent (to microsecond) datetime form.
+    Can be used to convert an entire index, i.e.
+    df.index = [year_decimal_to_datetime(j) for j in df.index]
+    '''
+    n_years = np.floor(year_decimal)
+    months = (year_decimal-n_years)*12+1
+    n_months = np.floor(months)
+    days_in_month = 31 if (n_months%2!=0 and n_months<8) or (n_months%2==0 and n_months>=8) else 30 if n_months!=2 else 28 if n_years%4!=0 else 29
+    days = (months-n_months)*days_in_month+1
+    n_days = np.floor(days)
+    hours = (days-n_days)*24
+    n_hours = np.floor(hours)
+    minutes = (hours-n_hours)*60
+    n_minutes = np.floor(minutes)
+    seconds = (minutes-n_minutes)*60
+    n_seconds = np.floor(seconds)
+    microseconds = (seconds-n_seconds)*1000
+    n_microseconds = np.floor(microseconds)
+    return datetime(int(n_years), int(n_months), int(n_days), int(n_hours), int(n_minutes), int(n_seconds), int(n_microseconds))
+
 init_plot2()

@@ -87,7 +87,6 @@ class miningModel():
             a = ax[-(plot_margin_supply_curve)]
             minn,maxx = mines['Total cash margin (USD/t)'].min(),mines['Total cash margin (USD/t)'].max()
             ylim = (minn-(maxx-minn)/10, maxx+(maxx-minn)/10)
-            ylim = (650,2400)
             supply_curve_plot(mines,'Production (kt)',['Total cash margin (USD/t)'],
                               width_scale=1.2,line_only=True,ax=a,xlabel='Cumulative production (kt)',
                               ylim=ylim,ylabel='Total cash margin (USD/t)',

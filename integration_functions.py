@@ -237,6 +237,7 @@ class Sensitivity():
                  use_alternative_gold_volumes=True,
                  historical_price_rolling_window=1,
                  constrain_previously_tuned=False,
+                 price_to_use='log',
                  timer=None):
         '''
         Initializing Sensitivity class.
@@ -316,6 +317,13 @@ class Sensitivity():
             previously been tuned (by historical_sim_check_demand, meaning they are in the index of
             self.updated_commodity_inputs(_sub)) to be +/- 10% of their previously-tuned value, if the optimization
             is trying to tune them. If False, constraints are as they were previously.
+        price_to_use: str within the set [log,original,diff,case study data]. The first three refer to
+            the respective columns in the data/price adjustment results.xlsx excel file, for the selected commodity.
+            Using case study data causes the system to use the values from the case study data.xlsx excel sheet
+            corresponding with the selected commodity. Using the other three values overwrites this input value,
+            with the purpose being to have more historical price data prior to the historical simulation time
+            such that the mining price expectation calculation has more data to draw from and we are not just
+            giving constant values for data before simulation start time.
         timer: callback, if provided, use this function to measure time and print mean iteration time as well as ETA,
             if interested, ask Luca Montanelli for his function.
         '''
@@ -324,9 +332,12 @@ class Sensitivity():
         self.additional_base_parameters = additional_base_parameters
         self.data_folder = 'generalization/data' if data_folder is None else data_folder
         self.case_study_data_file_path = f'{self.data_folder}/case study data.xlsx'
+        self.price_adjustment_results_file_path = f'{self.data_folder}/price adjustment results.xlsx'
+        self.price_to_use = price_to_use
         self.use_alternative_gold_volumes = use_alternative_gold_volumes
         self.historical_price_rolling_window = historical_price_rolling_window
         self.constrain_previously_tuned = constrain_previously_tuned
+        self.element_commodity_map = {'Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungsten','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
         self.update_changing_base_parameters_series()
 
         self.byproduct = byproduct
@@ -354,8 +365,7 @@ class Sensitivity():
 
         if self.overwrite and self.verbosity>0: print('WARNING, YOU ARE OVERWRITING AN EXISTING FILE')
 
-        self.demand_params = ['sector_specific_dematerialization_tech_growth','sector_specific_price_response','region_specific_price_response','intensity_response_to_gdp']
-
+        self.demand_params = ['sector_specific_dematerialization_tech_growth','sector_specific_price_response','intensity_response_to_gdp']
 
     def initialize_big_df(self):
         '''
@@ -410,12 +420,22 @@ class Sensitivity():
             commodity_inputs.loc['presimulate_n_years'] = 10
             commodity_inputs.loc['end_calibrate_years'] = 10
             commodity_inputs.loc['start_calibrate_years'] = 5
-            commodity_inputs.loc['close_price_method'] = 'probabilistic'
+            commodity_inputs.loc['close_price_method'] = 'max'
             commodity_inputs = commodity_inputs.dropna()
 
             history_file = pd.read_excel(self.case_study_data_file_path,index_col=0,sheet_name=changing_base_parameters_series)
             historical_data = history_file.loc[simulation_time[0]:].dropna(axis=1).astype(float)
             historical_data.index = historical_data.index.astype(int)
+            if self.price_to_use!='case study data':
+                price_update_file = pd.read_excel(self.price_adjustment_results_file_path,index_col=0)
+                cap_mat = self.element_commodity_map[self.material]
+                price_map = {'log':'log('+cap_mat+')',  'diff':'∆'+cap_mat,  'original':cap_mat+' original'}
+                historical_price = price_update_file[price_map[self.price_to_use]].astype(float)
+                historical_price.name = 'Primary commodity price'
+                if 'Primary commodity price' in historical_data.columns:
+                    historical_data = pd.concat([historical_data.drop('Primary commodity price',axis=1),historical_price],axis=1).sort_index().dropna(how='all')
+                else:
+                    historical_data = pd.concat([historical_data,historical_price],axis=1).sort_index().dropna(how='all')
             if 'Primary commodity price' in historical_data.columns:
                 historical_data.loc[historical_data.index,'Primary commodity price'] = historical_data['Primary commodity price'].rolling(self.historical_price_rolling_window,min_periods=1,center=True).mean()
 
@@ -586,7 +606,7 @@ class Sensitivity():
 
         self.mod.historical_data = self.historical_data.copy()
 
-        scenario_params_dont_change = ['collection_rate_price_response','direct_melt_price_response','secondary_refined_price_response','refinery_capacity_growth_lag']
+        scenario_params_dont_change = ['collection_rate_price_response','direct_melt_price_response','secondary_refined_price_response','refinery_capacity_growth_lag','region_specific_price_response']
 #         params_to_change = [i for i in self.mod.hyperparam.dropna(how='all').index if ('elas' in i or 'response' in i or 'growth' in i or 'improvements' in i) and i not in scenario_params_dont_change]
         params_to_change = [i for i in self.mod.hyperparam.dropna(how='all').index if np.any([j in i for j in sensitivity_parameters]) and i not in scenario_params_dont_change]
         self.sensitivity_param = params_to_change
@@ -634,11 +654,15 @@ class Sensitivity():
 
                     ###### UPDATING MONTE CARLO PARAMETERS ######
                     if len(params_to_change)>0:
-                        rs = random_state+n
-                        values = stats.uniform.rvs(loc=0,scale=1,size=len(params_to_change),random_state=rs)
-                        new_param_series = pd.Series(values, params_to_change)
                         if bayesian_tune:
                             new_param_series = pd.Series(next_parameters[i], params_to_change)
+                        else:
+                            rs = random_state+n
+                            values = stats.uniform.rvs(loc=0,scale=1,size=len(params_to_change),random_state=rs)
+                            new_param_series = pd.Series(values, params_to_change)
+
+                        if 'sector_specific_price_response' in params_to_change and 'region_specific_price_response' not in params_to_change:
+                            new_param_series.loc['region_specific_price_response'] = new_param_series['sector_specific_price_response']
                         if self.verbosity>0:
                             print('Parameters getting changed via Monte Carlo random selection:\n',params_to_change)
                         if 'sector_specific_dematerialization_tech_growth' in params_to_change and self.check_for_previously_tuned('sector_specific_dematerialization_tech_growth'):
@@ -663,7 +687,9 @@ class Sensitivity():
                                 new_param_series.loc[['close_probability_split_max','close_probability_split_mean']] *= 0.95/sum_mean_max
                             new_param_series.loc['close_probability_split_mean'] = 1-new_param_series.loc[['close_probability_split_max','close_probability_split_mean']].sum()
                         if 'close_years_back' in params_to_change and self.check_for_previously_tuned('close_years_back'):
-                            new_param_series.loc['close_years_back'] = int(10*new_param_series.loc['close_years_back']+3)
+                            new_param_series.loc['close_years_back'] = int(7*new_param_series.loc['close_years_back']+3)
+                        if 'reserves_ratio_price_lag' in params_to_change and self.check_for_previously_tuned('reserves_ratio_price_lag'):
+                            new_param_series.loc['reserves_ratio_price_lag'] = int(7*new_param_series['reserves_ratio_price_lag']+3)
                         if all_three_here and np.all([self.check_for_previously_tuned(j) for j in ['close_probability_split_mean','close_probability_split_min','close_probability_split_max']]):
                             new_param_series.loc[['close_probability_split_mean','close_probability_split_min','close_probability_split_max']] /=  new_param_series.loc[['close_probability_split_mean','close_probability_split_min','close_probability_split_max']].sum()
                         if 'mine_cost_tech_improvements' in params_to_change and self.check_for_previously_tuned('mine_cost_tech_improvements'):
@@ -953,11 +979,11 @@ class Sensitivity():
 
         if demand_or_mining=='demand':
             self.mod = demandModel(verbosity=self.verbosity, simulation_time=self.simulation_time, data_folder=self.data_folder)
-            params_to_change = ['sector_specific_dematerialization_tech_growth','sector_specific_price_response','region_specific_price_response','intensity_response_to_gdp']
-            dimensions = [(0.001, 0.08), (0.001, 0.3), (0.001, 0.3), (0.001, 1.5)]
+            params_to_change = self.demand_params
+            dimensions = [(0.001, 0.08), (0.001, 0.6), (0.001, 1.5)]
         else:
             self.mod = miningModel(verbosity=self.verbosity, simulation_time=self.simulation_time,byproduct=self.byproduct)
-            params_to_change = ['primary_oge_scale','mine_cu_margin_elas','mine_cost_og_elas','mine_cost_tech_improvements','mine_cost_price_elas','initial_ore_grade_decline','resources_contained_elas_primary_price','incentive_opening_probability','close_years_back','close_probability_split_max','close_probability_split_mean']
+            params_to_change = ['primary_oge_scale','mine_cu_margin_elas','mine_cost_og_elas','mine_cost_tech_improvements','mine_cost_price_elas','initial_ore_grade_decline','primary_price_resources_contained_elas','incentive_opening_probability','close_years_back','reserves_ratio_price_lag']
             dimensions = [(0.001,1) for i in params_to_change]
         self.hyperparam_changing = params_to_change
         if self.verbosity>0: print(params_to_change)
@@ -983,14 +1009,14 @@ class Sensitivity():
             if demand_or_mining=='demand':
                 self.mod = demandModel(verbosity=self.verbosity, simulation_time=self.simulation_time, data_folder=self.data_folder)
                 self.mod.commodity_price_series = self.historical_data['Primary commodity price']
-                self.mod.commodity_price_series = pd.concat([pd.Series(self.mod.commodity_price_series.iloc[0],np.arange(1900,self.simulation_time[0])),
+                self.mod.commodity_price_series = pd.concat([pd.Series(self.mod.commodity_price_series.iloc[0],np.arange(1900,self.historical_data['Primary commodity price'].dropna().index[0])),
                                                         self.mod.commodity_price_series]).sort_index()
             else:
                 self.mod = miningModel(verbosity=self.verbosity, simulation_time=self.simulation_time,byproduct=self.byproduct)
 
-                self.mod.primary_price_series = self.historical_data['Primary commodity price']
+                self.mod.primary_price_series = self.historical_data['Primary commodity price'].dropna()
                 self.mod.primary_tcrc_series = pd.Series(np.nan,self.simulation_time)
-                self.mod.primary_price_series = pd.concat([pd.Series(self.mod.primary_price_series.iloc[0],np.arange(1900,self.simulation_time[0])),
+                self.mod.primary_price_series = pd.concat([pd.Series(self.mod.primary_price_series.iloc[0],np.arange(1900,self.mod.primary_price_series.dropna().index[0])),
                                         self.mod.primary_price_series]).sort_index()
                 self.mod.demand_series = self.historical_data['Total demand']
 
@@ -999,7 +1025,7 @@ class Sensitivity():
             ###### CHANGING BASE PARAMETERS ######
             changing_base_parameters_series = self.changing_base_parameters_series.copy()
             for base in np.intersect1d(self.mod.hyperparam.index, changing_base_parameters_series.index):
-                if base in self.demand_params:
+                if type(base) not in [str]:
                     self.mod.hyperparam.loc[base,'Value'] = abs(self.changing_base_parameters_series[base])*np.sign(self.mod.hyperparam.loc[base,'Value'])
                 else:
                     self.mod.hyperparam.loc[base,'Value'] = self.changing_base_parameters_series[base]
@@ -1011,6 +1037,8 @@ class Sensitivity():
             ###### UPDATING PARAMETERS ######
             parameters = opt.ask()
             new_param_series = pd.Series(parameters,params_to_change)
+            if 'sector_specific_price_response' in params_to_change and 'region_specific_price_response' not in params_to_change:
+                new_param_series.loc['region_specific_price_response'] = new_param_series['sector_specific_price_response']
             if demand_or_mining=='mining':
                 if 'incentive_opening_probability' in params_to_change:
                     new_param_series.loc['incentive_opening_probability']*=0.5/(1-self.incentive_opening_probability_fraction_zero)
@@ -1031,7 +1059,9 @@ class Sensitivity():
                         new_param_series.loc[['close_probability_split_max','close_probability_split_mean']] *= 0.95/sum_mean_max
                     new_param_series.loc['close_probability_split_mean'] = 1-new_param_series.loc[['close_probability_split_max','close_probability_split_mean']].sum()
                 if 'close_years_back' in params_to_change:
-                    new_param_series.loc['close_years_back'] = int(10*new_param_series.loc['close_years_back']+3)
+                    new_param_series.loc['close_years_back'] = int(7*new_param_series.loc['close_years_back']+3)
+                if 'reserves_ratio_price_lag' in params_to_change:
+                    new_param_series.loc['reserves_ratio_price_lag'] = int(7*new_param_series['reserves_ratio_price_lag']+3)
                 if 'mine_cost_tech_improvements' in params_to_change:
                     new_param_series.loc['mine_cost_tech_improvements'] *= 5
                 if 'primary_overhead_const' in params_to_change:
@@ -1039,12 +1069,12 @@ class Sensitivity():
                 if all_three_here:
                     new_param_series.loc[['close_probability_split_mean','close_probability_split_min','close_probability_split_max']] /=  new_param_series.loc[['close_probability_split_mean','close_probability_split_min','close_probability_split_max']].sum()
 
-            for param in params_to_change:
+            for param in new_param_series.index:
                 if self.mod.hyperparam.loc[param,'Value']!=0 and param!='primary_overhead_const':
                     self.mod.hyperparam.loc[param,'Value'] = abs(new_param_series.loc[param])*np.sign(self.mod.hyperparam.loc[param,'Value'])
                 else:
                     self.mod.hyperparam.loc[param,'Value'] = new_param_series[param]
-            new_param_series = abs(new_param_series)*np.sign(self.mod.hyperparam.loc[params_to_change,'Value'])
+            new_param_series = abs(new_param_series)*np.sign(self.mod.hyperparam.loc[new_param_series.index,'Value'])
 
             potential_append = self.check_run_append()
             if demand_or_mining=='demand':
@@ -1169,6 +1199,7 @@ class Sensitivity():
         fig.tight_layout()
 
         hyps=self.hyperparam_changing
+        if 'region_specific_price_response' not in hyps and self.demand_or_mining=='demand': hyps = list(hyps)+['region_specific_price_response']
         hyper = pd.concat([big_df.loc['hyperparam'].dropna().loc[i].loc[hyps,'Value'] for i in ind],keys=ind,axis=1)
         if self.demand_or_mining=='demand':
             fig,ax=easy_subplots(4,dpi=self.dpi)
@@ -1182,6 +1213,7 @@ class Sensitivity():
             a.set(title=i,ylabel='RMSE (kt)',xlabel='Elasticity value')
         plt.suptitle('Checking correlation betwen RMSE and parameter value (sensitivity historical_sim_check_demand_result)',fontweight='bold')
         fig.tight_layout()
+        plt.show()
 
     def run_historical_monte_carlo(self, n_scenarios, random_state=220621,sensitivity_parameters=['elas','incentive_opening_probability','improvements','refinery_capacity_fraction_increase_mining'],bayesian_tune=False, n_params=2, n_jobs=3, surrogate_model='ET', log=True):
 
@@ -1301,7 +1333,9 @@ class Sensitivity():
 
         big_df = pd.read_pickle(self.pkl_filename)
         potential_append = self.create_potential_append(big_df=big_df,notes=self.notes,reg_results=[],initialize=True)
-        if type(mod)==demandModel or type(mod)==miningModel or self.overwrite or check_equivalence(big_df, potential_append)[0]:
+        check = self.bayesian_tune or type(mod)==demandModel or type(mod)==miningModel or self.overwrite
+        if not check: check = check or check_equivalence(big_df, potential_append)[0]
+        if check:
             if self.verbosity>-1:
                 print('\tScenario does not already exist, running...')
             if type(mod)==Integration:

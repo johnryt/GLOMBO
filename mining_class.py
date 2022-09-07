@@ -407,12 +407,12 @@ class miningModel():
                 hyperparameters.loc['incentive_subsample_init',:] = 1000, 'initial value for incentive_subsample_series'
 
                 hyperparameters.loc['annual_reserves_ratio_with_initial_production_const',:] = 1.1, 'multiplies by annual demand to determine initial reserves used for incentive pool size'
-                hyperparameters.loc['annual_reserves_ratio_with_initial_production_slope',:] = 0, 'linear change per year of annual demand to determine initial reserves used for incentive pool size'
+                hyperparameters.loc['annual_reserves_ratio_with_initial_production_slope',:] = 0, 'linear change per year of annual demand to determine initial reserves used for incentive pool size, in fraction form (would input 0.1 for 10% increase per year)'
                 hyperparameters.loc['incentive_resources_contained_series',:] = np.array([pd.Series(hyperparameters['Value']['primary_production']*hyperparameters['Value']['annual_reserves_ratio_with_initial_production_const'],self.simulation_time), 'the contained metal in the assumed resources, currently set to be a series with each year having contained metal in resources equal to one year of production'],dtype=object)
                 hyperparameters.loc['incentive_use_resources_contained_series',:] = True, 'whether to use the incentive_resources_contained_series series for determining incentive pool size or to use the incentive_subsample_series series for the number of mines in each year'
                 hyperparameters.loc['primary_price_resources_contained_elas',:] = 0.5, 'percent increase in the resources conatined/incentive pool size when price rises by 1%'
                 hyperparameters.loc['byproduct_price_resources_contained_elas',:] = 0.05, 'percent increase in the resources conatined/incentive pool size when price rises by 1%'
-                hyperparameters.loc['reserves_ratio_price_lag',:] = 0, 'lag on price change price(t-lag)/price(t-lag-1) used for informing incentive pool size change, paired with resources_contained_elas_primary_price (and byproduct if byproduct==True)'
+                hyperparameters.loc['reserves_ratio_price_lag',:] = 7, 'lag on price change price(t-lag)/price(t-lag-1) used for informing incentive pool size change, paired with resources_contained_elas_primary_price (and byproduct if byproduct==True)'
                 hyperparameters.loc['incentive_subsample_series',:] = np.array([pd.Series(hyperparameters['Value']['incentive_subsample_init'],self.simulation_time), 'series with number of mines to select for subsample used for the incentive pool'],dtype=object)
                 hyperparameters.loc['incentive_perturbation_percent',:] = 10, 'percent perturbation for the incentive pool parameters, on resampling from the operating mine pool'
 
@@ -1984,21 +1984,39 @@ class miningModel():
             sim_time = inc.simulation_time
             if h['Value']['demand_series_method']=='yoy':
                 self.demand_series = pd.Series([initial_demand*change**(j-sim_time[0]) for j in sim_time],sim_time)
+                self.demand_series.loc[i] = initial_demand*change**(i-sim_time[0])
+                if i-1 not in self.demand_series.index:
+                    self.demand_series.loc[i-1] = initial_demand*change**(i-1-sim_time[0])
             elif h['Value']['demand_series_method']=='target':
                 self.demand_series = pd.Series(np.linspace(initial_demand,initial_demand*change,len(sim_time)),sim_time)
-
-        self.resources_contained_series.loc[i] = self.demand_series[i-1]*\
-             (h['Value']['annual_reserves_ratio_with_initial_production_const']+
-              h['Value']['annual_reserves_ratio_with_initial_production_slope']*(i-self.simulation_time[0]))
-        if i>self.simulation_time[0]:
+                self.demand_series.loc[i] = initial_demand-change*(i-sim_time[0])
+                if i-1 not in self.demand_series.index:
+                    self.demand_series.loc[i-1] = initial_demand-change*(i-1-sim_time[0])
+        self.resources_contained_series.loc[i] = self.demand_series[i]*\
+             h['Value']['annual_reserves_ratio_with_initial_production_const']
+        if i-1 in self.demand_series.index and (i-1 not in self.resources_contained_series.index or self.resources_contained_series.isna()[i-1]):
+            self.resources_contained_series.loc[i-1] = self.demand_series[i-1]*h['Value']['annual_reserves_ratio_with_initial_production_const']
+        if i>self.simulation_time[0] and h['Value']['reserves_ratio_price_lag']>i-self.simulation_time[0]-1:
+            self.resources_contained_series.loc[i] = self.resources_contained_series[i-1] *\
+                 self.demand_series[i]/self.demand_series[i-1]*\
+                 (1+h['Value']['annual_reserves_ratio_with_initial_production_slope'])
+        elif i>self.simulation_time[0]:
             lag = min([h['Value']['reserves_ratio_price_lag'],i-self.simulation_time[0]-1])
             lag = lag if lag>0 else 0
-            self.resources_contained_series.loc[i] *= (self.primary_price_series[i-lag]/self.primary_price_series[i-lag-1])**h['Value']['primary_price_resources_contained_elas']
+            self.resources_contained_series.loc[i] = self.resources_contained_series[i-1]*\
+                 self.demand_series[i]/self.demand_series[i-1]*\
+                 (1+h['Value']['annual_reserves_ratio_with_initial_production_slope'])*\
+                 (self.primary_price_series[i-lag]/self.primary_price_series[i-lag-1])**h['Value']['primary_price_resources_contained_elas']
             if self.byproduct:
-                self.resources_contained_series.loc[i] *= (self.byproduct_price_series[i-lag]/self.byproduct_price_series[i-lag-1])**h['Value']['byproduct_price_resources_contained_elas']
+                self.resources_contained_series.loc[i] = self.resources_contained_series[i-1]*\
+                     self.demand_series[i]/self.demand_series[i-1]*\
+                     (1+h['Value']['annual_reserves_ratio_with_initial_production_slope'])*\
+                     (self.byproduct_price_series[i-lag]/self.byproduct_price_series[i-lag-1])**h['Value']['byproduct_price_resources_contained_elas']
+
         max_res = self.demand_series[self.simulation_time[0]]*h['Value']['annual_reserves_ratio_with_initial_production_const']*100
         self.resources_contained_series.loc[self.resources_contained_series>max_res] = max_res
         self.reserves_ratio_with_demand_series = self.resources_contained_series/self.demand_series
+
         self.inc = inc
 
     def select_incentive_mines(self):

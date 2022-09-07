@@ -134,11 +134,11 @@ class Integration():
         hyperparameters.loc['mine_cost_og_elas','Value'] = -0.113
         hyperparameters.loc['mine_cost_tech_improvements','Value'] = 0.05
         hyperparameters.loc['resources_contained_elas_primary_price','Value'] = 0.5
-        hyperparameters.loc['close_price_method','Value']='probabilistic'
+        hyperparameters.loc['close_price_method','Value']='max'
         hyperparameters.loc['close_years_back','Value']=3
         hyperparameters.loc['close_probability_split_max','Value']=0.3
         hyperparameters.loc['close_probability_split_mean','Value']=0.5
-        hyperparameters.loc['close_probability_split_min','Value']=0.
+        hyperparameters.loc['close_probability_split_min','Value']=0.2
         hyperparameters.loc['primary_oge_scale','Value'] = 0.399365
         hyperparameters.loc['initial_ore_grade_decline','Value'] = -0.05# 'Initial ore grade for new mines, elasticity to cumulative ore treated'
         hyperparameters.loc['annual_reserves_ratio_with_initial_production_const'] = 1.1

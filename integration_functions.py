@@ -346,7 +346,7 @@ class Sensitivity():
         self.pkl_filename = pkl_filename
         self.params_to_change = params_to_change
         self.n_per_param = n_per_param
-        self.notes = notes
+        self.notes = f'{notes}, price version: {price_to_use}, price rolling: {historical_price_rolling_window}'
         self.scenarios = scenarios
         self.overwrite = OVERWRITE
         self.random_state = random_state
@@ -366,7 +366,8 @@ class Sensitivity():
         if self.overwrite and self.verbosity>0: print('WARNING, YOU ARE OVERWRITING AN EXISTING FILE')
 
         self.demand_params = ['sector_specific_dematerialization_tech_growth','sector_specific_price_response','intensity_response_to_gdp']
-
+        self.historical_data_column_list = ['Total demand','Primary commodity price','Primary supply','Scrap demand','Total production','Primary demand']
+        self.historical_data_column_list = [j for j in self.historical_data_column_list if j in self.historical_data.columns]
     def initialize_big_df(self):
         '''
         Initializes the big dataframe used to save all the results
@@ -438,7 +439,6 @@ class Sensitivity():
                     historical_data = pd.concat([historical_data,historical_price],axis=1).sort_index().dropna(how='all')
             if 'Primary commodity price' in historical_data.columns:
                 historical_data.loc[historical_data.index,'Primary commodity price'] = historical_data['Primary commodity price'].rolling(self.historical_price_rolling_window,min_periods=1,center=True).mean()
-
             original_demand = commodity_inputs['initial_demand']
             original_production = commodity_inputs['Total production, Global']
             original_primary_production = commodity_inputs['primary_production']
@@ -603,7 +603,9 @@ class Sensitivity():
         self.update_changing_base_parameters_series()
         self.initialize_big_df()
         self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct)
-
+        self.mod.primary_commodity_price = self.historical_data['Primary commodity price'].dropna()
+        self.mod.primary_commodity_price = pd.concat([pd.Series(self.mod.primary_commodity_price.iloc[0],np.arange(1900,self.mod.primary_commodity_price.dropna().index[0])),
+                                        self.mod.primary_commodity_price]).sort_index()
         self.mod.historical_data = self.historical_data.copy()
 
         scenario_params_dont_change = ['collection_rate_price_response','direct_melt_price_response','secondary_refined_price_response','refinery_capacity_growth_lag','region_specific_price_response']
@@ -754,7 +756,7 @@ class Sensitivity():
         Initializes the things needed to run the Bayesian optimization
         '''
 
-        self.objective_parameters = self.historical_data.columns[:n_params]
+        self.objective_parameters = self.historical_data_column_list[:n_params]
         self.opt = Optimizer(
             dimensions=[(0.001, 1.0) if (not self.constrain_previously_tuned or _ not in self.updated_commodity_inputs_sub.dropna().index) else (abs(self.updated_commodity_inputs_sub[_])*0.5,abs(self.updated_commodity_inputs_sub[_])*1.5) for _ in self.sensitivity_param],
             base_estimator=surrogate_model,

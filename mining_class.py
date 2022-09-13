@@ -509,7 +509,7 @@ class miningModel():
 
                 hyperparameters.loc['mine_cu_margin_elas','Notes'] = 'capacity utlization elasticity to total cash margin, current value is approximate result of regression attempts; see slide 42 in Group Research Folder_Olivetti\Displacement\04 Presentations\John\Weekly Updates\20210825 Generalization.pptx',
                 hyperparameters.loc['mine_cost_og_elas','Notes'] = 'minesite cost elasticity to ore grade decline'
-                hyperparameters.loc['mine_cost_price_elas','Notes'] = 'minesite cost elasticity to bauxite price'
+                hyperparameters.loc['mine_cost_price_elas','Notes'] = 'minesite cost elasticity to commodity price'
                 hyperparameters.loc['mine_cu0','Notes'] = 'median capacity utlization in 2019, used to determine how mines change CU due to TCM'
                 hyperparameters.loc['mine_tcm0','Notes'] = 'median total cash margin in 2019, used to determine how mines change CU due to TCM'
                 hyperparameters.loc['discount_rate','Notes'] = 'discount rate (fraction, not percent - 0.1=10%), used for NPV/IRR calculation in mine opening decision'

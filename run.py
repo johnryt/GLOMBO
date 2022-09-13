@@ -12,7 +12,7 @@ from scipy import stats
 from random import seed, sample, shuffle
 import warnings
 
-os.chdir('C:\\Users\\ryter\\Dropbox (MIT)\\John MIT\\Research\\generalizationOutside\\generalization') #should i touch this? not sure
+# os.chdir('C:\\Users\\ryter\\Dropbox (MIT)\\John MIT\\Research\\generalizationOutside\\generalization') #should i touch this? not sure
 
 input_file = pd.read_excel('data/case study data.xlsx',index_col=0) #updated the path to the correct path for my laptop
 commodity_inputs = input_file['Au'].dropna() #changed to gold 'Au'
@@ -41,5 +41,5 @@ for i in np.arange(7,n_scen):
     with warnings.catch_warnings():
         warnings.simplefilter('error')
         OVERWRITE = OVERWRITE if i==0 else False
-        s = Sensitivity(filename,ci,OVERWRITE=OVERWRITE,notes='Big sensitivity, scrap demand shock, no collection rate price response',scenarios=scenarios,verbosity=0)
+        s = Sensitivity(pkl_filename=filename,data_folder='data',changing_base_parameters_series=ci,OVERWRITE=OVERWRITE,notes='Big sensitivity, scrap demand shock, no collection rate price response',scenarios=scenarios,verbosity=0)
         s.run_monte_carlo(n_scenarios=2,random_state=220615+i)

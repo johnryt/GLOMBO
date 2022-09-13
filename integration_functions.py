@@ -346,7 +346,7 @@ class Sensitivity():
         self.pkl_filename = pkl_filename
         self.params_to_change = params_to_change
         self.n_per_param = n_per_param
-        self.notes = f'{notes}, price version: {price_to_use}, price rolling: {historical_price_rolling_window}'
+        self.notes = f'{notes}, price version: {price_to_use}, price rolling: {historical_price_rolling_window},'
         self.scenarios = scenarios
         self.overwrite = OVERWRITE
         self.random_state = random_state
@@ -366,8 +366,9 @@ class Sensitivity():
         if self.overwrite and self.verbosity>0: print('WARNING, YOU ARE OVERWRITING AN EXISTING FILE')
 
         self.demand_params = ['sector_specific_dematerialization_tech_growth','sector_specific_price_response','intensity_response_to_gdp']
-        self.historical_data_column_list = ['Total demand','Primary commodity price','Primary supply','Scrap demand','Total production','Primary demand']
+        self.historical_data_column_list = ['Total demand','Primary commodity price','Primary supply','Primary production','Scrap demand','Total production','Primary demand']
         self.historical_data_column_list = [j for j in self.historical_data_column_list if j in self.historical_data.columns]
+
     def initialize_big_df(self):
         '''
         Initializes the big dataframe used to save all the results
@@ -425,7 +426,7 @@ class Sensitivity():
             commodity_inputs = commodity_inputs.dropna()
 
             history_file = pd.read_excel(self.case_study_data_file_path,index_col=0,sheet_name=changing_base_parameters_series)
-            historical_data = history_file.loc[simulation_time[0]:].dropna(axis=1).astype(float)
+            historical_data = history_file.loc[simulation_time].dropna(axis=1).astype(float)
             historical_data.index = historical_data.index.astype(int)
             if self.price_to_use!='case study data':
                 price_update_file = pd.read_excel(self.price_adjustment_results_file_path,index_col=0)
@@ -603,10 +604,11 @@ class Sensitivity():
         self.update_changing_base_parameters_series()
         self.initialize_big_df()
         self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct)
-        self.mod.primary_commodity_price = self.historical_data['Primary commodity price'].dropna()
-        self.mod.primary_commodity_price = pd.concat([pd.Series(self.mod.primary_commodity_price.iloc[0],np.arange(1900,self.mod.primary_commodity_price.dropna().index[0])),
+        if bayesian_tune:
+            self.mod.primary_commodity_price = self.historical_data['Primary commodity price'].dropna()
+            self.mod.primary_commodity_price = pd.concat([pd.Series(self.mod.primary_commodity_price.iloc[0],np.arange(1900,self.mod.primary_commodity_price.dropna().index[0])),
                                         self.mod.primary_commodity_price]).sort_index()
-        self.mod.historical_data = self.historical_data.copy()
+            self.mod.historical_data = self.historical_data.copy()
 
         scenario_params_dont_change = ['collection_rate_price_response','direct_melt_price_response','secondary_refined_price_response','refinery_capacity_growth_lag','region_specific_price_response']
 #         params_to_change = [i for i in self.mod.hyperparam.dropna(how='all').index if ('elas' in i or 'response' in i or 'growth' in i or 'improvements' in i) and i not in scenario_params_dont_change]
@@ -770,7 +772,6 @@ class Sensitivity():
         )
 
         self.rmse_df = pd.DataFrame()
-
 
     def complete_bayesian_trial(self, mods, new_param_series_all, next_parameters, scenario_numbers):
         '''

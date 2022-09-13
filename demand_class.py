@@ -111,7 +111,7 @@ class demandModel():
         intensity_parameters_cu_original = intensity_parameters_cu.copy()
         self.intensity_parameters = intensity_parameters_cu.copy()
 
-        if self.hyperparam['Value']['commodity']=='Au':
+        if self.hyperparam['Value']['commodity'] in ['Au','Ag']:
             gold_vols = pd.read_excel(f'{self.data_folder}/Gold demand volume indicators.xlsx',sheet_name='Volume drivers',index_col=0).loc[2001:]
             gold_vols1 = gold_vols.loc[2001:2019].rolling(self.hyperparam['Value']['gold_rolling_window'],min_periods=1,center=True).mean()
             gold_vols1 = pd.concat([gold_vols1,gold_vols.rolling(5,min_periods=1,center=True).mean().loc[2020:]])

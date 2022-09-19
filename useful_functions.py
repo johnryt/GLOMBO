@@ -350,7 +350,7 @@ def do_a_regress(x,y,ax=0,intercept=True,scatter_color='tab:blue',line_color='k'
     else:
         return pd.Series(m.params).rename({x.name:'slope','x1':'slope'}),m
 
-def easy_subplots(nplots, ncol=4, height_scale=1,width_scale=1,use_subplots=False,**kwargs):
+def easy_subplots(nplots, ncol=4, height_scale=1,width_scale=1,use_subplots=False,width_ratios=None,height_ratios=None,**kwargs):
     '''sets up plt.subplots with the correct number of rows and columns and figsize,
     given number of plots (nplots) and the number of columns (ncol).
     Option to make figures taller or shorter by changing the height_scale.
@@ -363,15 +363,27 @@ def easy_subplots(nplots, ncol=4, height_scale=1,width_scale=1,use_subplots=Fals
         ncol = nplots
     if nplots%3==0 and ncol==4:
         ncol=3
-
     nrows = int(np.ceil(nplots/ncol))
+
+    if width_ratios!=None or height_ratios!=None: use_subplots=True
+    if width_ratios==None: width_ratios=np.repeat(1,ncol)
+    if height_ratios==None: height_ratios=np.repeat(1,nrows)
+
     figsize = (7*ncol*width_scale,height_scale*6*int(np.ceil(nplots/ncol)))
     regular_version = False
     if use_subplots:
-        fig, ax = plt.subplots(nrows,ncol,**kwargs,
-                          figsize=figsize)
+        if 'figsize' in kwargs.keys():
+            fig, ax = plt.subplots(nrows,ncol,**kwargs,
+                            gridspec_kw={'width_ratios':width_ratios,'height_ratios':height_ratios})
+        else:
+            fig, ax = plt.subplots(nrows,ncol,**kwargs,figsize=figsize,
+                            gridspec_kw={'width_ratios':width_ratios,'height_ratios':height_ratios})
+        if 'dpi' in kwargs.keys(): fig.set_dpi(kwargs['dpi'])
     else:
-        fig = plt.figure(**kwargs, figsize = figsize)
+        if 'figsize' in kwargs.keys():
+            fig = plt.figure(**kwargs)
+        else:
+            fig = plt.figure(**kwargs, figsize = figsize)
         ax = []
         for i in np.arange(1,int(np.ceil(nrows*ncol))+1):
             ax += [fig.add_subplot(nrows, ncol, i)]

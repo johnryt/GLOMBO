@@ -114,7 +114,7 @@ class Integration():
         # mining only
         hyperparameters.loc['mining only',:] = np.nan
         hyperparameters.loc['primary_ore_grade_mean',:] = 0.1,'Ore grade mean for lognormal distribution'
-        hyperparameters.loc['use_ml_to_accelerate','Value'] = True
+        hyperparameters.loc['use_ml_to_accelerate','Value'] = False
         hyperparameters.loc['ml_accelerate_initialize_years','Value'] = 20
         hyperparameters.loc['ml_accelerate_every_n_years','Value'] = 5
         hyperparameters.loc['incentive_tuning_option','Value'] = 'pid-2019'
@@ -141,8 +141,9 @@ class Integration():
         hyperparameters.loc['close_probability_split_min','Value']=0.2
         hyperparameters.loc['primary_oge_scale','Value'] = 0.399365
         hyperparameters.loc['initial_ore_grade_decline','Value'] = -0.05# 'Initial ore grade for new mines, elasticity to cumulative ore treated'
-        hyperparameters.loc['annual_reserves_ratio_with_initial_production_const'] = 1.1
-        hyperparameters.loc['primary_overhead_const'] = 0
+        hyperparameters.loc['annual_reserves_ratio_with_initial_production_const','Value'] = 1.1
+        hyperparameters.loc['primary_overhead_const','Value'] = 0
+        hyperparameters.loc['ramp_up_fraction',['Value','Notes']] = np.array([0.02,'fraction of mines in the initial mine generation step that are in any of the ramp up stages (e.g. if ramp_up_year is 3 and ramp_up_fraction is 0.1, then 10% of the mines will have ramp up flag=1, 10% ramp up flag=2, etc.). Value is currently 0.02 based on an initial guess.'],dtype='object')
 
         # demand
         hyperparameters.loc['demand only',:] = np.nan

@@ -759,8 +759,9 @@ class Sensitivity():
         '''
 
         self.objective_parameters = self.historical_data_column_list[:n_params]
+        variance_from_previous = 0.2
         self.opt = Optimizer(
-            dimensions=[(0.001, 1.0) if (not self.constrain_previously_tuned or _ not in self.updated_commodity_inputs_sub.dropna().index) else (abs(self.updated_commodity_inputs_sub[_])*0.5,abs(self.updated_commodity_inputs_sub[_])*1.5) for _ in self.sensitivity_param],
+            dimensions=[(0.001, 1.0) if (not self.constrain_previously_tuned or _ not in self.updated_commodity_inputs_sub.dropna().index) else (abs(self.updated_commodity_inputs_sub[_])*(1-variance_from_previous),abs(self.updated_commodity_inputs_sub[_])*(1+variance_from_previous)) for _ in self.sensitivity_param],
             base_estimator=surrogate_model,
             n_initial_points=20,
             initial_point_generator='random' if surrogate_model=='dummy' else 'lhs',
@@ -806,13 +807,21 @@ class Sensitivity():
         potential_append = self.check_run_append(mod, s_n)
 
         #get scores
-        rmse_list, r2_list = self.get_rmse_r2(mod)
+        if type(mod)==Integration:
+            rmse_list, r2_list = self.get_rmse_r2(mod)
 
-        #add rmse and r2 score in new_param_series to then be added into rmse_df
-        for param, rmse, r2 in zip(self.objective_parameters, rmse_list, r2_list):
-            new_param_series.loc[param+' RMSE'] = rmse[0]
-            new_param_series.loc[param+' R2'] = r2[0]
-        new_param_series = pd.concat([new_param_series],keys=[s_n])
+            #add rmse and r2 score in new_param_series to then be added into rmse_df
+            for param, rmse, r2 in zip(self.objective_parameters, rmse_list, r2_list):
+                new_param_series.loc[param+' RMSE'] = rmse[0]
+                new_param_series.loc[param+' R2'] = r2[0]
+        else:
+            rmse_list, r2_list = self.get_rmse_r2_mining(mod)
+
+            #add rmse and r2 score in new_param_series to then be added into rmse_df
+            for rmse, r2 in zip(rmse_list, r2_list):
+                new_param_series.loc['RMSE'] = rmse[0]
+                new_param_series.loc['R2'] = r2[0]
+
 
         #if we optimise on rmse, return that, else return r2
         n = len(rmse_list)
@@ -857,48 +866,6 @@ class Sensitivity():
         rmse_df = rmse_df[0]
         rmse_df = rmse_df.unstack()
         self.rmse_df = rmse_df.copy()
-
-#         if n_params==1:
-#             best_params = pd.DataFrame(rmse_df.loc[rmse_df['RMSE'].idxmin()].drop('RMSE'))
-#             best_params = best_params.rename(columns={best_params.columns[0]:self.material})
-# #             best_parameters, values = self.ax_client.get_best_parameters()
-#         elif n_params>1:
-#             if not self.using_thresholds:
-#                 best_params = self.ax_client.get_pareto_optimal_parameters()
-#                 best_params = pd.DataFrame(best_params)
-#             else:
-#                 if self.use_rmse_not_r2:
-#                     cost_df = self.rmse_df.loc[:,[i for i in self.rmse_df.columns if 'RMSE' in i]]
-#                 else:
-#                     cost_df = self.rmse_df.loc[:,[i for i in self.rmse_df.columns if 'R2' in i]]
-#                 cost_array = cost_df.values
-#                 cost_df.loc[:,'is_pareto'] = is_pareto_efficient_simple(cost_array)
-#                 self.rmse_df.loc[:,'is_pareto'] = cost_df.is_pareto
-#                 yes = cost_df.loc[cost_df.is_pareto].astype(float)
-#                 no = cost_df.loc[cost_df.is_pareto==False].astype(float)
-#                 best_params = self.rmse_df.copy().loc[self.rmse_df['is_pareto']]
-
-#         path=''
-#         if os.path.exists('data/updated_commodity_inputs.pkl'):
-#             path = 'data/updated_commodity_inputs.pkl'
-#         elif os.path.exists('updated_commodity_inputs.pkl'):
-#             path = 'updated_commodity_inputs.pkl'
-
-#         if path!='':
-#             self.updated_commodity_inputs = pd.read_pickle(path)
-#             if n_params==1:
-#                 for i in best_params.index:
-#                     self.updated_commodity_inputs.loc[i,self.material] = best_params[self.material][i]
-#             elif n_params>1:
-#                 self.updated_commodity_inputs.loc['pareto_'+str(n_params)+'p',self.material] = [best_params]
-#             self.updated_commodity_inputs.to_pickle(path)
-
-#         else:
-#             self.updated_commodity_inputs = best_params.copy()
-#             if os.path.exists('data'):
-#                 self.updated_commodity_inputs.to_pickle('data/updated_commodity_inputs_all.pkl')
-#             else:
-#                 self.updated_commodity_inputs.to_pickle('updated_commodity_inputs_all.pkl')
 
     def get_rmse_r2(self, mod=None):
         #if no mod is provided, use self.mod, otherwise use mod
@@ -945,6 +912,26 @@ class Sensitivity():
 
         return rmse_list, r2_list
 
+    def get_rmse_r2_mining(self, mod=None):
+        #if no mod is provided, use self.mod, otherwise use mod
+        #this is because default model behaviour was to use self.mod but that doesn't work with
+        #having multiple samples per BO iteration
+        if mod is None:
+            mod = self.mod
+
+        rmse_list = []
+        r2_list = []
+
+        sim = mod.supply_series.loc[self.simulation_time]
+        hist = self.historical_data['Primary supply' if 'Primary supply' in self.historical_data.columns else 'Primary production'].loc[self.simulation_time]
+        rmse = mean_squared_error(hist, sim)**0.5
+        r2 = r2_score(hist, sim)
+
+        rmse_list += [(rmse,0)]
+        r2_list+= [(r2,0)]
+
+        return rmse_list, r2_list
+
     def historical_sim_check_demand(self, n_scenarios, surrogate_model='ET', log=True, demand_or_mining='demand'):
         '''
         Varies the parameters for demand (sector_specific_dematerialization_tech_growth,
@@ -952,15 +939,14 @@ class Sensitivity():
         intensity_response_to_gdp) to minimize the RMSE between simulated
         demand and historical.
 
-        Uses Ax Adaptive Experimentation Platform Bayesian Optimization to find these
-        parameters: https://ax.dev/tutorials/gpei_hartmann_service.html,
-        install: https://ax.dev/, pip3 install ax-platform
+        Uses skopt Optimize to optimize the parameters
 
         Adds/updates a dataframe self.updated_commodity_inputs that contains all demand
         updates for all commodities, which is saved in updated_commodity_inputs.pkl
         '''
         self.bayesian_tune = True
         self.demand_or_mining = demand_or_mining
+        self.log = log
         if demand_or_mining=='demand':
             self.pkl_filename = self.pkl_filename.split('.pkl')[0]+'_DEM.pkl'
             self.notes += ' check demand'
@@ -988,14 +974,18 @@ class Sensitivity():
             self.mod = miningModel(verbosity=self.verbosity, simulation_time=self.simulation_time,byproduct=self.byproduct)
             params_to_change = ['primary_oge_scale','mine_cu_margin_elas','mine_cost_og_elas','mine_cost_tech_improvements','mine_cost_price_elas','initial_ore_grade_decline','primary_price_resources_contained_elas','incentive_opening_probability','close_years_back','reserves_ratio_price_lag']
             dimensions = [(0.001,1) for i in params_to_change]
+        mod = self.mod
         self.hyperparam_changing = params_to_change
         if self.verbosity>0: print(params_to_change)
+
+        n_jobs = 1 if demand_or_mining=='demand' else 3
 
         opt = Optimizer(
             dimensions=dimensions,
             base_estimator=surrogate_model,
             n_initial_points=15,
             initial_point_generator='lhs',
+            n_jobs=n_jobs,
             acq_func='gp_hedge',
             acq_optimizer='auto',
             acq_func_kwargs={"kappa": 1.96},
@@ -1003,122 +993,159 @@ class Sensitivity():
         )
 
         self.rmse_df = pd.DataFrame()
+
         for n in np.arange(0,n_scenarios):
+            new_parameters = opt.ask(n_points=n_jobs)
+            mods = []
+            new_param_series_all = []
 
-            if self.timer is not None: self.timer.start_iter()
+            for j in range(n_jobs):
+                if self.timer is not None: self.timer.start_iter()
 
-            if self.verbosity>-1:
-                print(f'Scenario {n+1}/{n_scenarios}')
-            if demand_or_mining=='demand':
-                self.mod = demandModel(verbosity=self.verbosity, simulation_time=self.simulation_time, data_folder=self.data_folder)
-                self.mod.commodity_price_series = self.historical_data['Primary commodity price']
-                self.mod.commodity_price_series = pd.concat([pd.Series(self.mod.commodity_price_series.iloc[0],np.arange(1900,self.historical_data['Primary commodity price'].dropna().index[0])),
-                                                        self.mod.commodity_price_series]).sort_index()
-            else:
-                self.mod = miningModel(verbosity=self.verbosity, simulation_time=self.simulation_time,byproduct=self.byproduct)
-
-                self.mod.primary_price_series = self.historical_data['Primary commodity price'].dropna()
-                self.mod.primary_tcrc_series = pd.Series(np.nan,self.simulation_time)
-                self.mod.primary_price_series = pd.concat([pd.Series(self.mod.primary_price_series.iloc[0],np.arange(1900,self.mod.primary_price_series.dropna().index[0])),
-                                        self.mod.primary_price_series]).sort_index()
-                self.mod.demand_series = self.historical_data['Total demand']
-
-            self.mod.version = '220620'
-
-            ###### CHANGING BASE PARAMETERS ######
-            changing_base_parameters_series = self.changing_base_parameters_series.copy()
-            for base in np.intersect1d(self.mod.hyperparam.index, changing_base_parameters_series.index):
-                if type(base) not in [str]:
-                    self.mod.hyperparam.loc[base,'Value'] = abs(self.changing_base_parameters_series[base])*np.sign(self.mod.hyperparam.loc[base,'Value'])
+                if self.verbosity>-1:
+                    print(f'Scenario {n+1}/{n_scenarios}')
+                if demand_or_mining=='demand':
+                    mod = demandModel(verbosity=self.verbosity, simulation_time=self.simulation_time, data_folder=self.data_folder)
+                    mod.commodity_price_series = self.historical_data['Primary commodity price']
+                    mod.commodity_price_series = pd.concat([pd.Series(mod.commodity_price_series.iloc[0],np.arange(1900,self.historical_data['Primary commodity price'].dropna().index[0])),
+                                                            mod.commodity_price_series]).sort_index()
                 else:
-                    self.mod.hyperparam.loc[base,'Value'] = self.changing_base_parameters_series[base]
+                    mod = miningModel(verbosity=self.verbosity, simulation_time=self.simulation_time,byproduct=self.byproduct)
 
-                if n==0 and self.verbosity>-1:
-                    print(base,changing_base_parameters_series[base])
-            self.hyperparam_copy = self.mod.hyperparam.copy()
+                    mod.primary_price_series = self.historical_data['Primary commodity price'].dropna()
+                    mod.primary_tcrc_series = pd.Series(np.nan,self.simulation_time)
+                    mod.primary_price_series = pd.concat([pd.Series(mod.primary_price_series.iloc[0],np.arange(1900,mod.primary_price_series.dropna().index[0])),
+                                            mod.primary_price_series]).sort_index()
+                    mod.demand_series = self.historical_data['Total demand']
 
-            ###### UPDATING PARAMETERS ######
-            parameters = opt.ask()
-            new_param_series = pd.Series(parameters,params_to_change)
-            if 'sector_specific_price_response' in params_to_change and 'region_specific_price_response' not in params_to_change:
-                new_param_series.loc['region_specific_price_response'] = new_param_series['sector_specific_price_response']
-            if demand_or_mining=='mining':
-                if 'incentive_opening_probability' in params_to_change:
-                    new_param_series.loc['incentive_opening_probability']*=0.5/(1-self.incentive_opening_probability_fraction_zero)
-                    if new_param_series['incentive_opening_probability']>0.5:
-                        new_param_series.loc['incentive_opening_probability'] = 0
-                if 'primary_oge_scale' in params_to_change:
-                    new_param_series.loc['primary_oge_scale']*=0.5
-                if 'initial_ore_grade_decline' in params_to_change:
-                    new_param_series.loc['initial_ore_grade_decline']*=0.5
-                all_three_here = np.all([q in params_to_change for q in ['close_probability_split_max','close_probability_split_mean','close_probability_split_min']])
-                if 'close_probability_split_max' in params_to_change and not all_three_here:
-                    new_param_series.loc['close_probability_split_max'] *= 0.8
-                if 'close_probability_split_mean' in params_to_change and not all_three_here:
-                    new_param_series.loc['close_probability_split_mean'] *= 0.8
-                if 'close_probability_split_max' in params_to_change and 'close_probability_split_mean' in params_to_change and not all_three_here:
-                    sum_mean_max = new_param_series.loc[['close_probability_split_max','close_probability_split_mean']].sum()
-                    if sum_mean_max>0.95:
-                        new_param_series.loc[['close_probability_split_max','close_probability_split_mean']] *= 0.95/sum_mean_max
-                    new_param_series.loc['close_probability_split_mean'] = 1-new_param_series.loc[['close_probability_split_max','close_probability_split_mean']].sum()
-                if 'close_years_back' in params_to_change:
-                    new_param_series.loc['close_years_back'] = int(7*new_param_series.loc['close_years_back']+3)
-                if 'reserves_ratio_price_lag' in params_to_change:
-                    new_param_series.loc['reserves_ratio_price_lag'] = int(7*new_param_series['reserves_ratio_price_lag']+3)
-                if 'mine_cost_tech_improvements' in params_to_change:
-                    new_param_series.loc['mine_cost_tech_improvements'] *= 5
-                if 'primary_overhead_const' in params_to_change:
-                    new_param_series.loc['primary_overhead_const'] = (new_param_series['primary_overhead_const']-0.5)*10
-                if all_three_here:
-                    new_param_series.loc[['close_probability_split_mean','close_probability_split_min','close_probability_split_max']] /=  new_param_series.loc[['close_probability_split_mean','close_probability_split_min','close_probability_split_max']].sum()
+                mod.version = '220620'
 
-            for param in new_param_series.index:
-                if self.mod.hyperparam.loc[param,'Value']!=0 and param!='primary_overhead_const':
-                    self.mod.hyperparam.loc[param,'Value'] = abs(new_param_series.loc[param])*np.sign(self.mod.hyperparam.loc[param,'Value'])
+                ###### CHANGING BASE PARAMETERS ######
+                changing_base_parameters_series = self.changing_base_parameters_series.copy()
+                for base in np.intersect1d(mod.hyperparam.index, changing_base_parameters_series.index):
+                    if type(base) not in [str]:
+                        mod.hyperparam.loc[base,'Value'] = abs(self.changing_base_parameters_series[base])*np.sign(mod.hyperparam.loc[base,'Value'])
+                    else:
+                        mod.hyperparam.loc[base,'Value'] = self.changing_base_parameters_series[base]
+
+                    if n==0 and self.verbosity>-1:
+                        print(base,changing_base_parameters_series[base])
+                self.hyperparam_copy = mod.hyperparam.copy()
+
+                ###### UPDATING PARAMETERS ######
+                if n_jobs==1:
+                    new_param_series = pd.Series(new_parameters[0],params_to_change)
                 else:
-                    self.mod.hyperparam.loc[param,'Value'] = new_param_series[param]
-            new_param_series = abs(new_param_series)*np.sign(self.mod.hyperparam.loc[new_param_series.index,'Value'])
+                    new_param_series = pd.Series(new_parameters[j],params_to_change)
+                if 'sector_specific_price_response' in params_to_change and 'region_specific_price_response' not in params_to_change:
+                    new_param_series.loc['region_specific_price_response'] = new_param_series['sector_specific_price_response']
+                if demand_or_mining=='mining':
+                    if 'incentive_opening_probability' in params_to_change:
+                        new_param_series.loc['incentive_opening_probability']*=0.5/(1-self.incentive_opening_probability_fraction_zero)
+                        if new_param_series['incentive_opening_probability']>0.5:
+                            new_param_series.loc['incentive_opening_probability'] = 0
+                    if 'primary_oge_scale' in params_to_change:
+                        new_param_series.loc['primary_oge_scale']*=0.5
+                    if 'initial_ore_grade_decline' in params_to_change:
+                        new_param_series.loc['initial_ore_grade_decline']*=0.5
+                    all_three_here = np.all([q in params_to_change for q in ['close_probability_split_max','close_probability_split_mean','close_probability_split_min']])
+                    if 'close_probability_split_max' in params_to_change and not all_three_here:
+                        new_param_series.loc['close_probability_split_max'] *= 0.8
+                    if 'close_probability_split_mean' in params_to_change and not all_three_here:
+                        new_param_series.loc['close_probability_split_mean'] *= 0.8
+                    if 'close_probability_split_max' in params_to_change and 'close_probability_split_mean' in params_to_change and not all_three_here:
+                        sum_mean_max = new_param_series.loc[['close_probability_split_max','close_probability_split_mean']].sum()
+                        if sum_mean_max>0.95:
+                            new_param_series.loc[['close_probability_split_max','close_probability_split_mean']] *= 0.95/sum_mean_max
+                        new_param_series.loc['close_probability_split_mean'] = 1-new_param_series.loc[['close_probability_split_max','close_probability_split_mean']].sum()
+                    if 'close_years_back' in params_to_change:
+                        new_param_series.loc['close_years_back'] = int(7*new_param_series.loc['close_years_back']+3)
+                    if 'reserves_ratio_price_lag' in params_to_change:
+                        new_param_series.loc['reserves_ratio_price_lag'] = int(7*new_param_series['reserves_ratio_price_lag']+3)
+                    if 'mine_cost_tech_improvements' in params_to_change:
+                        new_param_series.loc['mine_cost_tech_improvements'] *= 5
+                    if 'primary_overhead_const' in params_to_change:
+                        new_param_series.loc['primary_overhead_const'] = (new_param_series['primary_overhead_const']-0.5)*10
+                    if all_three_here:
+                        new_param_series.loc[['close_probability_split_mean','close_probability_split_min','close_probability_split_max']] /=  new_param_series.loc[['close_probability_split_mean','close_probability_split_min','close_probability_split_max']].sum()
 
-            potential_append = self.check_run_append()
-            if demand_or_mining=='demand':
-                sim = self.mod.demand.sum(axis=1).loc[self.simulation_time]
-                hist = self.historical_data['Total demand'].loc[self.simulation_time]
-            else:
-                sim = self.mod.supply_series.loc[self.simulation_time]
-                hist = self.historical_data['Primary supply' if 'Primary supply' in self.historical_data.columns else 'Primary production'].loc[self.simulation_time]
-            rmse = mean_squared_error(hist, sim)**0.5
-            r2 = r2_score(hist, sim)
-            # ((self.mod.demand.sum(axis=1)-self.historical_data['Total demand'])**2).loc[self.simulation_time].astype(float).sum()**0.5
-            new_param_series.loc['RMSE'] = rmse
-            new_param_series.loc['R2'] = r2
-            new_param_series = pd.concat([new_param_series],keys=[n])
-            self.rmse_df = pd.concat([self.rmse_df,new_param_series]).astype(float)
+                for param in new_param_series.index:
+                    if mod.hyperparam.loc[param,'Value']!=0 and param!='primary_overhead_const':
+                        mod.hyperparam.loc[param,'Value'] = abs(new_param_series.loc[param])*np.sign(mod.hyperparam.loc[param,'Value'])
+                    else:
+                        mod.hyperparam.loc[param,'Value'] = new_param_series[param]
+                new_param_series = abs(new_param_series)*np.sign(mod.hyperparam.loc[new_param_series.index,'Value'])
 
-            if self.use_rmse_not_r2:
-                if log: opt.tell(parameters, np.log(rmse))
-                else: opt.tell(parameters, rmse)
-            else:
-                #r2 is [-inf, 4] so we change it to [1, inf] to use in log to that it becomes [0, inf]
-                #+4 intead of +5 would have made it into [-inf, inf]; not good
-                if log: opt.tell(parameters, np.log(-r2+5))
-                #we flip the sign because skopt only minimises
-                else: opt.tell(parameters, -r2)
+                if n_jobs>1:
+                    self.mod = mod
+                    mods.append(mod)
+                    new_param_series_all.append(new_param_series)
+                    #output is of the form [(score_0, new_params_0, potential_append_0), (score_1, new_params_1, potential_append_0),
+                else:
+                    self.mod = mod
+                    potential_append = self.check_run_append(mod)
+                    self.mod = mod
 
-            big_df = pd.read_pickle(self.pkl_filename)
-            if potential_append is None:
-                raise Exception("Scenario has already been run, this case has not been implemented yet. Ask Luca Montanelli why.")
-            big_df = pd.concat([big_df,potential_append],axis=1)
+                    if demand_or_mining=='demand':
+                        sim = mod.demand.sum(axis=1).loc[self.simulation_time]
+                        hist = self.historical_data['Total demand'].loc[self.simulation_time]
+                    else:
+                        sim = mod.supply_series.loc[self.simulation_time]
+                        hist = historical_data['Primary supply' if 'Primary supply' in self.historical_data.columns else 'Primary production'].loc[self.simulation_time]
+                    rmse = mean_squared_error(hist, sim)**0.5
+                    r2 = r2_score(hist, sim)
+                    # ((self.mod.demand.sum(axis=1)-self.historical_data['Total demand'])**2).loc[self.simulation_time].astype(float).sum()**0.5
+                    new_param_series.loc['RMSE'] = rmse
+                    new_param_series.loc['R2'] = r2
+                    new_param_series = pd.concat([new_param_series],keys=[n])
+                    self.rmse_df = pd.concat([self.rmse_df,new_param_series]).astype(float)
 
-            big_df.to_pickle(self.pkl_filename)
+                    if self.use_rmse_not_r2:
+                        if log: opt.tell(new_parameters[0], np.log(rmse))
+                        else: opt.tell(new_parameters[0], rmse)
+                    else:
+                        #r2 is [-inf, 4] so we change it to [1, inf] to use in log to that it becomes [0, inf]
+                        #+4 intead of +5 would have made it into [-inf, inf]; not good
+                        if log: opt.tell(parameters, np.log(-r2+5))
+                        #we flip the sign because skopt only minimises
+                        else: opt.tell(parameters, -r2)
 
-            if self.timer is not None: self.timer.end_iter()
+                    big_df = pd.read_pickle(self.pkl_filename)
+                    if potential_append is None:
+                        raise Exception("Scenario has already been run, this case has not been implemented yet. Ask Luca Montanelli why.")
+                    big_df = pd.concat([big_df,potential_append],axis=1)
 
+                    big_df.to_pickle(self.pkl_filename)
+
+                    if self.timer is not None: self.timer.end_iter()
+
+            if n_jobs>1:
+                scenario_numbers=range(n_jobs*(n-1)+1, n_jobs*n+1)
+                output = Parallel(n_jobs=n_jobs)(delayed(self.skopt_run_score)(mod, param_series, s_n) for mod, param_series, s_n in zip(mods, new_param_series_all, scenario_numbers))
+
+                #give scores to skopt
+                opt.tell(new_parameters, [out[0] for out in output])
+
+                #save new_param_series in rmse_df
+                for new_param_series in [out[1] for out in output]:
+                    self.rmse_df = pd.concat([self.rmse_df, new_param_series])
+
+                #save scenario results in pickle file
+                big_df = pd.read_pickle(self.pkl_filename)
+                for potential_append in [out[2] for out in output]:
+                    if potential_append is None:
+                        raise Exception("Scenario has already been run, this case has not been implemented yet. Ask Luca Montanelli why.")
+                    big_df = pd.concat([big_df,potential_append],axis=1)
+
+                big_df.to_pickle(self.pkl_filename)
+                if self.verbosity>-1:
+                    print('\tScenario successfully saved\n')
         rmse_df = self.rmse_df.copy()
         rmse_df.index = pd.MultiIndex.from_tuples(rmse_df.index)
         rmse_df = rmse_df[0]
         rmse_df = rmse_df.unstack()
-        self.rmse_df = rmse_df.copy()
-        best_params = pd.DataFrame(rmse_df.loc[rmse_df.where(rmse_df!=0).dropna()['RMSE'].idxmin()])
+        self.rmse_df = rmse_df.copy().astype(float)
+        best_params = pd.DataFrame(rmse_df.loc[rmse_df.where(rmse_df!=0).dropna()['RMSE'].astype(float).idxmin()])
         if 'RMSE' in best_params.index:
             best_params.drop('RMSE',inplace=True)
         if 'R2' in best_params.index:
@@ -1387,7 +1414,8 @@ class Sensitivity():
                     notes += ', {}={}'.format(zz,mod.hyperparam['Value'][zz])
 
             if type(mod)==Integration: reg_results = create_result_df(mod)
-            elif type(mod) == demandModel: reg_results = pd.concat([mod.demand.sum(axis=1),mod.commodity_price_series],axis=1,keys=['Total demand','Primary commodity price'])
+            elif type(mod) == demandModel:
+                reg_results = pd.concat([mod.demand.sum(axis=1),mod.commodity_price_series],axis=1,keys=['Total demand','Primary commodity price'])
             elif type(mod) == miningModel: reg_results = pd.concat([mod.supply_series,mod.primary_price_series,mod.demand_series],axis=1,keys=['Primary supply','Primary commodity price','Total demand'])
             potential_append = self.create_potential_append(big_df=big_df,notes=notes,reg_results=reg_results,initialize=False, mod=mod)
 

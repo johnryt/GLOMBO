@@ -39,7 +39,7 @@ class Individual():
     - material: str, Al, Steel, etc., in the format of the case study data.xlsx file column/sheet names. Not necessary if giving the filename input. The combination of material and n_params can be used to get specific files, but they have to match the aluminum_run_hist_3p.pkl format and be in the same folder as this file. Easier to just give the filename.
     - n_params: int, can be used with the material input to get the file. If filename is given, can be used to only plot a smaller number of columns (where n_params is any integer <= the number of parameters used in run_historical_monte_carlo()). This can be particularly useful when calling the find_pareto function, so you can see the tradeoff between just the two parameters.
     - filename: str, the pickle path/filename produced by your Sensitivity() run.
-    - historical_data_filename: str, the path/filename to access the case study data excel file
+    - historical_data_file_path: str, the path/filename to access the case study data excel file
     - rmse_not_mae: bool, True means root mean squared error is used to calculate the error and select the best-performing scenarios, while False means the mean absolute error is used.
     - drop_no_price_elasticitiy: bool, True means that the price elasticity to SD must be nonzero and all scenarios where price elasticity to SD (primary_commodity_price_elas_sd in hyperparam) are dropped. False means we leave them in.
     - weight_price: float, allows scaling of the normalized Primary commodity price RMSE/MAE such that NORM SUM and NORM SUM OBJ ONLY rows will consider price error more or less heavily. Is in exponential form.
@@ -66,18 +66,25 @@ class Individual():
         - func indiv.plot_results(): produces many different plots you can use to try and understand the model outputs. Plots the best overall scenario over time (using NORM SUM or NORM SUM OBJ ONLY) for each objective to allow comparison, plots a heatmap of the hyperparameter values for the best n scenarios, plots the hyperparameter distributions, plots the hyperparameter values vs the error value
     '''
 
-    def __init__(self,material='Al',n_params=3,filename='',historical_data_filename='',rmse_not_mae=True, drop_no_price_elasticity=True, weight_price=1, dpi=50, price_rolling=1):
+    def __init__(self,material='Al',n_params=3,filename='',historical_data_path=None,rmse_not_mae=True, drop_no_price_elasticity=True, weight_price=1, dpi=50, price_rolling=1):
         self.material = material
         self.price_rolling = price_rolling
         self.n_params = n_params
         self.filename = filename
-        self.historical_data_filename = historical_data_filename
+        element_commodity_map = {'Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungsten','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
+        commodity_element_map = dict(zip(element_commodity_map.values(),element_commodity_map.keys()))
+        if filename!='':
+            if '/' in filename: filename=filename.split('/')[1]
+            self.material = commodity_element_map[filename.split('_')[0].capitalize()]
         self.rmse_not_mae = rmse_not_mae
         self.drop_no_price_elasticity = drop_no_price_elasticity
         self.weight_price = weight_price
-        self.get_results()
         self.dpi = dpi
+        self.historical_data_path = 'generalization/data/' if historical_data_path==None else historical_data_path
+        self.historical_data_file_path = self.historical_data_path+'case study data.xlsx'
+        self.price_adjustment_results_file_path = self.historical_data_path+'price adjustment results.xlsx'
 
+        self.get_results()
 
     def get_results(self):
         '''
@@ -85,20 +92,45 @@ class Individual():
         '''
         try:
             if '_DEM' in self.filename or '_mining' in self.filename:
+                self.demand_flag = '_DEM' in self.filename
                 self.big_df = pd.read_pickle(self.filename)
                 big_df = self.big_df.copy()
-                if self.historical_data_filename=='':
-                    self.historical_data_filename='generalization/data/case study data.xlsx'
-                self.historical_data = pd.read_excel(self.historical_data_filename,sheet_name=self.material,index_col=0).loc[2001:].astype(float)
+                self.simulated_demand = pd.concat([big_df.loc['results'][i]['Total demand'] for i in big_df.columns],keys=big_df.columns,axis=1).loc[2001:2019]
+                self.historical_data = pd.read_excel(self.historical_data_file_path,sheet_name=self.material,index_col=0).loc[self.simulated_demand.index].astype(float)
                 self.historical_data.index = self.historical_data.index.astype(int)
+                self.historical_data_column_list = ['Total demand','Primary commodity price','Primary supply','Scrap demand','Total production','Primary demand']
+                self.historical_data_column_list = [j for j in self.historical_data_column_list if j in self.historical_data.columns]
+
+                notes = self.big_df[0]['notes']
+                if 'price rolling: ' in notes:
+                    self.price_rolling = notes.split('price rolling: ')[1].split(',')[0]
+                    try: self.price_rolling = int(self.price_rolling)
+                    except: self.price_rolling = int(self.price_rolling.split()[0])
+                if 'price version: ' in notes:
+                    price_to_use = notes.split('price version: ')[1].split(',')[0]
+                    commodity = self.filename if '/' not in self.filename else self.filename.split('/')[1]
+                    commodity = commodity.split('_')[0].capitalize()
+                    if price_to_use!='case study data':
+                        price_update_file = pd.read_excel(self.price_adjustment_results_file_path,index_col=0)
+                        price_map = {'log':'log('+commodity+')',  'diff':'∆'+commodity,  'original':commodity+' original'}
+                        historical_price = price_update_file[price_map[price_to_use]].astype(float)
+                        historical_price.name = 'Primary commodity price'
+                        if 'Primary commodity price' in self.historical_data.columns:
+                            self.historical_data = pd.concat([self.historical_data.drop('Primary commodity price',axis=1),historical_price],axis=1).sort_index().dropna(how='all')
+                        else:
+                            self.historical_data = pd.concat([self.historical_data,historical_price],axis=1).sort_index().dropna(how='all')
                 if 'Primary commodity price' in self.historical_data.columns:
                     self.historical_data.loc[:,'Primary commodity price'] = self.historical_data.loc[:,'Primary commodity price'].rolling(self.price_rolling,min_periods=1,center=True).mean()
-                self.simulated_demand = pd.concat([big_df.loc['results'][i]['Total demand'] for i in big_df.columns],keys=big_df.columns,axis=1).loc[2001:2019]
                 self.price =  pd.concat([big_df.loc['results'][i]['Primary commodity price'] for i in big_df.columns],keys=big_df.columns,axis=1).loc[2001:2019]
+                self.hyperparam =  pd.concat([big_df.loc['hyperparam'][i] for i in big_df.columns],keys=big_df.columns,axis=1)
                 if 'Primary supply' in big_df.loc['results'][big_df.columns[0]].columns:
                     self.mine_supply = pd.concat([big_df.loc['results'][i]['Primary supply'] for i in big_df.columns],keys=big_df.columns,axis=1).loc[2001:2019]
+                if 'rmse_df' in big_df.index:
+                    self.rmse_df = big_df.loc['rmse_df'].iloc[-1][0]
+                    self.rmse_df.index = pd.MultiIndex.from_tuples(self.rmse_df.index)
+                    self.rmse_df = self.rmse_df.unstack(0)
             else:
-                self.results, self.hyperparam, self.historical_data = self.get_results_hyperparam_history()
+                self.get_results_hyperparam_history()
         except Exception as e:
             print('Files within current path:')
             self.check_available_files()
@@ -121,7 +153,7 @@ class Individual():
         material = self.material
         n_params = self.n_params
         filename = self.filename
-        historical_data_filename = self.historical_data_filename
+        historical_data_file_path = self.historical_data_file_path
         material_map={'Al':'aluminum','Steel':'steel'}
         if n_params==1 and filename=='':
             filename = material_map[material]+'_run_hist.pkl'
@@ -142,14 +174,34 @@ class Individual():
             results = results.loc[idx[cols,:],:].copy()
             hyperparameters = hyperparameters[cols].copy()
 
-        if historical_data_filename=='':
-            historical_data_filename='generalization/data/case study data.xlsx'
-        historical_data = pd.read_excel(historical_data_filename,sheet_name=material,index_col=0).loc[2001:].astype(float)
+        historical_data = pd.read_excel(historical_data_file_path,sheet_name=material,index_col=0).loc[2001:].astype(float)
         historical_data.index = historical_data.index.astype(int)
+        self.historical_data_column_list = ['Total demand','Primary commodity price','Primary supply','Scrap demand','Total production','Primary demand']
+        self.historical_data_column_list = [j for j in self.historical_data_column_list if j in historical_data.columns]
+
+        notes = big_df[0]['notes']
+        if 'price rolling: ' in notes:
+            self.price_rolling = notes.split('price rolling: ')[1].split(',')[0]
+            try: self.price_rolling = int(self.price_rolling)
+            except: self.price_rolling = int(self.price_rolling.split()[0])
+        if 'price version: ' in notes:
+            price_to_use = notes.split('price version: ')[1].split(',')[0]
+            commodity = self.filename if '/' not in self.filename else self.filename.split('/')[1]
+            commodity = commodity.split('_')[0].capitalize()
+            if price_to_use!='case study data':
+                price_update_file = pd.read_excel(self.price_adjustment_results_file_path,index_col=0)
+                price_map = {'log':'log('+commodity+')',  'diff':'∆'+commodity,  'original':commodity+' original'}
+                historical_price = price_update_file[price_map[price_to_use]].astype(float)
+                historical_price.name = 'Primary commodity price'
+                if 'Primary commodity price' in historical_data.columns:
+                    historical_data = pd.concat([historical_data.drop('Primary commodity price',axis=1),historical_price],axis=1).sort_index().dropna(how='all')
+                else:
+                    historical_data = pd.concat([historical_data,historical_price],axis=1).sort_index().dropna(how='all')
+
         if 'Primary commodity price' in historical_data.columns:
             historical_data.loc[:,'Primary commodity price'] = historical_data.loc[:,'Primary commodity price'].rolling(self.price_rolling,min_periods=1,center=True).mean()
 
-        self.objective_params = historical_data.columns[:n_params]
+        self.objective_params = self.historical_data_column_list[:n_params]
         self.objective_results_map = {'Total demand':'Total demand','Primary commodity price':'Refined price',
                                  'Primary demand':'Conc. demand','Primary supply':'Mine production',
                                 'Conc. SD':'Conc. SD','Scrap SD':'Scrap SD','Ref. SD':'Ref. SD'}
@@ -174,10 +226,15 @@ class Individual():
 
         self.big_df = big_df.copy()
 
+        if 'rmse_df' in big_df.index:
+            self.rmse_df = big_df.loc['rmse_df'].iloc[-1][0]
+            self.rmse_df.index = pd.MultiIndex.from_tuples(self.rmse_df.index)
+            self.rmse_df = self.rmse_df.unstack(0)
+
         if 'mine_data' in big_df.index:
             self.mine_data = pd.concat([big_df[i]['mine_data'] for i in big_df.columns],keys=big_df.columns)
             self.mine_data.index.set_names(['scenario','year','mine_id'],inplace=True)
-        return results.astype(float), hyperparameters, historical_data.astype(float)
+        self.results, self.hyperparam, self.historical_data = results.astype(float), hyperparameters, historical_data.astype(float)
 
     def plot_best_all(self):
         '''
@@ -362,25 +419,40 @@ class Individual():
         if plot_best_params:
             self.plot_best_scenario_sd(include_sd=include_sd, plot_supply_demand_stack=plot_supply_demand_stack, best=best_ind)
 
-    def plot_demand_results(self):
+    def plot_demand_results(self, mining=False, n_best=25):
         '''
         plots the demand results, with historical and best-fit scenarios using thicker lines and all others semi-transparent thin lines
         '''
-        historical_demand = self.historical_data['Total demand']
-        simulated_demand = self.simulated_demand.copy()
+        if self.demand_flag:
+            historical_demand = self.historical_data['Total demand']
+            simulated_demand = self.simulated_demand.copy()
+        else:
+            historical_demand = self.historical_data['Primary supply']
+            simulated_demand = self.mine_supply.copy()
         simulated_demand, historical_demand, unit = self.get_unit(simulated_demand, historical_demand, 'Demand')
         rmse = (simulated_demand.subtract(historical_demand,axis=0)**2).sum()**0.5
         best = simulated_demand[rmse.idxmin()]
-        fig,ax = easy_subplots(1,dpi=self.dpi)
-        simulated_demand.plot(ax=ax[0],linewidth=1,alpha=0.5,legend=False)
+        best_n = simulated_demand.loc[:,rmse.sort_values().tail(n_best).index]
+        fig,ax = easy_subplots(3,dpi=self.dpi)
+        best_n.plot(ax=ax[0],linewidth=1,alpha=0.5,legend=False)
         best.plot(ax=ax[0],linewidth=4,color='blue')
         historical_demand.plot(ax=ax[0],linewidth=4,color='k').grid(axis='x')
         material = self.filename.split('_')[0]
         material = material if '/' not in material else material.split('/')[1]
-        ax[0].set(title='Historical '+material+' demand',xlabel='Years',ylabel=material.title()+' demand ('+unit+')')
+        if self.demand_flag:
+            ax[0].set(title='Historical '+material+' demand',xlabel='Years',ylabel=f'{material} demand ({unit})'.capitalize())
+        else:
+            ax[0].set(title='Historical '+material+' mine production',xlabel='Years',ylabel=f'{material} production ({unit})'.capitalize())
         custom_lines = [Line2D([0], [0], color='k', lw=4),
                         Line2D([0], [0], color='blue', lw=4)]
         ax[0].legend(custom_lines,['Historical','Simulated'],loc='upper left')
+        best.name = 'Simulated'
+        best.plot(ax=ax[1],linewidth=4,color='blue',label='Simulated')
+        historical_demand.loc[best.index].plot(ax=ax[1],linewidth=4,color='k',label='Historical').grid(axis='x')
+        ax[1].legend()
+        ax[1].set(title=f'Historical {material} mine production',xlabel='Years',ylabel=f'{material} production ({unit})'.capitalize())
+
+        do_a_regress(best.astype(float),historical_demand.loc[best.index].astype(float),ax=ax[2])
 
     def get_unit(self, simulated_demand, historical_demand, param):
         if 'price' in param.lower():

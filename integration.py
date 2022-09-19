@@ -133,7 +133,7 @@ class Integration():
         hyperparameters.loc['mine_cost_price_elas','Value'] = 0.125
         hyperparameters.loc['mine_cost_og_elas','Value'] = -0.113
         hyperparameters.loc['mine_cost_tech_improvements','Value'] = 0.05
-        hyperparameters.loc['resources_contained_elas_primary_price','Value'] = 0.5
+        hyperparameters.loc['primary_price_resources_contained_elas','Value'] = 0.5
         hyperparameters.loc['close_price_method','Value']='max'
         hyperparameters.loc['close_years_back','Value']=3
         hyperparameters.loc['close_probability_split_max','Value']=0.3

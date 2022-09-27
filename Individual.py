@@ -387,7 +387,13 @@ class Individual():
 
         if plot_hyperparam_heatmap:
             plt.figure(figsize=(1.2*n_best,10),dpi=self.dpi)
-            sns.heatmap(best_hyperparam,yticklabels=True,annot=True)
+            heat = best_hyperparam.copy()
+            while (heat.max(axis=1)>1).any():
+                lrg=heat.max(axis=1)>1
+                lrg=lrg[lrg].index
+                heat.loc[lrg,:] /= 10
+                heat.rename(dict(zip(lrg,[i+'*' for i in lrg])),inplace=True)
+            sns.heatmap(heat,yticklabels=True,annot=True)
 
         if plot_hyperparam_distributions:
             breaks = np.arange(0,int(np.ceil(len(ind)/n_per_plot)))
@@ -439,6 +445,7 @@ class Individual():
         historical_demand.plot(ax=ax[0],linewidth=4,color='k').grid(axis='x')
         material = self.filename.split('_')[0]
         material = material if '/' not in material else material.split('/')[1]
+
         if self.demand_flag:
             ax[0].set(title='Historical '+material+' demand',xlabel='Years',ylabel=f'{material} demand ({unit})'.capitalize())
         else:
@@ -450,7 +457,10 @@ class Individual():
         best.plot(ax=ax[1],linewidth=4,color='blue',label='Simulated')
         historical_demand.loc[best.index].plot(ax=ax[1],linewidth=4,color='k',label='Historical').grid(axis='x')
         ax[1].legend()
-        ax[1].set(title=f'Historical {material} mine production',xlabel='Years',ylabel=f'{material} production ({unit})'.capitalize())
+        if self.demand_flag:
+            ax[1].set(title=f'Historical {material} demand',xlabel='Years',ylabel=f'{material} demand ({unit})'.capitalize())
+        else:
+            ax[1].set(title=f'Historical {material} mine production',xlabel='Years',ylabel=f'{material} production ({unit})'.capitalize())
 
         do_a_regress(best.astype(float),historical_demand.loc[best.index].astype(float),ax=ax[2])
 
@@ -460,11 +470,12 @@ class Individual():
         else:
             min_simulated = abs(simulated_demand).min() if len(simulated_demand.shape)<=1 else abs(simulated_demand).min().min()
             max_simulated = abs(simulated_demand).max() if len(simulated_demand.shape)<=1 else abs(simulated_demand).max().max()
-            if min(historical_demand.min(),min_simulated)>1000:
+            mean_simulated = abs(simulated_demand).mean() if len(simulated_demand.shape)<=1 else abs(simulated_demand).mean().mean()
+            if np.mean([historical_demand.mean(),mean_simulated])>1000:
                 historical_demand /= 1000
                 simulated_demand /= 1000
                 unit = 'Mt'
-            elif max(historical_demand.max(),max_simulated)<1:
+            elif np.mean([historical_demand.mean(),mean_simulated])<1:
                 historical_demand *= 1000
                 simulated_demand *= 1000
                 unit = 't'
@@ -473,17 +484,17 @@ class Individual():
         return simulated_demand, historical_demand, unit
 
     def get_unit_df(self, res):
-        maxx, minn = abs(res).max().max(), abs(res).min().min()
+        maxx, minn, mean = abs(res).max().max(), abs(res).min().min(), abs(res).mean().mean()
         if np.any([i in res.columns[0].lower() for i in ['price','cost','tcrc','spread']]):
             unit = ' (USD/t)'
         elif 'CU' in res.columns[0] or 'SR' in res.columns[0]:
             unit = ''
         elif 'grade' in res.columns[0]:
             unit = ' (%)'
-        elif minn>1000:
+        elif mean>1000:
             res/=1000
             unit=' (Mt)'
-        elif maxx<1:
+        elif mean<1:
             res*=1000
             unit=' (t)'
         else:

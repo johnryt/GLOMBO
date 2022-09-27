@@ -707,7 +707,8 @@ class Sensitivity():
                             new_param_series.loc['primary_overhead_const'] = (new_param_series['primary_overhead_const']-0.5)*1
                         for param in params_to_change:
                             if type(self.mod.hyperparam['Value'][param])!=bool and param!='primary_overhead_const':
-                                self.mod.hyperparam.loc[param,'Value'] = new_param_series[param]*np.sign(self.mod.hyperparam.loc[param,'Value'])
+                                new_param_series.loc[param] = abs(new_param_series[param])*np.sign(self.mod.hyperparam.loc[param,'Value'])
+                                self.mod.hyperparam.loc[param,'Value'] = abs(new_param_series[param])*np.sign(self.mod.hyperparam.loc[param,'Value'])
                             else:
                                 self.mod.hyperparam.loc[param,'Value'] = new_param_series[param]
 
@@ -1084,10 +1085,10 @@ class Sensitivity():
 
                 for param in new_param_series.index:
                     if mod.hyperparam.loc[param,'Value']!=0 and param!='primary_overhead_const':
+                        new_param_series.loc[param] = abs(new_param_series[param])*np.sign(self.mod.hyperparam.loc[param,'Value'])
                         mod.hyperparam.loc[param,'Value'] = abs(new_param_series.loc[param])*np.sign(mod.hyperparam.loc[param,'Value'])
                     else:
                         mod.hyperparam.loc[param,'Value'] = new_param_series[param]
-                new_param_series = abs(new_param_series)*np.sign(mod.hyperparam.loc[new_param_series.index,'Value'])
 
                 if n_jobs>1:
                     self.mod = mod

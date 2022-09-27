@@ -71,6 +71,7 @@ def init_plot2(fontsize=20,figsize=(8,5.5),font='Arial',font_family='sans-serif'
         'axes.labelsize': fontsize,
         'font.size': fontsize,
         'axes.titlesize':fontsize+1,
+        'axes.titleweight':font_style,
         'figure.titlesize':fontsize+1,
         'legend.fontsize': fontsize,
         'xtick.labelsize': fontsize,

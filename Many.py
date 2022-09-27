@@ -10,6 +10,7 @@ from sklearn.ensemble import RandomForestRegressor, ExtraTreesRegressor, Gradien
 from matplotlib.lines import Line2D
 from sklearn.preprocessing import StandardScaler
 import shap
+from Individual import Individual
 
 class Many():
     def __init__(self, data_folder=None, pkl_folder=None):
@@ -44,7 +45,7 @@ class Many():
                                incentive_opening_probability_fraction_zero=0)
             self.shist.historical_sim_check_demand(n_runs,demand_or_mining='mining')
 
-    def run_all_integration(self, n_runs=200, commodities=None):
+    def run_all_integration(self, n_runs=200, commodities=None, normalize_objectives=False, constrain_previously_tuned=True):
         commodities = self.ready_commodities if commodities==None else commodities
         for material in commodities:
             print('-'*40)
@@ -59,7 +60,7 @@ class Many():
                             additional_base_parameters=pd.Series(1,['refinery_capacity_growth_lag']),
                             simulation_time=np.arange(2001,2020), include_sd_objectives=False,
                             OVERWRITE=True,verbosity=0,historical_price_rolling_window=5,
-                            constrain_previously_tuned=True)
+                            constrain_previously_tuned=constrain_previously_tuned, normalize_objectives=normalize_objectives)
             sensitivity_parameters = [
                 'pri CU price elas',
                 'sec CU price elas',

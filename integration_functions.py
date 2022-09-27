@@ -368,6 +368,7 @@ class Sensitivity():
         self.demand_params = ['sector_specific_dematerialization_tech_growth','sector_specific_price_response','intensity_response_to_gdp']
         self.historical_data_column_list = ['Total demand','Primary commodity price','Primary supply','Primary production','Scrap demand','Total production','Primary demand']
         self.historical_data_column_list = [j for j in self.historical_data_column_list if j in self.historical_data.columns]
+        self.demand_or_mining = None
 
     def initialize_big_df(self):
         '''
@@ -376,7 +377,7 @@ class Sensitivity():
         if os.path.exists(self.pkl_filename) and not self.overwrite:
             big_df = pd.read_pickle(self.pkl_filename)
         else:
-            self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct,scenario_name='')
+            self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct,scenario_name='',commodity=self.material, price_to_use=self.price_to_use)
             for base in self.changing_base_parameters_series.index:
                 if base in self.demand_params:
                     self.mod.hyperparam.loc[base,'Value'] = abs(self.changing_base_parameters_series[base])*np.sign(self.mod.hyperparam.loc[base,'Value'])
@@ -418,9 +419,10 @@ class Sensitivity():
             self.material = changing_base_parameters_series
             input_file = pd.read_excel(self.case_study_data_file_path,index_col=0)
             commodity_inputs = input_file[changing_base_parameters_series]
-            commodity_inputs.loc['incentive_require_tune_years'] = 10
-            commodity_inputs.loc['presimulate_n_years'] = 10
-            commodity_inputs.loc['end_calibrate_years'] = 10
+            n_years_tune = 20
+            commodity_inputs.loc['incentive_require_tune_years'] = n_years_tune
+            commodity_inputs.loc['presimulate_n_years'] = n_years_tune
+            commodity_inputs.loc['end_calibrate_years'] = n_years_tune
             commodity_inputs.loc['start_calibrate_years'] = 5
             commodity_inputs.loc['close_price_method'] = 'max'
             commodity_inputs = commodity_inputs.dropna()
@@ -467,6 +469,7 @@ class Sensitivity():
 
             if 'Primary commodity price' in historical_data.columns:
                 commodity_inputs.loc['primary_commodity_price'] = historical_data['Primary commodity price'][simulation_time[0]]
+
             if 'Total production' in historical_data.columns:
                 commodity_inputs.loc['Total production, Global'] = historical_data['Total production'][simulation_time[0]]
             elif 'Scrap demand' in historical_data.columns and 'Primary production' in historical_data.columns:
@@ -512,7 +515,8 @@ class Sensitivity():
         Integration class hyperparam dataframe
         '''
         if type(self.params_to_change)==int:
-            self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct)
+            self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct, commodity=self.material, price_to_use=self.price_to_use)
+            self.mod.historical_data = self.historical_data
             for base in self.changing_base_parameters_series.index:
                 if base in self.demand_params:
                     self.mod.hyperparam.loc[base,'Value'] = abs(self.changing_base_parameters_series[base])*np.sign(self.mod.hyperparam.loc[base,'Value'])
@@ -553,7 +557,8 @@ class Sensitivity():
                 if val!=0:
                     val = round(val, n_sig_dig-1 - int(np.floor(np.log10(abs(val)))))
                 self.val = val
-                self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct)
+                self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct,commodity=self.material, price_to_use=self.price_to_use)
+                self.mod.historical_data = self.historical_data.copy()
                 self.hyperparam_copy = self.mod.hyperparam.copy()
 
                 ###### CHANGING BASE PARAMETERS ######
@@ -603,7 +608,7 @@ class Sensitivity():
         self.bayesian_tune = bayesian_tune
         self.update_changing_base_parameters_series()
         self.initialize_big_df()
-        self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct)
+        self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct,commodity=self.material, price_to_use=self.price_to_use)
         if bayesian_tune:
             self.mod.primary_commodity_price = self.historical_data['Primary commodity price'].dropna()
             self.mod.primary_commodity_price = pd.concat([pd.Series(self.mod.primary_commodity_price.iloc[0],np.arange(1900,self.mod.primary_commodity_price.dropna().index[0])),
@@ -640,7 +645,7 @@ class Sensitivity():
                 for enum,scenario_name in enumerate(self.scenarios):
                     if self.verbosity>-1:
                         print(f'\tSub-scenario {enum+1}/{len(self.scenarios)}: {scenario_name} checking if exists...')
-                    self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct,scenario_name=scenario_name)
+                    self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct,scenario_name=scenario_name,commodity=self.material, price_to_use=self.price_to_use)
                     self.mod.historical_data = self.historical_data.copy()
                     self.notes = scenario_name
 
@@ -759,9 +764,11 @@ class Sensitivity():
         '''
 
         self.objective_parameters = self.historical_data_column_list[:n_params]
-        variance_from_previous = 0.2
+        variance_from_previous = 1
+        lowerbound = 1-variance_from_previous
+        lowerbound = 0.001 if lowerbound<=0 else lowerbound
         self.opt = Optimizer(
-            dimensions=[(0.001, 1.0) if (not self.constrain_previously_tuned or _ not in self.updated_commodity_inputs_sub.dropna().index) else (abs(self.updated_commodity_inputs_sub[_])*(1-variance_from_previous),abs(self.updated_commodity_inputs_sub[_])*(1+variance_from_previous)) for _ in self.sensitivity_param],
+            dimensions=[(0.001, 1.5) if (not self.constrain_previously_tuned or _ not in self.updated_commodity_inputs_sub.dropna().index) else (abs(self.updated_commodity_inputs_sub[_])*(lowerbound),abs(self.updated_commodity_inputs_sub[_])*(1+variance_from_previous)) for _ in self.sensitivity_param],
             base_estimator=surrogate_model,
             n_initial_points=20,
             initial_point_generator='random' if surrogate_model=='dummy' else 'lhs',
@@ -807,7 +814,7 @@ class Sensitivity():
         potential_append = self.check_run_append(mod, s_n)
 
         #get scores
-        if type(mod)==Integration:
+        if type(mod)==Integration and self.demand_or_mining!='mining':
             rmse_list, r2_list = self.get_rmse_r2(mod)
 
             #add rmse and r2 score in new_param_series to then be added into rmse_df
@@ -876,7 +883,7 @@ class Sensitivity():
 
         param_variable_map = {'Total demand':'total_demand','Primary demand':'primary_demand',
             'Primary commodity price':'primary_commodity_price','Primary supply':'mine_production',
-            'Scrap demand':'scrap_demand'}
+            'Primary production':'mine_production','Scrap demand':'scrap_demand'}
         rmse_list = []
         r2_list = []
         for param in self.objective_parameters:
@@ -886,25 +893,25 @@ class Sensitivity():
                 if hasattr(simulated,'columns') and 'Global' in simulated.columns:
                     simulated = simulated['Global']
                 if self.normalize_objectives:
-                    historical /= historical.iloc[0]
-                    simulated /= simulated.iloc[0]
+                    historical /= historical.loc[self.simulation_time[0]]
+                    simulated /= historical.loc[self.simulation_time[0]]
                 rmse = self.calculate_rmse_r2(simulated,historical,True)
                 r2 = self.calculate_rmse_r2(simulated,historical,False)
             else:
                 if 'Conc' in param:
                     rmse = self.calculate_rmse_r2(mod.concentrate_supply,mod.concentrate_demand,True)
                     if self.normalize_objectives:
-                        rmse /= mod.concentrate_demand.iloc[0] if not hasattr(mod.concentrate_demand,'columns') else mod.concentrate_demand['Global'].iloc[0]
+                        rmse /= mod.concentrate_demand.loc[self.simulation_time[0]] if not hasattr(mod.concentrate_demand,'columns') else mod.concentrate_demand['Global'].iloc[0]
                     r2 = self.calculate_rmse_r2(mod.primary_supply,mod.primary_demand,False)
                 elif 'Scrap' in param:
                     rmse = self.calculate_rmse_r2(mod.scrap_supply,mod.scrap_demand,True)
                     if self.normalize_objectives:
-                        rmse /= mod.scrap_demand.iloc[0] if not hasattr(mod.scrap_demand,'columns') else mod.scrap_demand['Global'].iloc[0]
+                        rmse /= mod.scrap_demand.loc[self.simulation_time[0]] if not hasattr(mod.scrap_demand,'columns') else mod.scrap_demand['Global'].iloc[0]
                     r2 = self.calculate_rmse_r2(mod.scrap_supply,mod.scrap_demand,False)
                 elif 'Ref' in param:
                     rmse = self.calculate_rmse_r2(mod.refined_supply,mod.refined_demand,True)
                     if self.normalize_objectives:
-                        rmse /= mod.refined_demand.iloc[0] if not hasattr(mod.refined_demand,'columns') else mod.refined_demand['Global'].iloc[0]
+                        rmse /= mod.refined_demand.loc[self.simulation_time[0]] if not hasattr(mod.refined_demand,'columns') else mod.refined_demand['Global'].iloc[0]
                     r2= self.calculate_rmse_r2(mod.refined_supply,mod.refined_demand,False)
 
             rmse_list += [(rmse,0)]
@@ -922,7 +929,10 @@ class Sensitivity():
         rmse_list = []
         r2_list = []
 
-        sim = mod.supply_series.loc[self.simulation_time]
+        if type(mod)==Integration:
+            sim = mod.mine_production.loc[self.simulation_time]
+        else:
+            sim = mod.supply_series.loc[self.simulation_time]
         hist = self.historical_data['Primary supply' if 'Primary supply' in self.historical_data.columns else 'Primary production'].loc[self.simulation_time]
         rmse = mean_squared_error(hist, sim)**0.5
         r2 = r2_score(hist, sim)
@@ -971,7 +981,9 @@ class Sensitivity():
             params_to_change = self.demand_params
             dimensions = [(0.001, 0.08), (0.001, 0.6), (0.001, 1.5)]
         else:
-            self.mod = miningModel(verbosity=self.verbosity, simulation_time=self.simulation_time,byproduct=self.byproduct)
+            # self.mod = miningModel(verbosity=self.verbosity, simulation_time=self.simulation_time,byproduct=self.byproduct)
+            self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct,commodity=self.material, price_to_use=self.price_to_use)
+            self.mod.historical_data = self.historical_data.copy()
             params_to_change = ['primary_oge_scale','mine_cu_margin_elas','mine_cost_og_elas','mine_cost_tech_improvements','mine_cost_price_elas','initial_ore_grade_decline','primary_price_resources_contained_elas','incentive_opening_probability','close_years_back','reserves_ratio_price_lag']
             dimensions = [(0.001,1) for i in params_to_change]
         mod = self.mod
@@ -1010,8 +1022,9 @@ class Sensitivity():
                     mod.commodity_price_series = pd.concat([pd.Series(mod.commodity_price_series.iloc[0],np.arange(1900,self.historical_data['Primary commodity price'].dropna().index[0])),
                                                             mod.commodity_price_series]).sort_index()
                 else:
-                    mod = miningModel(verbosity=self.verbosity, simulation_time=self.simulation_time,byproduct=self.byproduct)
-
+                    # mod = miningModel(verbosity=self.verbosity, simulation_time=self.simulation_time,byproduct=self.byproduct)
+                    mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct,commodity=self.material, price_to_use=self.price_to_use)
+                    mod.historical_data = self.historical_data.copy()
                     mod.primary_price_series = self.historical_data['Primary commodity price'].dropna()
                     mod.primary_tcrc_series = pd.Series(np.nan,self.simulation_time)
                     mod.primary_price_series = pd.concat([pd.Series(mod.primary_price_series.iloc[0],np.arange(1900,mod.primary_price_series.dropna().index[0])),
@@ -1083,15 +1096,16 @@ class Sensitivity():
                     #output is of the form [(score_0, new_params_0, potential_append_0), (score_1, new_params_1, potential_append_0),
                 else:
                     self.mod = mod
-                    potential_append = self.check_run_append(mod)
+                    potential_append = self.check_run_append(self.mod)
                     self.mod = mod
 
                     if demand_or_mining=='demand':
                         sim = mod.demand.sum(axis=1).loc[self.simulation_time]
                         hist = self.historical_data['Total demand'].loc[self.simulation_time]
                     else:
-                        sim = mod.supply_series.loc[self.simulation_time]
-                        hist = historical_data['Primary supply' if 'Primary supply' in self.historical_data.columns else 'Primary production'].loc[self.simulation_time]
+                        # sim = mod.supply_series.loc[self.simulation_time]
+                        sim = mod.mine_production.loc[self.simulation_time]
+                        hist = self.historical_data['Primary supply' if 'Primary supply' in self.historical_data.columns else 'Primary production'].loc[self.simulation_time]
                     rmse = mean_squared_error(hist, sim)**0.5
                     r2 = r2_score(hist, sim)
                     # ((self.mod.demand.sum(axis=1)-self.historical_data['Total demand'])**2).loc[self.simulation_time].astype(float).sum()**0.5
@@ -1281,7 +1295,7 @@ class Sensitivity():
             raise ValueError('updated_commodity_inputs.pkl does not exist in the expected locations (in this directory, in data folder, as attribute of Sensitivity). Need to run the historical_sim_check_demand() function to create an initialization of updated_commodity_inputs.pkl')
 
         if hasattr(self,'material') and self.material!='':
-            best_params = self.updated_commodity_inputs[self.material].copy()
+            best_params = self.updated_commodity_inputs[self.material].copy().dropna()
             self.updated_commodity_inputs_sub = best_params.copy()
         else:
             raise ValueError('need to use a string input to changing_base_parameters_series in Sensitivity initialization to run this method')
@@ -1370,7 +1384,10 @@ class Sensitivity():
                 print('\tScenario does not already exist, running...')
             if type(mod)==Integration:
                 try:
-                    mod.run()
+                    if hasattr(self,'demand_or_mining') and self.demand_or_mining=='mining':
+                        mod.run_mining_only()
+                    else:
+                        mod.run()
                 except MemoryError:
                     if self.verbosity>-1:
                         print('************************MemoryError, no clue what to do about this************************')
@@ -1413,7 +1430,11 @@ class Sensitivity():
                 for zz in z:
                     notes += ', {}={}'.format(zz,mod.hyperparam['Value'][zz])
 
-            if type(mod)==Integration: reg_results = create_result_df(mod)
+            if type(mod)==Integration:
+                if hasattr(self,'demand_or_mining') and self.demand_or_mining=='mining':
+                    reg_results = pd.concat([mod.mine_production,mod.mining.primary_price_series,mod.mining.demand_series],axis=1,keys=['Primary supply','Primary commodity price','Total demand'])
+                else:
+                    reg_results = create_result_df(mod)
             elif type(mod) == demandModel:
                 reg_results = pd.concat([mod.demand.sum(axis=1),mod.commodity_price_series],axis=1,keys=['Total demand','Primary commodity price'])
             elif type(mod) == miningModel: reg_results = pd.concat([mod.supply_series,mod.primary_price_series,mod.demand_series],axis=1,keys=['Primary supply','Primary commodity price','Total demand'])

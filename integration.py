@@ -2,6 +2,7 @@ from mining_class import *
 from demand_class import *
 from refining_class import *
 import numpy as np
+from warnings import warn
 
 class Integration():
     '''
@@ -28,9 +29,15 @@ class Integration():
          (in that order)
 
     '''
-    def __init__(self, data_folder=None, simulation_time=np.arange(2019,2041), verbosity=0, byproduct=False, input_hyperparam=0, scenario_name=''):
-        self.version = '2022-05-30 09:12:42' # str(datetime.now())[:19]
+    def __init__(self, data_folder=None, simulation_time=np.arange(2019,2041), verbosity=0, byproduct=False, input_hyperparam=0, scenario_name='', commodity=None, price_to_use=None):
+        self.version = '2022-09-19 18:03:44' # str(datetime.now())[:19]
+
+        self.price_to_use = 'log' if price_to_use==None else price_to_use
+        self.element_commodity_map = {'Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungsten','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
+
         self.i = simulation_time[0]
+        self.commodity = commodity
+        self.data_folder = data_folder
         self.simulation_time = simulation_time
         self.verbosity = verbosity
         self.byproduct = byproduct
@@ -63,6 +70,24 @@ class Integration():
         self.tcrc = self.concentrate_supply.copy()
 
         self.decode_scrap_scenario_name()
+
+    def load_historical_data(self):
+        if self.commodity!=None and type(self.commodity)==str and not hasattr(self,'historical_data'):
+            self.case_study_data_file_path = f'{self.data_folder}/case study data.xlsx'
+            history_file = pd.read_excel(self.case_study_data_file_path,index_col=0,sheet_name=self.commodity)
+            self.historical_data = history_file.iloc[1:]['Primary supply' if 'Primary supply' in history_file.columns else 'Primary production'].astype(float)
+            self.historical_data = self.historical_data.dropna()
+            self.historical_data.index = self.historical_data.index.astype(int)
+            self.price_adjustment_results_file_path = f'{self.data_folder}/price adjustment results.xlsx'
+            if self.price_to_use!='case study data':
+                self.historical_price_data = pd.read_excel(self.price_adjustment_results_file_path,index_col=0)
+                cap_mat = self.element_commodity_map[self.commodity]
+                price_map = {'log':'log('+cap_mat+')',  'diff':'∆'+cap_mat,  'original':cap_mat+' original'}
+                self.historical_price_data = self.historical_price_data[price_map[self.price_to_use]].astype(float).dropna().sort_index()
+                self.historical_price_data.name='Primary commodity price'
+                self.historical_data.drop('Primary commodity price',axis=1,inplace=True)
+                self.historical_data = pd.concat([self.historical_data,self.historical_price_data],axis=1)
+
 
     def initialize_hyperparam(self):
         hyperparameters = pd.DataFrame(np.nan,index=[],columns=['Value','Notes'])
@@ -127,7 +152,7 @@ class Integration():
         hyperparameters.loc['demand_series_method','Value'] = 'none'
         hyperparameters.loc['end_calibrate_years','Value'] = 10
         hyperparameters.loc['start_calibrate_years','Value'] = 5
-        hyperparameters.loc['ramp_up_cu','Value'] = 0.7
+        hyperparameters.loc['ramp_up_cu','Value'] = 0.4
         hyperparameters.loc['ml_accelerate_initialize_years','Value'] = max(hyperparameters['Value'][['ml_accelerate_initialize_years','end_calibrate_years']])
         hyperparameters.loc['mine_cu_margin_elas','Value'] = 0.8
         hyperparameters.loc['mine_cost_price_elas','Value'] = 0.125
@@ -144,6 +169,8 @@ class Integration():
         hyperparameters.loc['annual_reserves_ratio_with_initial_production_const','Value'] = 1.1
         hyperparameters.loc['primary_overhead_const','Value'] = 0
         hyperparameters.loc['ramp_up_fraction',['Value','Notes']] = np.array([0.02,'fraction of mines in the initial mine generation step that are in any of the ramp up stages (e.g. if ramp_up_year is 3 and ramp_up_fraction is 0.1, then 10% of the mines will have ramp up flag=1, 10% ramp up flag=2, etc.). Value is currently 0.02 based on an initial guess.'],dtype='object')
+        hyperparameters.loc['demand_series_method',['Value','Notes']] = np.array(['','This is for setting up the so-called demand series, which is what the mining module tries to tune mine production to match when historical presimulation is done. This value is normally either yoy or target, and setting it to anything else allows us to ensure the demand_series used for mine tuning is the one from our historical data file.'],dtype='object')
+        hyperparameters.loc['reserves_ratio_price_lag',:] = 7, 'lag on price change price(t-lag)/price(t-lag-1) used for informing incentive pool size change, paired with resources_contained_elas_primary_price (and byproduct if byproduct==True)'
 
         # demand
         hyperparameters.loc['demand only',:] = np.nan
@@ -230,6 +257,8 @@ class Integration():
         '''
         Sets up the integration, also sets up the scenario corresponding with scenario_name
         '''
+        self.load_historical_data()
+
         i = self.i
         self.conc_to_cathode_eff = self.refine.ref_param['Global']['conc to cathode eff']
         self.scrap_to_cathode_eff = self.refine.ref_param['Global']['scrap to cathode eff']
@@ -316,6 +345,9 @@ class Integration():
         else:
             self.mining = miningModel(simulation_time=self.simulation_time, verbosity=self.verbosity, byproduct=self.byproduct)
             self.mining.hyperparam.loc['primary_production','Value'] = self.concentrate_demand['Global'][i]
+            if hasattr(self,'historical_data'):
+                self.mining.demand_series = self.historical_data['Primary supply' if 'Primary supply' in self.historical_data.columns else 'Primary production']
+            else: raise ValueError('if simulating a real commodity, the Integration class initialization should take a str input for its commodity variable, which should correspond with a sheet name in case study data.xlsx. See the presimulate_mining function for how to deal with creating an alternate demand, if that is desired')
             if self.verbosity>1: print('Mining parameters updated:')
             for param in np.intersect1d(self.mining.hyperparam.index, self.h.index):
                 self.mining.hyperparam.loc[param,'Value'] = self.h[param]
@@ -410,6 +442,9 @@ class Integration():
         self.mining.i = self.i
         self.mining.primary_price_series.loc[self.i] = self.primary_commodity_price[self.i]
         self.mining.primary_tcrc_series.loc[self.i] = self.tcrc[self.i]
+        if self.concentrate_demand['Global'][self.i-1]==np.nan and self.mining.demand_series[self.i-1]!=np.nan:
+            self.concentrate_demand.loc[self.i-1,'Global']=self.mining.demand_series.loc[self.i-1]
+            print(433, 'did this one')
         self.mining.demand_series.loc[self.i-1] = self.concentrate_demand['Global'][self.i-1]
         self.mining.run()
         # concentrate_supply
@@ -436,14 +471,32 @@ class Integration():
         initial_ore_grade_decline = m.hyperparam['Value']['initial_ore_grade_decline']
         incentive_mine_cost_improvement = m.hyperparam['Value']['incentive_mine_cost_improvement']
         annual_reserves_ratio_with_initial_production_slope = m.hyperparam['Value']['annual_reserves_ratio_with_initial_production_slope']
-        m.hyperparam.loc['internal_price_formation','Value'] = True
+        m.hyperparam.loc['internal_price_formation','Value'] = False
         m.hyperparam.loc['initial_ore_grade_decline','Value'] = 0
         m.hyperparam.loc['incentive_mine_cost_improvement','Value'] = 0
         m.hyperparam.loc['annual_reserves_ratio_with_initial_production_slope','Value'] = 0
 
 #         primary_production
-        m.demand_series = self.demand.alt_demand[[j for j in self.demand.alt_demand.columns if j!='China Fraction']].sum(axis=1).rolling(5).mean()
-        m.demand_series *= self.concentrate_demand['Global'][end_yr]/m.demand_series[end_yr]
+        if hasattr(self,'historical_data'):
+            self.historical_mining = self.historical_data['Primary supply' if 'Primary supply' in self.historical_data.columns else 'Primary production'].astype(float)
+            self.historical_mining = self.historical_mining.dropna()
+            self.historical_mining.index = self.historical_mining.index.astype(int)
+            start_hist_year = self.historical_mining.sort_index().index[0]
+            m.demand_series = self.demand.alt_demand[[j for j in self.demand.alt_demand.columns if j!='China Fraction']].sum(axis=1).rolling(5).mean()
+            m.demand_series *= self.historical_mining[start_hist_year]/m.demand_series[start_hist_year]
+            m.demand_series = pd.concat([m.demand_series.loc[~m.demand_series.index.isin(self.historical_mining.index)],self.historical_mining]).sort_index()
+
+            m.primary_price_series = self.historical_data['Primary commodity price'].copy().dropna()
+            m.primary_price_series.name = 'Primary commodity price'
+            m.primary_price_series = pd.concat([pd.Series(m.primary_price_series.iloc[0],[i for i in mine_simulation_time if i not in m.primary_price_series.index]),
+                m.primary_price_series]).sort_index()
+            m.hyperparam.loc['primary_commodity_price','Value'] = m.primary_price_series.iloc[0]
+
+        else:
+            m.demand_series = self.demand.alt_demand[[j for j in self.demand.alt_demand.columns if j!='China Fraction']].sum(axis=1).rolling(5).mean()
+            m.demand_series *= self.concentrate_demand['Global'][end_yr]/m.demand_series[end_yr]
+            warn('if simulating a real commodity, the Integration class initialization should take a str input for its commodity variable, which should correspond with a sheet name in case study data.xlsx')
+
         m.hyperparam.loc['primary_production','Value'] = m.demand_series[mine_simulation_time[0]]
         primary_production_mean_series = m.demand_series*h['primary_production_mean']/m.demand_series[end_yr]
         self.primary_production_mean_series = primary_production_mean_series.copy()
@@ -458,12 +511,17 @@ class Integration():
 #             raise ValueError('no')
 
             if self.verbosity>4:
-                fig,ax=easy_subplots(2,2)
-                ax[0].plot(m.demand_series,label='Demand',marker='o')
+                fig,ax=easy_subplots(3)
                 ax[0].plot(m.supply_series,label='Supply',marker='o')
+                ax[0].plot(m.demand_series,label='Demand',marker='v',zorder=0)
                 ax[0].legend()
-                ax[1].plot(m.primary_tcrc_series,marker='o')
+
+                ax[1].plot(m.supply_series/m.demand_series,marker='o')
+
+                ax[2].plot(m.primary_tcrc_series,marker='o')
+
                 plt.show()
+                plt.close()
 
         m.hyperparam.loc['initial_ore_grade_decline','Value'] = initial_ore_grade_decline
         m.hyperparam.loc['incentive_mine_cost_improvement','Value'] = incentive_mine_cost_improvement
@@ -473,6 +531,10 @@ class Integration():
         self.sxew_supply = m.sxew_supply_series.copy()
         self.mine_production = self.concentrate_supply+self.sxew_supply
         self.tcrc = m.primary_tcrc_series.copy()
+        self.tcrc = pd.concat([self.tcrc.dropna(), pd.Series(self.tcrc.dropna().sort_index().iloc[-1],[i for i in self.simulation_time if i not in self.tcrc.dropna().index])]).sort_index()
+        self.primary_commodity_price = m.primary_price_series.copy()
+        self.concentrate_demand.loc[:,'Global'] = m.demand_series.copy()
+
         self.mining = m
 
     def calculate_direct_melt_demand(self):
@@ -561,6 +623,18 @@ class Integration():
                 self.update_integration_variables_post_refine()
         self.concentrate_demand = pd.concat([self.mining.demand_series,self.concentrate_demand['China'],
                                             self.concentrate_demand['RoW']],axis=1,keys=['Global','China','RoW'])
+
+    def run_mining_only(self):
+        self.h = self.hyperparam['Value'].copy()
+        for year in self.simulation_time:
+            if self.verbosity>0: print(year)
+            self.i = year
+            if self.i==self.simulation_time[0]:
+                self.h = self.hyperparam['Value'].copy()
+                self.initialize_integration()
+            else:
+                self.primary_commodity_price.loc[year] = self.historical_data['Primary commodity price'].copy().dropna().loc[year]
+                self.run_mining()
 
     def decode_scrap_scenario_name(self):
         '''

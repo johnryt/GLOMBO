@@ -376,8 +376,8 @@ def easy_subplots(nplots, ncol=4, height_scale=1,width_scale=1,use_subplots=Fals
             fig, ax = plt.subplots(nrows,ncol,**kwargs,
                             gridspec_kw={'width_ratios':width_ratios,'height_ratios':height_ratios})
         else:
-            fig, ax = plt.subplots(nrows,ncol,**kwargs,figsize=figsize,
-                            gridspec_kw={'width_ratios':width_ratios,'height_ratios':height_ratios})
+            fig, ax = plt.subplots(nrows,ncol,figsize=figsize,
+                            gridspec_kw={'width_ratios':width_ratios,'height_ratios':height_ratios},**kwargs)
         if 'dpi' in kwargs.keys(): fig.set_dpi(kwargs['dpi'])
     else:
         if 'figsize' in kwargs.keys():

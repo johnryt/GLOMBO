@@ -227,7 +227,7 @@ class Sensitivity():
                  scenarios=[''],
                  OVERWRITE=False,
                  random_state=220620,
-                 incentive_opening_probability_fraction_zero=0.1,
+                 incentive_opening_probability_fraction_zero=0,
                  include_sd_objectives=False,
                  use_rmse_not_r2=True,
                  dpi=50,
@@ -682,7 +682,7 @@ class Sensitivity():
                             new_param_series.loc['region_specific_price_response'] *= 0.15
                         if 'incentive_opening_probability' in params_to_change and self.check_for_previously_tuned('incentive_opening_probability'):
                             new_param_series.loc['incentive_opening_probability']*=0.5/(1-self.incentive_opening_probability_fraction_zero)
-                            if new_param_series['incentive_opening_probability']>0.5:
+                            if new_param_series['incentive_opening_probability']>0.5 and self.incentive_opening_probability_fraction_zero!=0:
                                 new_param_series.loc['incentive_opening_probability'] = 0
                         # ^ these values should be small, since small changes make big changes
                         all_three_here = np.all([q in params_to_change for q in ['close_probability_split_max','close_probability_split_mean','close_probability_split_min']])
@@ -706,7 +706,7 @@ class Sensitivity():
                         if 'primary_overhead_const' in params_to_change and self.check_for_previously_tuned('primary_overhead_const'):
                             new_param_series.loc['primary_overhead_const'] = (new_param_series['primary_overhead_const']-0.5)*1
                         for param in params_to_change:
-                            if type(self.mod.hyperparam['Value'][param])!=bool and param!='primary_overhead_const':
+                            if type(self.mod.hyperparam['Value'][param])!=bool and self.mod.hyperparam['Value'][param]!=np.nan:
                                 new_param_series.loc[param] = abs(new_param_series[param])*np.sign(self.mod.hyperparam.loc[param,'Value'])
                                 self.mod.hyperparam.loc[param,'Value'] = abs(new_param_series[param])*np.sign(self.mod.hyperparam.loc[param,'Value'])
                             else:
@@ -769,7 +769,7 @@ class Sensitivity():
         lowerbound = 1-variance_from_previous
         lowerbound = 0.001 if lowerbound<=0 else lowerbound
         self.opt = Optimizer(
-            dimensions=[(0.001, 1.5) if (not self.constrain_previously_tuned or _ not in self.updated_commodity_inputs_sub.dropna().index) else (abs(self.updated_commodity_inputs_sub[_])*(lowerbound),abs(self.updated_commodity_inputs_sub[_])*(1+variance_from_previous)) for _ in self.sensitivity_param],
+            dimensions=[(0.001, 1) if (not self.constrain_previously_tuned or _ not in self.updated_commodity_inputs_sub.dropna().index) else (abs(self.updated_commodity_inputs_sub[_])*(lowerbound),abs(self.updated_commodity_inputs_sub[_])*(1+variance_from_previous)) for _ in self.sensitivity_param],
             base_estimator=surrogate_model,
             n_initial_points=20,
             initial_point_generator='random' if surrogate_model=='dummy' else 'lhs',
@@ -1056,7 +1056,7 @@ class Sensitivity():
                 if demand_or_mining=='mining':
                     if 'incentive_opening_probability' in params_to_change:
                         new_param_series.loc['incentive_opening_probability']*=0.5/(1-self.incentive_opening_probability_fraction_zero)
-                        if new_param_series['incentive_opening_probability']>0.5:
+                        if new_param_series['incentive_opening_probability']>0.5 and self.incentive_opening_probability_fraction_zero!=0:
                             new_param_series.loc['incentive_opening_probability'] = 0
                     if 'primary_oge_scale' in params_to_change:
                         new_param_series.loc['primary_oge_scale']*=0.5

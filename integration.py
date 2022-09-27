@@ -88,7 +88,6 @@ class Integration():
                 self.historical_data.drop('Primary commodity price',axis=1,inplace=True)
                 self.historical_data = pd.concat([self.historical_data,self.historical_price_data],axis=1)
 
-
     def initialize_hyperparam(self):
         hyperparameters = pd.DataFrame(np.nan,index=[],columns=['Value','Notes'])
 
@@ -134,7 +133,7 @@ class Integration():
         hyperparameters.loc['presimulate_n_years',:] = 10, 'int, number of years in the past to simulate mining to establish baseline'
         hyperparameters.loc['collection_rate_price_response',:] = True,'bool, whether or not this parameter responds to price'
         hyperparameters.loc['direct_melt_price_response',:] = True,'bool, whether or not this parameter responds to price'
-        hyperparameters.loc['refinery_capacity_fraction_increase_mining'] = 0,'0 means refinery capacity growth is determined by demand growth alone; 1 means refinery capacity growth is determined by mining production growth alone. Values in between allow for a weighted mixture.'
+        hyperparameters.loc['refinery_capacity_fraction_increase_mining'] = 0.001,'0 means refinery capacity growth is determined by demand growth alone; 1 means refinery capacity growth is determined by mining production growth alone. Values in between allow for a weighted mixture.'
 
         # mining only
         hyperparameters.loc['mining only',:] = np.nan

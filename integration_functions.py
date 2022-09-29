@@ -18,7 +18,7 @@ from joblib import Parallel, delayed
 from sklearn.metrics import mean_squared_error, r2_score
 
 
-def create_result_df(integ):
+def create_result_df(self,integ):
     '''
     takes Integration object, returns regional results. Used within the senstivity
     function to convert the individual model run to results we can interpret later.
@@ -93,6 +93,9 @@ def create_result_df(integ):
         collection = collection.rename(columns=dict(zip(collection.columns,['Collection rate '+j.lower() for j in collection.columns])))
         scraps = pd.concat([old_scrap,new_scrap],axis=1,keys=['Old scrap collection','New scrap collection'])
         results = pd.concat([results,collection,scraps],axis=1)
+        time_index = np.arange(self.simulation_time[0]-self.changing_base_parameters_series['presimulate_n_years'],self.simulation_time[-1]+1)
+        time_index = [i for i in results.index if i in time_index]
+        if self.trim_result_df: results = results.loc[time_index]
         reg_results.loc[reg] = [results]
     return reg_results
 
@@ -239,7 +242,8 @@ class Sensitivity():
                  constrain_previously_tuned=False,
                  price_to_use='log',
                  timer=None,
-                 save_mining_info=False):
+                 save_mining_info=False,
+                 trim_result_df=True):
         '''
         Initializing Sensitivity class.
 
@@ -329,6 +333,7 @@ class Sensitivity():
             if interested, ask Luca Montanelli for his function.
         '''
         self.save_mining_info = save_mining_info
+        self.trim_result_df = trim_result_df
         self.simulation_time = simulation_time
         self.changing_base_parameters_series = changing_base_parameters_series
         self.additional_base_parameters = additional_base_parameters
@@ -391,7 +396,7 @@ class Sensitivity():
             big_df = pd.DataFrame(np.nan,index=[
                 'version','notes','hyperparam','mining.hyperparam','refine.hyperparam','demand.hyperparam','results','mine_data'
             ],columns=[])
-            reg_results = create_result_df(self.mod)
+            reg_results = create_result_df(self, self.mod)
             big_df.loc[:,0] = np.array([self.mod.version, self.notes, self.mod.hyperparam, self.mod.mining.hyperparam,
                                         self.mod.refine.hyperparam, self.mod.demand.hyperparam, reg_results, self.mod.mining.ml],dtype=object)
             big_df.to_pickle(self.pkl_filename)
@@ -707,6 +712,9 @@ class Sensitivity():
                             new_param_series.loc['mine_cost_tech_improvements'] *= 5
                         if 'primary_overhead_const' in params_to_change and self.check_for_previously_tuned('primary_overhead_const'):
                             new_param_series.loc['primary_overhead_const'] = (new_param_series['primary_overhead_const']-0.5)*1
+                        int_params = ['reserves_ratio_price_lag','close_years_back']
+                        for j in int_params:
+                            if j in new_param_series.index: new_param_series.loc[j] = int(new_param_series[j])
                         for param in params_to_change:
                             if type(self.mod.hyperparam['Value'][param])!=bool and self.mod.hyperparam['Value'][param]!=np.nan:
                                 new_param_series.loc[param] = abs(new_param_series[param])*np.sign(self.mod.hyperparam.loc[param,'Value'])
@@ -1350,9 +1358,10 @@ class Sensitivity():
                 mining = deepcopy([mod.mining])[0]
                 refine = deepcopy([mod.refine])[0]
                 demand = deepcopy([mod.demand])[0]
-                if not self.save_mining_info: mining.ml = 0
+            if not self.save_mining_info: ml = [0]
+            else: ml = mining.ml.copy()
             potential_append = pd.DataFrame(np.array([mod.version, notes, mod.hyperparam, mining.hyperparam,
-                                refine.hyperparam, demand.hyperparam, reg_results, mining.ml, self.rmse_df],dtype=object)
+                                refine.hyperparam, demand.hyperparam, reg_results, ml, self.rmse_df],dtype=object)
                                              ,index=[
                                     'version','notes','hyperparam','mining.hyperparam','refine.hyperparam','demand.hyperparam','results','mine_data','rmse_df'
                                 ],columns=[new_col_name])
@@ -1438,10 +1447,15 @@ class Sensitivity():
                 if hasattr(self,'demand_or_mining') and self.demand_or_mining=='mining':
                     reg_results = pd.concat([mod.mine_production,mod.mining.primary_price_series,mod.mining.demand_series],axis=1,keys=['Primary supply','Primary commodity price','Total demand'])
                 else:
-                    reg_results = create_result_df(mod)
+                    reg_results = create_result_df(self,mod)
             elif type(mod) == demandModel:
                 reg_results = pd.concat([mod.demand.sum(axis=1),mod.commodity_price_series],axis=1,keys=['Total demand','Primary commodity price'])
             elif type(mod) == miningModel: reg_results = pd.concat([mod.supply_series,mod.primary_price_series,mod.demand_series],axis=1,keys=['Primary supply','Primary commodity price','Total demand'])
+
+            if type(mod)!=Integration or self.demand_or_mining=='mining':
+                time_index = np.arange(self.simulation_time[0]-self.changing_base_parameters_series['presimulate_n_years'],self.simulation_time[-1]+1)
+                time_index = [i for i in reg_results.index if i in time_index]
+                if self.trim_result_df: reg_results = reg_results.loc[time_index]
             potential_append = self.create_potential_append(big_df=big_df,notes=notes,reg_results=reg_results,initialize=False, mod=mod)
 
             if mod is None or self.bayesian_tune==False:

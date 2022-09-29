@@ -20,7 +20,7 @@ class Many():
         self.data_folder = 'generalization/data' if data_folder==None else data_folder
         self.pkl_folder = 'data' if pkl_folder==None else pkl_folder
 
-    def run_all_demand(self, n_runs=50, commodities=None):
+    def run_all_demand(self, n_runs=50, commodities=None, trim_result_df=True):
         commodities = self.ready_commodities if commodities==None else commodities
         for material in commodities:
             print('-'*40)
@@ -29,10 +29,10 @@ class Many():
             filename=f'{self.pkl_folder}/{mat}_run_hist.pkl'
             self.shist1 = Sensitivity(pkl_filename=filename, data_folder=self.data_folder,changing_base_parameters_series=material,notes='Monte Carlo aluminum run',
                             simulation_time=np.arange(2001,2020),OVERWRITE=True,use_alternative_gold_volumes=True,
-                                historical_price_rolling_window=5,verbosity=0)
+                                historical_price_rolling_window=5,verbosity=0, trim_result_df=trim_result_df)
             self.shist1.historical_sim_check_demand(n_runs,demand_or_mining='demand')
 
-    def run_all_mining(self, n_runs=50, commodities=None):
+    def run_all_mining(self, n_runs=50, commodities=None, save_mining_info=False, trim_result_df=True):
         commodities = self.ready_commodities if commodities==None else commodities
         for material in commodities:
             print('-'*40)
@@ -42,10 +42,13 @@ class Many():
             self.shist = Sensitivity(pkl_filename=filename, data_folder=self.data_folder,changing_base_parameters_series=material,notes='Monte Carlo aluminum run',
                             simulation_time=np.arange(2001,2020),OVERWRITE=True,use_alternative_gold_volumes=True,
                                 historical_price_rolling_window=5,verbosity=0,
-                               incentive_opening_probability_fraction_zero=0)
+                               incentive_opening_probability_fraction_zero=0, save_mining_info=save_mining_info,
+                               trim_result_df=trim_result_df)
             self.shist.historical_sim_check_demand(n_runs,demand_or_mining='mining')
 
-    def run_all_integration(self, n_runs=200, commodities=None, normalize_objectives=False, constrain_previously_tuned=True):
+    def run_all_integration(self, n_runs=200, commodities=None, normalize_objectives=False,
+                            constrain_previously_tuned=True, verbosity=0, save_mining_info=False,
+                            trim_result_df=True):
         commodities = self.ready_commodities if commodities==None else commodities
         for material in commodities:
             print('-'*40)
@@ -59,8 +62,9 @@ class Many():
             s = Sensitivity(pkl_filename=filename, data_folder=self.data_folder,changing_base_parameters_series=material,notes=f'Monte Carlo {material} run',
                             additional_base_parameters=pd.Series(1,['refinery_capacity_growth_lag']),
                             simulation_time=np.arange(2001,2020), include_sd_objectives=False,
-                            OVERWRITE=True,verbosity=0,historical_price_rolling_window=5,
-                            constrain_previously_tuned=constrain_previously_tuned, normalize_objectives=normalize_objectives)
+                            OVERWRITE=True,verbosity=verbosity,historical_price_rolling_window=5,
+                            constrain_previously_tuned=constrain_previously_tuned, normalize_objectives=normalize_objectives,
+                            save_mining_info=save_mining_info, trim_result_df=trim_result_df)
             sensitivity_parameters = [
                 'pri CU price elas',
                 'sec CU price elas',

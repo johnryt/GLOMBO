@@ -126,7 +126,7 @@ class Individual():
                 if 'Primary supply' in big_df.loc['results'][big_df.columns[0]].columns:
                     self.mine_supply = pd.concat([big_df.loc['results'][i]['Primary supply'] for i in big_df.columns],keys=big_df.columns,axis=1).loc[2001:2019]
                 if 'rmse_df' in big_df.index:
-                    self.rmse_df = big_df.loc['rmse_df'].iloc[-1][0]
+                    self.rmse_df = big_df.loc['rmse_df'].loc[big_df.columns[-1]][0]
                     self.rmse_df.index = pd.MultiIndex.from_tuples(self.rmse_df.index)
                     self.rmse_df = self.rmse_df.unstack(0)
             else:
@@ -227,7 +227,7 @@ class Individual():
         self.big_df = big_df.copy()
 
         if 'rmse_df' in big_df.index:
-            self.rmse_df = big_df.loc['rmse_df'].iloc[-1][0]
+            self.rmse_df = big_df.loc['rmse_df'].loc[big_df.columns[-1]][0]
             self.rmse_df.index = pd.MultiIndex.from_tuples(self.rmse_df.index)
             self.rmse_df = self.rmse_df.unstack(0)
 

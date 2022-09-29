@@ -238,7 +238,8 @@ class Sensitivity():
                  historical_price_rolling_window=1,
                  constrain_previously_tuned=False,
                  price_to_use='log',
-                 timer=None):
+                 timer=None,
+                 save_mining_info=False):
         '''
         Initializing Sensitivity class.
 
@@ -327,6 +328,7 @@ class Sensitivity():
         timer: callback, if provided, use this function to measure time and print mean iteration time as well as ETA,
             if interested, ask Luca Montanelli for his function.
         '''
+        self.save_mining_info = save_mining_info
         self.simulation_time = simulation_time
         self.changing_base_parameters_series = changing_base_parameters_series
         self.additional_base_parameters = additional_base_parameters
@@ -1348,6 +1350,7 @@ class Sensitivity():
                 mining = deepcopy([mod.mining])[0]
                 refine = deepcopy([mod.refine])[0]
                 demand = deepcopy([mod.demand])[0]
+                if not self.save_mining_info: mining.ml = 0
             potential_append = pd.DataFrame(np.array([mod.version, notes, mod.hyperparam, mining.hyperparam,
                                 refine.hyperparam, demand.hyperparam, reg_results, mining.ml, self.rmse_df],dtype=object)
                                              ,index=[

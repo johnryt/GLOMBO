@@ -13,7 +13,15 @@ import shap
 from Individual import Individual
 
 class Many():
+    '''
+    Runs many commodities simultaneously, and contains methods for plotting
+    the outcomes of those runs.
+    '''
     def __init__(self, data_folder=None, pkl_folder=None):
+        '''
+        data_folder: str, the folder where historical data needing loading lives
+        pkl_folder: str, folder where pkl files of results will be saved
+        '''
         self.ready_commodities = ['Steel','Al','Au','Sn','Cu','Ni','Ag','Zn','Pb']
         self.element_commodity_map = {'Steel':'Steel','Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungsten','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
         self.commodity_element_map = dict(zip(self.element_commodity_map.values(),self.element_commodity_map.keys()))
@@ -46,9 +54,10 @@ class Many():
                                trim_result_df=trim_result_df)
             self.shist.historical_sim_check_demand(n_runs,demand_or_mining='mining')
 
-    def run_all_integration(self, n_runs=200, commodities=None, normalize_objectives=False,
-                            constrain_previously_tuned=True, verbosity=0, save_mining_info=False,
-                            trim_result_df=True):
+    def run_all_integration(self, n_runs=200, commodities=None, normalize_objectives=False,constrain_previously_tuned=True, verbosity=0, save_mining_info=False, trim_result_df=True):
+        '''
+
+        '''
         commodities = self.ready_commodities if commodities==None else commodities
         for material in commodities:
             print('-'*40)
@@ -92,6 +101,12 @@ class Many():
 
     def get_variables(self, demand_mining_all='demand'):
         '''
+        loads the data from the output pkl files and concatenates the dataframes
+        for each commodity. Main variable names are results, hyperparam, and
+        rmse_df, where each of these can have _sorted appended to them to
+        reorder their scenario numbering from min RMSE to maximum (when viewing
+        the dataframe left to right, or smallest scenario number to highest)
+
         sorting takes place from min rmse to max
         ------
         demand_mining_all: str, can be demand, mining, or all
@@ -158,7 +173,19 @@ class Many():
         self.changing_hyperparam = self.hyperparam.loc[types].copy()
         self.changing_hyperparam = self.changing_hyperparam.loc[~(self.changing_hyperparam.apply(lambda x: x-x.mean(),axis=1)<1e-6).all(axis=1)]
 
-    def get_multiple(self, demand=True, mining=True, integration=False, reinitialize=False):
+    def get_multiple(self, demand=True, mining=True, integ=False, reinitialize=False):
+        '''
+        Runs the get_variables command on each type of model run, which are
+        then accessible through self.mining, self.demand, and self.integ, each
+        as an instance of the Many class.
+        -----------------------
+        demand: bool, whether to load the demand pre-tuning results
+        mining: bool, whether to load the mining pre-tuning results
+        integ: bool, whether to load the full tuning results
+        reinitialize: bool, allows this to get called multiple times such that
+          if you've already loaded e.g. demand and do not want to reload it
+          when you load mining, you leave this value as False
+        '''
         if demand and (not hasattr(self,'demand') or reinitialize):
             self.demand = Many()
             self.demand.get_variables('demand')
@@ -175,6 +202,12 @@ class Many():
             feature_importance(many.all,plot=False)
 
     def plot_all_demand(self, dpi=50):
+        '''
+        Loads each commodity in the Individual class and runs its
+        plot_demand_results method.
+        -----------
+        dpi: int, dots per inch for controlling figure resolution
+        '''
         for material in self.ready_commodities:
             material = self.element_commodity_map[material].lower()
             filename=f'{self.pkl_folder}/{material}_run_hist_DEM.pkl'
@@ -184,6 +217,12 @@ class Many():
         plt.close()
 
     def plot_all_mining(self,dpi=50):
+        '''
+        Loads each commodity in the Individual class and runs its
+        plot_demand_results method.
+        -----------
+        dpi: int, dots per inch for controlling figure resolution
+        '''
         for material in self.ready_commodities:
             material = self.element_commodity_map[material].lower()
             filename=f'{self.pkl_folder}/{material}_run_hist_mining.pkl'
@@ -203,8 +242,13 @@ class Many():
                     plot_best_params=False,
                     plot_supply_demand_stack=False):
         '''
-        produces many different plots you can use to try and understand the model outputs. More info is given with each model input bool description below.
+        Produces many different plots you can use to try and understand the
+        model outputs. Loads each commodity in the Individual class, and runs
+        its plot_results method on it.
 
+        More info is given with each model input bool description below.
+
+        ----------------------
         Inputs:
         plot_over_time: bool, True plots the best overall scenario over time (using NORM SUM or NORM SUM OBJ ONLY) for each objective to allow comparison
         n_best: int, the number of scenarios to include in plot_over_time or in plot_hyperparam_distributions
@@ -236,6 +280,9 @@ class Many():
                                )
 
 def feature_importance(self,plot=None, dpi=50,recalculate=False, standard_scaler=True, plot_commodity_importances=False, commodity=None):
+    '''
+    
+    '''
     split_frac = 0.5
 
     if plot==None or (type(plot)==bool and plot):

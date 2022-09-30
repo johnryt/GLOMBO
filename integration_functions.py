@@ -240,6 +240,7 @@ class Sensitivity():
                  use_alternative_gold_volumes=True,
                  historical_price_rolling_window=1,
                  constrain_previously_tuned=False,
+                 dont_constrain_demand=True,
                  price_to_use='log',
                  timer=None,
                  save_mining_info=False,
@@ -344,6 +345,7 @@ class Sensitivity():
         self.use_alternative_gold_volumes = use_alternative_gold_volumes
         self.historical_price_rolling_window = historical_price_rolling_window
         self.constrain_previously_tuned = constrain_previously_tuned
+        self.dont_constrain_demand = dont_constrain_demand
         self.element_commodity_map = {'Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungsten','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
         self.update_changing_base_parameters_series()
 
@@ -397,8 +399,10 @@ class Sensitivity():
                 'version','notes','hyperparam','mining.hyperparam','refine.hyperparam','demand.hyperparam','results','mine_data'
             ],columns=[])
             reg_results = create_result_df(self, self.mod)
+            if not self.save_mining_info: ml = [0]
+            else: ml = self.mod.mining.ml.copy()
             big_df.loc[:,0] = np.array([self.mod.version, self.notes, self.mod.hyperparam, self.mod.mining.hyperparam,
-                                        self.mod.refine.hyperparam, self.mod.demand.hyperparam, reg_results, self.mod.mining.ml],dtype=object)
+                                        self.mod.refine.hyperparam, self.mod.demand.hyperparam, reg_results, ml],dtype=object)
             big_df.to_pickle(self.pkl_filename)
         self.big_df = big_df.copy()
 
@@ -1308,6 +1312,8 @@ class Sensitivity():
         if hasattr(self,'material') and self.material!='':
             best_params = self.updated_commodity_inputs[self.material].copy().dropna()
             self.updated_commodity_inputs_sub = best_params.copy()
+            for q in self.demand_params:
+                if q in self.updated_commodity_inputs_sub.index and self.dont_constrain_demand: self.updated_commodity_inputs_sub.drop(q,inplace=True)
         else:
             raise ValueError('need to use a string input to changing_base_parameters_series in Sensitivity initialization to run this method')
 

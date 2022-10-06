@@ -76,8 +76,7 @@ def intensity_growth_sec_reg_specified_pooled(elas_sec_reg, reg, sec, gdp_growth
 
     return int_growth
 
-def intensity_prediction(year_i, price_series, gdp_growth_prediction, intensity_last, volume_prediction, elas_mat,
-                        price_lag=0):
+def intensity_prediction(year_i, price_series, gdp_growth_prediction, intensity_last, volume_prediction, elas_mat, price_lag=0):
     '''
     Calculates new aluminium intensities.
 

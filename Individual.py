@@ -231,7 +231,7 @@ class Individual():
             self.rmse_df.index = pd.MultiIndex.from_tuples(self.rmse_df.index)
             self.rmse_df = self.rmse_df.unstack(0)
 
-        if 'mine_data' in big_df.index:
+        if 'mine_data' in big_df.index and type(big_df.loc['mine_data',0][0])!=int:
             self.mine_data = pd.concat([big_df[i]['mine_data'] for i in big_df.columns],keys=big_df.columns)
             self.mine_data.index.set_names(['scenario','year','mine_id'],inplace=True)
         self.results, self.hyperparam, self.historical_data = results.astype(float), hyperparameters, historical_data.astype(float)

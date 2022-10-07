@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 idx = pd.IndexSlice
 from scipy import stats
+from math import erf
 
 def sum_distribution(year_i, y, mu, sigma, distr):
     '''
@@ -21,9 +22,8 @@ def sum_distribution(year_i, y, mu, sigma, distr):
         if y == year_i-1: return 1
         else: return 0
     if distr == 'normal':
-        return stats.norm.cdf(year_i+1, loc=y+mu, scale=sigma) - stats.norm.cdf(year_i, loc=y+mu, scale=sigma)
+        # return stats.norm.cdf(year_i+1, loc=y+mu, scale=sigma) - stats.norm.cdf(year_i, loc=y+mu, scale=sigma)
         return 0.5*(erf((year_i+1-mu-y)/(np.sqrt(2)*sigma)) - erf((year_i-mu-y)/(np.sqrt(2)*sigma)))
-
 
 def reaching_end_of_life(year_i, demand_sectors, lifetime_parameters):
     '''

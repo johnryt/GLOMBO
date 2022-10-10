@@ -58,7 +58,8 @@ class OneMine():
     def shape(self):
         return len(self.index), len(self.columns)
 
-    def sample(self, size=1, resample=False):
+    def sample(self, size=1, resample=False, random_state=0):
+        seed(random_state)
         if resample:
             return choices(self.index, k=size)
         return sample(self.index, k=size)
@@ -84,6 +85,7 @@ class OneMine():
         new_OM_instance.index = np.arange(self.index_max + 1, self.index_max + 1 + len(new_OM_instance.index))
         for i in self.columns:
             ph = getattr(self, i)
+            # v = len(ph)
             ph_type = ph.dtype
             if type(ph) == np.ndarray:
                 if i in new_OM_instance.columns:
@@ -92,6 +94,7 @@ class OneMine():
                     print(85, i)
                     ph = np.append(ph, nan_array).astype(ph_type)
                 setattr(self, i, ph)
+                # print(97, i, v, len(ph))
         self.index_max = np.max(self.index)
 
     def generate_df(self, columns=None):
@@ -1143,7 +1146,7 @@ class miningModel:
                 num_ramping = int(round(h['ramp_up_fraction'] * mines.shape[0], 0))
                 if num_ramping > mines_not_ramping.shape[0]: raise ValueError(
                     'ramp_up_fraction hyperparam input is too large, not enough mines in the pool to have any remaining non-ramping mines')
-                ind = mines_not_ramping.sample(num_ramping, replace=False).index
+                ind = mines_not_ramping.sample(num_ramping, replace=False, random_state=self.rs).index
                 mines_not_ramping.drop(ind, inplace=True)
                 mines.loc[ind, 'Ramp up flag'] = i
                 if h['ramp_up_exponent'] != 0:
@@ -1241,8 +1244,9 @@ class miningModel:
         mines['Production capacity fraction'] = mines['Production capacity (kt)'] / mines[
             'Production capacity (kt)'].sum()
         mines['Payable percent (%)'] = 100 - self.values_from_dist('primary_payable_percent')
-        mines.loc[mines['Production fraction'].cumsum() < self.hyperparam['Value'][
+        mines.loc[mines['Production fraction'].cumsum() <= self.hyperparam['Value'][
             'primary_sxew_fraction'], 'Payable percent (%)'] = 100
+        if self.hyperparam['Value']['primary_sxew_fraction']==1: mines['Payable percent (%)']=100.
         self.mines = mines.copy()
         self.generate_costs_from_regression('Recovery rate (%)')
         mines = self.mines.copy()
@@ -1369,6 +1373,7 @@ class miningModel:
                                 h['primary_tcrc_theta'] * h['primary_tcrc_dore_flag'] + \
                                 h['primary_tcrc_eta'] * (mines['Mine type string'] == 'tailings')
             mines[param] = np.exp(log_minesite_cost)
+            mines.loc[mines['Payable percent (%)']==100,param]=0
         elif param == 'Sustaining CAPEX ($M)':
             #         log(sCAPEX) = alpha + beta*log(commodity price) + gamma*log(head grade)
             #            + delta*log(capacity) + epsilon*placer + theta*stockpile + eta*tailings + rho*underground + zeta*sxew
@@ -1624,12 +1629,14 @@ class miningModel:
 
         mines = host1.mines.copy()
         mines['Capacity utilization'] = host1.values_from_dist(by_param + '_cu')
-        mines['Recovery rate (%)'] = 100 - host1.values_from_dist(by_param + '_rr_default')
+        mines['Recovery rate (%)'] = 100. - host1.values_from_dist(by_param + '_rr_default')
         mines['Production capacity (kt)'] = mines[['Capacity utilization', 'Production (kt)']].product(axis=1)
         mines['Production capacity fraction'] = mines['Production capacity (kt)'] / mines[
             'Production capacity (kt)'].sum()
-        mines['Payable percent (%)'] = 100 - host1.values_from_dist(by_param + '_payable_percent')
-        mines.loc[mines['Production fraction'].cumsum() < h[by_param + '_sxew_fraction'], 'Payable percent (%)'] = 100
+        mines['Payable percent (%)'] = 100. - host1.values_from_dist(by_param + '_payable_percent')
+        mines.loc[mines['Production fraction'].cumsum() <= h[by_param + '_sxew_fraction'], 'Payable percent (%)'] = 100.
+        if h[by_param+'_sxew_fraction']==1: mines['Payable percent (%)']=100.
+        mines.loc[mines['Payable percent (%)']==100,'TCRC (USD/t)'] = 0
         mines['Commodity price (USD/t)'] = h[by_param + '_commodity_price']
 
         host1.mines = mines.copy()
@@ -1670,7 +1677,7 @@ class miningModel:
         mines.loc[mines['Byproduct grade ratio'] < 0, 'Byproduct grade ratio'] = mines['Byproduct grade ratio'].sample(
             n=(mines['Byproduct grade ratio'] < 0).sum(), random_state=self.rs).values
         mines['Head grade (%)'] = mines['Primary Head grade (%)'] / mines['Byproduct grade ratio']
-        mines['Payable percent (%)'] = 100
+        mines['Payable percent (%)'] = 100.
 
         mines['Byproduct minesite cost ratio'] = host1.values_from_dist(by_param + '_minesite_cost_ratio')
         mines.loc[mines['Byproduct minesite cost ratio'] < 0, 'Byproduct minesite cost ratio'] = mines[
@@ -1691,7 +1698,7 @@ class miningModel:
             print(
                 'Currently assuming 95% byproduct recovery rate and 100% byproduct payable percent. Byproduct recovery rate is multiplied by primary recovery rate in future calculations.')
 
-        mines.loc[mines['Byproduct ID'] == 0, 'Primary Recovery rate (%)'] = 100
+        mines.loc[mines['Byproduct ID'] == 0, 'Primary Recovery rate (%)'] = 100.
         mines['Ore treated (kt)'] = mines['Production (kt)'] / (
                     mines[['Recovery rate (%)', 'Head grade (%)', 'Primary Recovery rate (%)']].product(axis=1) / 1e6)
         mines['Primary Production (kt)'] = mines[['Ore treated (kt)', 'Primary Recovery rate (%)',
@@ -1998,13 +2005,15 @@ class miningModel:
                 if i == simulation_time[0]:
                     ml_yr.initial_price_usdpt = np.repeat(primary_price_series[i], len(ml_yr.index))
 
-            sxew_mines = ml_yr.index[ml_yr.payable_percent_pct == 100]
-            conc_mines = ml_yr.index[ml_yr.payable_percent_pct != 100]
-            ml_yr.tcrc_usdpt[sxew_mines] = 0
+            self.sxew_mines = ml_yr.index[ml_yr.payable_percent_pct == 100]
+            self.conc_mines = ml_yr.index[(ml_yr.payable_percent_pct != 100)&(~np.isnan(ml_yr.payable_percent_pct))]
+            ml_yr.tcrc_usdpt[self.sxew_mines] = 0
             if self.byproduct:
-                ml_yr.primary_tcrc_usdpt[sxew_mines] = 0
+                ml_yr.primary_tcrc_usdpt[self.sxew_mines] = 0
             closing_mines = ml_last.index[ml_last.ramp_down_flag]
             opening_mines = ml_yr.index[ml_yr.ramp_up_flag != 0]
+            not_new_opening = ml_yr.index[ml_yr.ramp_up_flag!=2] if i>self.simulation_time[1] else ml_yr.index
+            # print(2014,len(not_new_opening),len(ml_yr.index))
             govt_mines = ml_yr.index[ml_yr.operate_with_negative_cash_flow]
             #             end_ramp_up = ml_yr.loc[(opening_mines)&(ml_yr['Opening']+h['ramp_up_years']<=i)&(ml_yr['Opening']>simulation_time[0]-1)].index
             end_ramp_up = ml_yr.index[ml_yr.ramp_up_flag == h['ramp_up_years'] + 1]
@@ -2116,9 +2125,9 @@ class miningModel:
             # print(2113,len(ml_yr.commodity_price_usdpt))
 
             ml_yr.minesite_cost_usdpt = self.calculate_minesite_cost(
-                ml_last.minesite_cost_usdpt, ml_yr.head_grade_pct[ml_last.index], ml_last.head_grade_pct,
+                ml_last.minesite_cost_usdpt, ml_yr.head_grade_pct, ml_last.head_grade_pct,
                 ml_yr.commodity_price_usdpt, ml_last.commodity_price_usdpt,
-                ml_yr.ore_treated_kt[ml_last.index], ml_yr.simulation_start_ore_treated_kt[ml_last.index], i)
+                ml_yr.ore_treated_kt, ml_yr.simulation_start_ore_treated_kt, i)
             if self.byproduct:
                 ml_yr.primary_minesite_cost_usdpt = self.calculate_minesite_cost(
                     ml_last.primary_minesite_cost_usdpt, ml_yr.primary_head_grade_pct, ml_last.primary_head_grade_pct,
@@ -2221,6 +2230,7 @@ class miningModel:
             self.byproduct_tcrc_series.loc[i] = np.nanmean(ml_yr_ph.tcrc_usdpt)
         else:
             self.primary_price_series.loc[i] = np.nanmean(ml_yr_ph.commodity_price_usdpt)
+            # print(2225,ml_yr_ph.tcrc_usdpt)
             self.primary_tcrc_series.loc[i] = np.nanmean(ml_yr_ph.tcrc_usdpt)
 
         self.supply_series.loc[i] = np.nansum(ml_yr_ph.production_kt)
@@ -2249,8 +2259,7 @@ class miningModel:
         grade[grade > 80] = 80
         return grade
 
-    def calculate_minesite_cost(self, minesite_cost_last, grade, initial_grade, price, initial_price, ore_treated,
-                                sim_start_ore_treated, year_i):
+    def calculate_minesite_cost(self, minesite_cost_last, grade, initial_grade, price, initial_price, ore_treated, sim_start_ore_treated, year_i):
 
         h = self.hyperparam.copy()['Value']
         if h['minesite_cost_response_to_grade_price']:
@@ -2342,7 +2351,9 @@ class miningModel:
         # tcrc_df = self.ml['TCRC (USD/t)'].unstack()
         # tcrc_df.loc[i,:] = ml_yr['TCRC (USD/t)']
         tcrc_expect = self.calculate_price_expect(self.primary_tcrc_series.copy(), i)
-        ml_yr.tcrc_expect_usdpt = ml_yr.tcrc_usdpt*tcrc_expect/np.nanmean(ml_yr.tcrc_usdpt)
+        ml_yr.tcrc_expect_usdpt = np.repeat(0, len(ml_yr.index)) # SX-EW mines have tcrc of zero so only set conc mines below
+        if len(self.conc_mines)>0:
+            ml_yr.tcrc_expect_usdpt[self.conc_mines] = ml_yr.tcrc_usdpt[self.conc_mines]*tcrc_expect/np.nanmean(ml_yr.tcrc_usdpt[self.conc_mines])
         tcrc_expect = ml_yr.tcrc_expect_usdpt
 
         if self.byproduct:
@@ -2515,9 +2526,7 @@ class miningModel:
                                                ml_yr['Development CAPEX ($M)']
         return ml_yr
 
-    def get_cash_flow(self, ml_yr_, cumu_ot_expect, ot_expect, initial_ore_treated, initial_grade, price_expect,
-                      tcrc_expect, initial_price, overhead, sustaining_capex, development_capex, pri_initial_price,
-                      pri_price_expect, pri_tcrc_expect, neg_cash_flow):
+    def get_cash_flow(self, ml_yr_, cumu_ot_expect, ot_expect, initial_ore_treated, initial_grade, price_expect, tcrc_expect, initial_price, overhead, sustaining_capex, development_capex, pri_initial_price, pri_price_expect, pri_tcrc_expect, neg_cash_flow):
         by_cash_flow_expect = 0
         by_tcm_expect = 0
         ml_yr = ml_yr_.copy()
@@ -2754,6 +2763,7 @@ class miningModel:
         else:
             n = self.subsample_series.loc[i]
             incentive_mines = incentive_mines.sample(n=n, replace=True).reset_index(drop=True)
+        sxew = incentive_mines['Payable percent (%)']==100.
         self.perturb_cols = [i for i in incentive_mines.dtypes[incentive_mines.dtypes == float].index if
                              'price' not in i and i not in ['Opening', 'Closure', 'Known opening', 'Region',
                                                             'Mine type', 'Risk indicator']]
@@ -2764,6 +2774,8 @@ class miningModel:
                                             (incentive_mines.shape[0], len(self.perturb_cols))), incentive_mines.index,
                                  self.perturb_cols)
         incentive_mines[self.perturb_cols] = incentive_mines[self.perturb_cols] * jitter_df
+        incentive_mines.loc[sxew,'Payable percent (%)'] = 100.
+        incentive_mines.loc[incentive_mines['Payable percent (%)']==100,'TCRC (USD/t)'] = 0.
 
         inc.mines = incentive_mines.copy()
         inc.generate_costs_from_regression('Development CAPEX ($M)')
@@ -2818,7 +2830,7 @@ class miningModel:
         #                              np.arange(self.ml.index.get_level_values(1).max()+self.i*1e4,
         #                                        self.ml.index.get_level_values(1).max()+self.i*1e4+mines_to_open.shape[0]))),level=1)
 
-        self.mines_to_open = mines_to_open.copy()
+        self.mines_to_open = mines_to_open
 
     def incentive_open_xinkai_thesis(self):
         nowish = datetime.now()
@@ -2830,6 +2842,9 @@ class miningModel:
         condition_for_ml = i > self.simulation_time[0] + h['ml_accelerate_initialize_years'] and i % h[
             'ml_accelerate_every_n_years'] != 0
 
+
+        inc.mine_life_init['Initial price (USD/t)'] = self.primary_price_series[self.i]
+        inc.mine_life_init['Commodity price (USD/t)'] = self.primary_price_series[self.i]
         inc.mines = OneMine(name=i, df=inc.mine_life_init)
         inc2 = deepcopy([inc])[0]
         if h['use_ml_to_accelerate'] and condition_for_ml:
@@ -2961,7 +2976,7 @@ class miningModel:
 
         if self.verbosity > 1:
             print(f'Number of mines opening {inc.mines_to_open.shape[0]}')
-            print('Number of mines closing:', np.nansum(self.ml_yr.closed_flag))
+            print('Number of mines closing:', np.nansum(self.ml_yr.simulated_closure==i))
         self.inc = inc
         if not hasattr(self, 'inc_list'):
             self.inc_list = []
@@ -3202,7 +3217,8 @@ class miningModel:
             price_select = 'Commodity price (USD/t)'
 
         inc_mines = s.mine_life_init.copy()
-        inc_mines[price_select] *= price / inc_mines[price_select].mean()
+        if inc_mines[price_select].mean()!=0:
+            inc_mines[price_select] *= price / inc_mines[price_select].mean()
 
         target = self.demand_series[i]
         operating_production = self.ml.copy().loc[i, 'Production (kt)'].sum()
@@ -3420,15 +3436,21 @@ class miningModel:
                 else:
                     new_price = self.primary_price_series[i] if price_select == 'Commodity price (USD/t)' else \
                     self.primary_tcrc_series[i]
-                    if 'TCRC' in price_select:
-                        setattr(self.ml.loc[i], alt_select, getattr(self.ml.loc[i], alt_select) * new_price / np.nanmean(
-                            getattr(self.ml.loc[i], alt_select)))
+                    if True:#'TCRC' in price_select:
+                        year_i_mines = self.ml.loc[i]
+                        conc_mines = (year_i_mines.payable_percent_pct!=100)&(~np.isnan(year_i_mines.payable_percent_pct))
+                        if np.sum(conc_mines)>0:
+                            setattr(self.ml.loc[i], alt_select, getattr(year_i_mines, alt_select) * new_price / np.nanmean(
+                                getattr(year_i_mines, alt_select)[conc_mines]))
                         if len(opening.index)>0:
-                            setattr(opening, alt_select,
-                                getattr(opening, alt_select) * new_price / np.nanmean(getattr(opening, alt_select).astype(float)))
+                            conc_mines = (opening.payable_percent_pct!=100)&(~np.isnan(opening.payable_percent_pct.astype(float)))
+                            if np.sum(conc_mines)>0:
+                                setattr(opening, alt_select,
+                                    getattr(opening, alt_select) * new_price / np.nanmean(getattr(opening, alt_select).astype(float)[conc_mines]))
                     else:
                         setattr(self.ml.loc[i], alt_select, new_price)
                         setattr(opening, alt_select, new_price)
+                        # print(3437,opening.commodity_price_usdpt)
 
         self.opening = opening.copy()
         if self.byproduct and byproduct == False:

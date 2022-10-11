@@ -2846,10 +2846,11 @@ class miningModel:
         inc.mine_life_init['Initial price (USD/t)'] = self.primary_price_series[self.i]
         inc.mine_life_init['Commodity price (USD/t)'] = self.primary_price_series[self.i]
         inc.mines = OneMine(name=i, df=inc.mine_life_init)
-        inc2 = deepcopy([inc])[0]
-        if h['use_ml_to_accelerate'] and condition_for_ml:
-            inc.i = i
-            inc.simulate_mine_life_one_year()
+        if h['use_ml_to_accelerate']:
+            inc2 = deepcopy([inc])[0]
+            if condition_for_ml:
+                inc.i = i
+                inc.simulate_mine_life_one_year()
         else:
             inc.simulate_mine_life_all_years()
         opening_sim = inc.ml.generate_df()

@@ -6,7 +6,7 @@ import pandas as pd
 idx = pd.IndexSlice
 from scipy import stats
 from datetime import datetime
-from copy import deepcopy
+from copy import deepcopy, copy
 from IPython.display import display
 from random import sample, choices, seed
 
@@ -52,8 +52,16 @@ class OneMine():
         setattr(self, name, array)
         self.columns = np.append(self.columns, [name])
 
-    def copy(self):
-        return deepcopy([self])[0]
+    def copy(self, use_deepcopy=False):
+        if use_deepcopy:
+            return deepcopy([self])[0]
+        else:
+            copy_ph = OneMine(name=self.name)
+            copy_ph.columns = self.columns
+            for k in self.columns:
+                q = getattr(self,k)
+                setattr(copy_ph, k, q.copy())
+            return copy_ph
 
     def shape(self):
         return len(self.index), len(self.columns)
@@ -109,39 +117,37 @@ class miningModel:
     docstring
     """
 
-    def __init__(self, simulation_time=np.arange(2019, 2041), hyperparam=0, byproduct=False, verbosity=0,
-                 price_change_yoy=0):
+    def __init__(self, simulation_time=np.arange(2019, 2041), hyperparam=0, byproduct=False, verbosity=0, price_change_yoy=0):
         """"""
         self.simulation_time = simulation_time
         self.byproduct = byproduct
         self.verbosity = verbosity
         self.initialize_hyperparams(hyperparam)
-        self.hyperparam.loc['primary_recovery_rate_shuffle_param', 'Value'] = 1
+        self.hyperparam['primary_recovery_rate_shuffle_param'] = 1
         self.price_change_yoy = price_change_yoy
         self.i = self.simulation_time[0]
-        self.rs = self.hyperparam['Value']['random_state']
+        self.rs = self.hyperparam['random_state']
 
         self.concentrate_supply_series = pd.Series(np.nan, self.simulation_time)
         self.sxew_supply_series = pd.Series(np.nan, self.simulation_time)
 
     def load_variables_from_hyperparam(self):
         #         self.mine_cu_margin_elas, self.mine_cost_og_elas, self.mine_cost_price_elas, self.mine_cu0, self.mine_tcm0, self.discount_rate, self.ramp_down_cu, self.ramp_up_cu, self.ramp_up_years = \
-        #             self.hyperparam['Value'][['mine_cu_margin_elas','mine_cost_og_elas','mine_cost_price_elas',
+        #             self.hyperparam[['mine_cu_margin_elas','mine_cost_og_elas','mine_cost_price_elas',
         #                                  'mine_cu0','mine_tcm0','discount_rate','ramp_down_cu','ramp_up_cu','ramp_up_years']]
-        #         self.rs = self.hyperparam['Value']['random_state']
-        #         self.minesite_cost_response_to_grade_price = self.hyperparam['Value']['minesite_cost_response_to_grade_price']
-        #         self.resources_contained_series = self.hyperparam['Value']['incentive_resources_contained_series']
-        self.subsample_series = self.hyperparam['Value']['incentive_subsample_series']
+        #         self.rs = self.hyperparam['random_state']
+        #         self.minesite_cost_response_to_grade_price = self.hyperparam['minesite_cost_response_to_grade_price']
+        #         self.resources_contained_series = self.hyperparam['incentive_resources_contained_series']
+        self.subsample_series = self.hyperparam['incentive_subsample_series']
         self.initial_subsample_series = self.subsample_series.copy()
 
-    #         self.simulate_history_bool = self.hyperparam['Value']['simulate_history_bool']
-    #         self.incentive_tuning_option = self.hyperparam['Value']['incentive_tuning_option']
+    #         self.simulate_history_bool = self.hyperparam['simulate_history_bool']
+    #         self.incentive_tuning_option = self.hyperparam['incentive_tuning_option']
 
-    def plot_relevant_params(self, include=0, exclude=[], plot_recovery_grade_correlation=True,
-                             plot_minesite_supply_curve=True, plot_margin_supply_curve=True,
-                             plot_primary_minesite_supply_curve=False, plot_primary_margin_supply_curve=False,
-                             log_scale=False, dontplot=False, byproduct=False):
-
+    def plot_relevant_params(self, include=0, exclude=[], plot_recovery_grade_correlation=True, plot_minesite_supply_curve=True, plot_margin_supply_curve=True, plot_primary_minesite_supply_curve=False, plot_primary_margin_supply_curve=False, log_scale=False, dontplot=False, byproduct=False):
+        """
+        docstring
+        """
         mines = self.mines.copy()
         if type(include) == int:
             cols = [i for i in mines.columns if i not in exclude and mines.dtypes[i] not in [object, str]]
@@ -169,7 +175,7 @@ class miningModel:
             else:
                 mines[i].replace({'Primary': 0, 'Host 1': 1, 'Host 2': 2, 'Host 3': 3}).plot.hist(ax=a, title=i.replace(
                     'Primary', 'Host'), bins=50)
-            if i == 'Recovery rate (%)' and self.hyperparam['Value']['primary_rr_negative']:
+            if i == 'Recovery rate (%)' and self.hyperparam['primary_rr_negative']:
                 a.text(0.05, 0.95, 'Reset to default,\nnegative values found.\nPrice and grade too low.',
                        va='top', ha='left', transform=a.transAxes)
 
@@ -178,7 +184,7 @@ class miningModel:
             do_a_regress(mines['Head grade (%)'], mines['Recovery rate (%)'], ax=a)
             a.set(xlabel='Head grade (%)', ylabel='Recovery rate (%)',
                   title='Correlation with partial shuffle param\nValue: {:.2f}'.format(
-                      self.hyperparam['Value']['primary_recovery_rate_shuffle_param']))
+                      self.hyperparam['primary_recovery_rate_shuffle_param']))
 
         if plot_minesite_supply_curve:
             a = ax[-(plot_minesite_supply_curve + plot_margin_supply_curve)]
@@ -246,595 +252,507 @@ class miningModel:
         and/or Displacement/04 Presentations/John/Weekly Updates/20210825 Generalization.pptx
         '''
         if type(hyperparam) == int:
-            hyperparameters = pd.DataFrame(np.nan, ['primary_commodity_price'], ['Value', 'Notes'])
+            hyperparameters = {}
+            hyperparameter_notes = {}
 
             if 'parameters for operating mine pool generation, mass':
-                hyperparameters.loc['verbosity', 'Value'] = self.verbosity
-                hyperparameters.loc['byproduct', 'Value'] = self.byproduct
-                hyperparameters.loc['primary_production', 'Value'] = 1  # kt
-                hyperparameters.loc['primary_production_mean', 'Value'] = 0.001  # kt
-                hyperparameters.loc['primary_production_var', 'Value'] = 1
-                hyperparameters.loc['primary_production_distribution', 'Value'] = 'lognorm'
-                hyperparameters.loc['primary_production_fraction', 'Value'] = 1
-                hyperparameters.loc['primary_ore_grade_mean', 'Value'] = 0.01
-                hyperparameters.loc['primary_ore_grade_var', 'Value'] = 0.3
-                hyperparameters.loc['primary_ore_grade_distribution', 'Value'] = 'lognorm'
-                hyperparameters.loc['primary_cu_mean', 'Value'] = 0.85
-                hyperparameters.loc['primary_cu_var', 'Value'] = 0.06
-                hyperparameters.loc['primary_cu_distribution', 'Value'] = 'lognorm'
-                hyperparameters.loc['primary_payable_percent_mean', 'Value'] = 0.63
-                hyperparameters.loc['primary_payable_percent_var', 'Value'] = 1.83
-                hyperparameters.loc['primary_payable_percent_distribution', 'Value'] = 'weibull_min'
-                hyperparameters.loc['primary_rr_default_mean', 'Value'] = 13.996
-                hyperparameters.loc['primary_rr_default_var', 'Value'] = 0.675
-                hyperparameters.loc['primary_rr_default_distribution', 'Value'] = 'lognorm'
-                hyperparameters.loc['primary_ot_cumu_mean', 'Value'] = 14.0018
-                hyperparameters.loc['primary_ot_cumu_var', 'Value'] = 0.661
-                hyperparameters.loc['primary_ot_cumu_distribution', 'Value'] = 'lognorm'
+                hyperparameters['verbosity'] = self.verbosity
+                hyperparameters['byproduct'] = self.byproduct
+                hyperparameters['primary_production'] = 1  # kt
+                hyperparameters['primary_production_mean'] = 0.001  # kt
+                hyperparameters['primary_production_var'] = 1
+                hyperparameters['primary_production_distribution'] = 'lognorm'
+                hyperparameters['primary_production_fraction'] = 1
+                hyperparameters['primary_ore_grade_mean'] = 0.01
+                hyperparameters['primary_ore_grade_var'] = 0.3
+                hyperparameters['primary_ore_grade_distribution'] = 'lognorm'
+                hyperparameters['primary_cu_mean'] = 0.85
+                hyperparameters['primary_cu_var'] = 0.06
+                hyperparameters['primary_cu_distribution'] = 'lognorm'
+                hyperparameters['primary_payable_percent_mean'] = 0.63
+                hyperparameters['primary_payable_percent_var'] = 1.83
+                hyperparameters['primary_payable_percent_distribution'] = 'weibull_min'
+                hyperparameters['primary_rr_default_mean'] = 13.996
+                hyperparameters['primary_rr_default_var'] = 0.675
+                hyperparameters['primary_rr_default_distribution'] = 'lognorm'
+                hyperparameters['primary_ot_cumu_mean'] = 14.0018
+                hyperparameters['primary_ot_cumu_var'] = 0.661
+                hyperparameters['primary_ot_cumu_distribution'] = 'lognorm'
 
-                hyperparameters.loc['primary_rr_alpha', 'Value'] = 39.2887
-                hyperparameters.loc['primary_rr_beta', 'Value'] = 5.0898
-                hyperparameters.loc['primary_rr_gamma', 'Value'] = 4.9559
-                hyperparameters.loc['primary_rr_delta', 'Value'] = 21.8916
-                hyperparameters.loc['primary_rr_epsilon', 'Value'] = -2.4569
-                hyperparameters.loc['primary_rr_theta', 'Value'] = -17.4767
-                hyperparameters.loc['primary_rr_eta', 'Value'] = 0.6320
-                hyperparameters.loc['primary_rr_rho', 'Value'] = -10.7094
-                hyperparameters.loc['primary_rr_negative', 'Value'] = False
+                hyperparameters['primary_rr_alpha'] = 39.2887
+                hyperparameters['primary_rr_beta'] = 5.0898
+                hyperparameters['primary_rr_gamma'] = 4.9559
+                hyperparameters['primary_rr_delta'] = 21.8916
+                hyperparameters['primary_rr_epsilon'] = -2.4569
+                hyperparameters['primary_rr_theta'] = -17.4767
+                hyperparameters['primary_rr_eta'] = 0.6320
+                hyperparameters['primary_rr_rho'] = -10.7094
+                hyperparameters['primary_rr_negative'] = False
 
-                hyperparameters.loc[
-                    'primary_recovery_rate_var', 'Value'] = 0.6056  # default value of 0.6056 comes from the mean across all materials in snl
-                hyperparameters.loc['primary_recovery_rate_distribution', 'Value'] = 'lognorm'
-                hyperparameters.loc['primary_recovery_rate_shuffle_param', 'Value'] = 0.4
-                hyperparameters.loc[
-                    'primary_reserves_mean', 'Value'] = 11.04953  # these values are from https://countertop.mit.edu:3048/notebooks/SQL/Second%20round%20generalization%20mine%20parameters.ipynb
-                hyperparameters.loc[
-                    'primary_reserves_var', 'Value'] = 0.902357  # use the ratio between reserves and ore treated in each year, finding lognormal distribution
-                hyperparameters.loc['primary_reserves_distribution', 'Value'] = 'lognorm'
-                hyperparameters.loc['primary_reserves_reported', 'Value'] = 30
-                hyperparameters.loc[
-                    'primary_reserves_reported_basis', 'Value'] = 'none'  # ore, metal, or none basis - ore: mass of ore reported as reserves (SNL style), metal: metal content of reserves reported, none: use the generated values without adjustment
+                hyperparameters['primary_recovery_rate_var'] = 0.6056  # default value of 0.6056 comes from the mean across all materials in snl
+                hyperparameters['primary_recovery_rate_distribution'] = 'lognorm'
+                hyperparameters['primary_recovery_rate_shuffle_param'] = 0.4
+                hyperparameters['primary_reserves_mean'] = 11.04953  # these values are from https://countertop.mit.edu:3048/notebooks/SQL/Second%20round%20generalization%20mine%20parameters.ipynb
+                hyperparameters['primary_reserves_var'] = 0.902357  # use the ratio between reserves and ore treated in each year, finding lognormal distribution
+                hyperparameters['primary_reserves_distribution'] = 'lognorm'
+                hyperparameters['primary_reserves_reported'] = 30
+                hyperparameters['primary_reserves_reported_basis'] = 'none'  # ore, metal, or none basis - ore: mass of ore reported as reserves (SNL style), metal: metal content of reserves reported, none: use the generated values without adjustment
 
-                hyperparameters.loc['production_frac_region1', 'Value'] = 0.2
-                hyperparameters.loc['production_frac_region2', 'Value'] = 0.2
-                hyperparameters.loc['production_frac_region3', 'Value'] = 0.2
-                hyperparameters.loc['production_frac_region4', 'Value'] = 0.2
-                hyperparameters.loc['production_frac_region5', 'Value'] = 1 - hyperparameters.loc[
-                                                                              'production_frac_region1':'production_frac_region4',
-                                                                              'Value'].sum()
+                hyperparameters['production_frac_region1'] = 0.2
+                hyperparameters['production_frac_region2'] = 0.2
+                hyperparameters['production_frac_region3'] = 0.2
+                hyperparameters['production_frac_region4'] = 0.2
+                hyperparameters['production_frac_region5'] = 1 - np.sum([hyperparameters[i] for i in ['production_frac_region1','production_frac_region2','production_frac_region3','production_frac_region4']])
 
             if 'parameters for operating mine pool generation, cost':
-                hyperparameters.loc['primary_commodity_price', 'Value'] = 6000  # USD/t
-                hyperparameters.loc['primary_minesite_cost_mean', 'Value'] = 0
-                hyperparameters.loc['primary_minesite_cost_var', 'Value'] = 1
-                hyperparameters.loc['primary_minesite_cost_distribution', 'Value'] = 'lognorm'
+                hyperparameters['primary_commodity_price'] = 6000  # USD/t
+                hyperparameters['primary_minesite_cost_mean'] = 0
+                hyperparameters['primary_minesite_cost_var'] = 1
+                hyperparameters['primary_minesite_cost_distribution'] = 'lognorm'
 
-                hyperparameters.loc['minetype_prod_frac_underground', 'Value'] = 0.3
-                hyperparameters.loc['minetype_prod_frac_openpit', 'Value'] = 0.7
-                hyperparameters.loc['minetype_prod_frac_tailings', 'Value'] = 0
-                hyperparameters.loc['minetype_prod_frac_stockpile', 'Value'] = 0
-                hyperparameters.loc['minetype_prod_frac_placer', 'Value'] = 1 - hyperparameters.loc[
-                                                                                'minetype_prod_frac_underground':'minetype_prod_frac_stockpile',
-                                                                                'Value'].sum()
+                hyperparameters['minetype_prod_frac_underground'] = 0.3
+                hyperparameters['minetype_prod_frac_openpit'] = 0.7
+                hyperparameters['minetype_prod_frac_tailings'] = 0
+                hyperparameters['minetype_prod_frac_stockpile'] = 0
+                hyperparameters['minetype_prod_frac_placer'] = 1 - np.sum([hyperparameters[i] for i in ['minetype_prod_frac_underground','minetype_prod_frac_openpit','minetype_prod_frac_tailings','minetype_prod_frac_stockpile']])
 
-                hyperparameters.loc['primary_minerisk_mean', 'Value'] = 9.4  # values for copper → ranges from 4 to 20
-                hyperparameters.loc['primary_minerisk_var', 'Value'] = 1.35
-                hyperparameters.loc['primary_minerisk_distribution', 'Value'] = 'norm'
+                hyperparameters['primary_minerisk_mean'] = 9.4  # values for copper → ranges from 4 to 20
+                hyperparameters['primary_minerisk_var'] = 1.35
+                hyperparameters['primary_minerisk_distribution'] = 'norm'
 
-                hyperparameters.loc[
-                    'primary_minesite_cost_regression2use', 'Value'] = 'linear_113_price_tcm_sx'  # options: linear_107, bayesian_108, linear_110_price, linear_111_price_tcm, linear_112_price_tcm_sx, linear_112_price_tcm_sx; not used if primary_minesite_cost_mean>0
-                hyperparameters.loc['primary_tcm_flag', 'Value'] = 'tcm' in hyperparameters['Value'][
-                    'primary_minesite_cost_regression2use']
-                hyperparameters.loc[
-                    'primary_tcrc_regression2use', 'Value'] = 'linear_114'  # options: linear_114, linear_114_reftype
-                hyperparameters.loc[
-                    'primary_tcrc_dore_flag', 'Value'] = False  # determines whether the refining process is that for dore or for concentrate
-                hyperparameters.loc[
-                    'primary_sxew_fraction', 'Value'] = 0  # fraction of primary production coming from sxew mines
-                hyperparameters.loc[
-                    'primary_sxew_fraction_change', 'Value'] = 0  # change per year in the fraction of primary production coming from sxew mines
-                hyperparameters.loc['primary_sxew_fraction_series', :] = np.array(
-                    [pd.Series(0, self.simulation_time), 'default primary sxew_fraction_series series'], dtype=object)
+                hyperparameters['primary_minesite_cost_regression2use'] = 'linear_113_price_tcm_sx'  # options: linear_107, bayesian_108, linear_110_price, linear_111_price_tcm, linear_112_price_tcm_sx, linear_112_price_tcm_sx; not used if primary_minesite_cost_mean>0
+                hyperparameters['primary_tcm_flag'] = 'tcm' in hyperparameters['primary_minesite_cost_regression2use']
+                hyperparameters['primary_tcrc_regression2use'] = 'linear_114'  # options: linear_114, linear_114_reftype
+                hyperparameters['primary_tcrc_dore_flag'] = False  # determines whether the refining process is that for dore or for concentrate
+                hyperparameters['primary_sxew_fraction'] = 0  # fraction of primary production coming from sxew mines
+                hyperparameters['primary_sxew_fraction_change'] = 0  # change per year in the fraction of primary production coming from sxew mines
+                hyperparameters['primary_sxew_fraction_series'] = pd.Series(0, self.simulation_time)
+                hyperparameter_notes['primary_sxew_fraction_series'] = 'default primary sxew_fraction_series series'
 
-                hyperparameters.loc[
-                    'primary_scapex_regression2use', 'Value'] = 'linear_123_norm'  # options: linear_119_cap_sx, linear_117_price_cap_sx, linear_123_norm
-                hyperparameters.loc['primary_dcapex_regression2use',
-                :] = 'linear_124_norm', 'options: linear_124_norm. See 20210825 Generalization.pptx, slide 124'
+                hyperparameters['primary_scapex_regression2use'] = 'linear_123_norm'  # options: linear_119_cap_sx, linear_117_price_cap_sx, linear_123_norm
+                hyperparameters['primary_dcapex_regression2use'] = 'linear_124_norm'
+                hyperparameter_notes['primary_dcapex_regression2use'] = 'options: linear_124_norm. See 20210825 Generalization.pptx, slide 124'
 
-                hyperparameters.loc['primary_reclamation_constant',
-                :] = 1.321, 'for use in np.exp(1.321+0.671*np.log(mines_cor_adj[Capacity (kt)]))'
-                hyperparameters.loc['primary_reclamation_slope',
-                :] = 0.671, 'for use in np.exp(1.321+0.671*np.log(mines_cor_adj[Capacity (kt)]))'
-                hyperparameters.loc['primary_overhead_regression2use',
-                :] = 'linear_194', 'options are linear_194, which uses values from 20210825 Generalization.pptx slide 194 or None, which gives a constant value for overhead at all mines of 0.1, in $M'
+                hyperparameters['primary_reclamation_constant'] = 1.321
+                hyperparameter_notes['primary_reclamation_constant'] = 'for use in np.exp(1.321+0.671*np.log(mines_cor_adj[Capacity (kt)]))'
+                hyperparameters['primary_reclamation_slope'] = 0.671
+                hyperparameter_notes['primary_reclamation_slope'] = 'for use in np.exp(1.321+0.671*np.log(mines_cor_adj[Capacity (kt)]))'
+                hyperparameters['primary_overhead_regression2use'] = 'linear_194'
+                hyperparameter_notes['primary_overhead_regression2use'] = 'options are linear_194, which uses values from 20210825 Generalization.pptx slide 194 or None, which gives a constant value for overhead at all mines of 0.1, in $M'
                 hyperparameters = self.add_minesite_cost_regression_params(hyperparameters)
 
             if 'parameters for mine life simulation':
-                hyperparameters.loc['commodity', 'Value'] = 'notAu'
-                hyperparameters.loc['primary_oge_s', 'Value'] = 0.3320346
-                hyperparameters.loc['primary_oge_loc', 'Value'] = 0
-                hyperparameters.loc['primary_oge_scale', 'Value'] = 0.399365
+                hyperparameters['commodity'] = 'notAu'
+                hyperparameters['primary_oge_s'] = 0.3320346
+                hyperparameters['primary_oge_loc'] = 0
+                hyperparameters['primary_oge_scale'] = 0.399365
 
-                hyperparameters.loc['mine_cu_margin_elas', 'Value'] = 0.01
-                hyperparameters.loc['mine_cost_og_elas', 'Value'] = -0.113
-                hyperparameters.loc['mine_cost_tech_improvements', ['Value', 'Notes']] = np.array(
-                    [0.5, 'Percent (%) improvement in mine cost reductions per year, default 0.5%'], dtype='object')
-                hyperparameters.loc['mine_cost_price_elas', 'Value'] = 0.125
-                hyperparameters.loc['mine_cu0', 'Value'] = 0.7688729808870376
-                hyperparameters.loc['mine_tcm0', 'Value'] = 14.575211987093567
-                hyperparameters.loc['ramp_up_fraction', ['Value', 'Notes']] = np.array([0.02,
-                                                                                        'fraction of mines in the initial mine generation step that are in any of the ramp up stages (e.g. if ramp_up_year is 3 and ramp_up_fraction is 0.1, then 10% of the mines will have ramp up flag=1, 10% ramp up flag=2, etc.). Value is currently 0.02 based on an initial guess.'],
-                                                                                       dtype='object')
-                hyperparameters.loc['discount_rate', 'Value'] = 0.10
-                hyperparameters.loc['cu_cutoff', ['Value', 'Notes']] = np.array(
-                    [1.1, 'highest allowable capacity utilization'], dtype='object')
-                hyperparameters.loc['ramp_down_cu', 'Value'] = 0.4
-                hyperparameters.loc[
-                    'ramp_up_cu', 'Value'] = 0.4  # currently replacing this s.t. linear ramp up to 100% instead
-                hyperparameters.loc['ramp_up_years', 'Value'] = 3
-                hyperparameters.loc['ramp_up_exponent', 'Value'] = 1
-                hyperparameters.loc['byproduct_ramp_down_rr', 'Value'] = 0.4
-                hyperparameters.loc['byproduct_ramp_up_rr', 'Value'] = 0.4
-                hyperparameters.loc['byproduct_ramp_up_years', 'Value'] = 1
-                hyperparameters.loc['close_price_method', 'Value'] = 'probabilistic'
-                hyperparameters.loc['close_years_back', 'Value'] = 3
-                hyperparameters.loc['close_probability_split_max', 'Value'] = 0.3
-                hyperparameters.loc['close_probability_split_mean', 'Value'] = 0.5
-                hyperparameters.loc['close_probability_split_min', 'Value'] = 0.2
+                hyperparameters['mine_cu_margin_elas'] = 0.01
+                hyperparameters['mine_cost_og_elas'] = -0.113
+                hyperparameters['mine_cost_tech_improvements'] = 0.5
+                hyperparameter_notes['mine_cost_tech_improvements'] = 'Percent (%) improvement in mine cost reductions per year, default 0.5%'
+                hyperparameters['mine_cost_price_elas'] = 0.125
+                hyperparameters['mine_cu0'] = 0.7688729808870376
+                hyperparameters['mine_tcm0'] = 14.575211987093567
+                hyperparameters['ramp_up_fraction'] = 0.02
+                hyperparameter_notes['ramp_up_fraction'] = 'fraction of mines in the initial mine generation step that are in any of the ramp up stages (e.g. if ramp_up_year is 3 and ramp_up_fraction is 0.1, then 10% of the mines will have ramp up flag=1, 10% ramp up flag=2, etc.). Value is currently 0.02 based on an initial guess.'
 
-                hyperparameters.loc['reinitialize', ['Value', 'Notes']] = np.array([True,
-                                                                                    'bool, True runs the setup fn initialize_mine_life instead of pulling from init_mine_life.pkl'],
-                                                                                   dtype='object')
-                hyperparameters.loc['load_mine_life_init_from_pkl', :] = np.array([False, 'self explanatory'],
-                                                                                  dtype=object)
-                hyperparameters.loc['minesite_cost_response_to_grade_price', ['Value', 'Notes']] = np.array([True,
-                                                                                                             'bool, True,minesite costs respond to ore grade decline as per slide 10 here: Group Research Folder_Olivetti/Displacement/04 Presentations/John/Weekly Updates/20210825 Generalization.pptx'],
-                                                                                                            dtype='object')
-                hyperparameters.loc['use_reserves_for_closure', ['Value', 'Notes']] = np.array([False,
-                                                                                                'bool, True forces mines to close when they run out of reserves, False allows otherwise. Should always use False'],
-                                                                                               dtype='object')
-                hyperparameters.loc['forever_sim', ['Value', 'Notes']] = np.array([False,
-                                                                                   'bool, if True allows the simulation to run until all mines have closed (or bauxite price series runs out of values), False only goes until set point'],
-                                                                                  dtype='object')
-                hyperparameters.loc['simulate_closure', ['Value', 'Notes']] = np.array([True,
-                                                                                        'bool, whether to simulate 2019 operating mines and their closure, default Truebut can be set to False to test mine opening.'],
-                                                                                       dtype='object')
-                hyperparameters.loc['simulate_opening', ['Value', 'Notes']] = np.array([False,
-                                                                                        'bool, whether to simulate new mine opening, default True but set False during mine opening evaluation so we dont end up in an infinite loop'],
-                                                                                       dtype='object')
-                hyperparameters.loc['reinitialize_incentive_mines', ['Value', 'Notes']] = np.array([False,
-                                                                                                    'bool, default False and True is not set up yet. Whether to create a new  incentive pool of mines or to use the pre-generated one, passing True requires supplying incentive_mine_hyperparameters, which can be accessed by calling self.output_incentive_mine_hyperparameters()'],
-                                                                                                   dtype='object')
-                hyperparameters.loc['continuous_incentive', ['Value', 'Notes']] = np.array([False,
-                                                                                            'bool, if True, maintains the same set of incentive pool mines the entire time, dropping them from the incentive pool and adding them to the operating pool as they open. Hopefully this will eventually also include adding new mines to the incentive as reserves expand. If False, does not drop & samples from incentive pool each time; recommend changing incentive_mine_hyperparameters and setting reinitialize_incentive_mines=True if that is the case. Current default is False'],
-                                                                                           dtype='object')
-                hyperparameters.loc['years_for_roi', ['Value', 'Notes']] = np.array([10,
-                                                                                     'int, default 10, number of years simulated in simulate_incentive_mines() to determine NPV of incentive mines'],
-                                                                                    dtype='object')
-                hyperparameters.loc['follow_copper_opening_method', ['Value', 'Notes']] = np.array([True,
-                                                                                                    'bool, if True, generates an incentive pool for each year of the simulation, creates alterable subsample_series to track how many from the pool are sampled in each year'],
-                                                                                                   dtype='object')
-                hyperparameters.loc['calibrate_copper_opening_method', ['Value', 'Notes']] = np.array([True,
-                                                                                                       'bool, should be False once the subsample_series is set up (sets up the subsample series for mine opening evaluation.'],
-                                                                                                      dtype='object')
+                hyperparameters['discount_rate'] = 0.10
+                hyperparameters['cu_cutoff'] = 1.1
+                hyperparameter_notes['cu_cutoff'] = 'highest allowable capacity utilization'
+                hyperparameters['ramp_down_cu'] = 0.4
+                hyperparameters['ramp_up_cu'] = 0.4  # currently replacing this s.t. linear ramp up to 100% instead
+                hyperparameters['ramp_up_years'] = 3
+                hyperparameters['ramp_up_exponent'] = 1
+                hyperparameters['byproduct_ramp_down_rr'] = 0.4
+                hyperparameters['byproduct_ramp_up_rr'] = 0.4
+                hyperparameters['byproduct_ramp_up_years'] = 1
+                hyperparameters['close_price_method'] = 'probabilistic'
+                hyperparameters['close_years_back'] = 3
+                hyperparameters['close_probability_split_max'] = 0.3
+                hyperparameters['close_probability_split_mean'] = 0.5
+                hyperparameters['close_probability_split_min'] = 0.2
 
-                hyperparameters.loc['primary_commodity_price_option', ['Value', 'Notes']] = np.array(['constant',
-                                                                                                      'str, how commodity prices are meant to evolve. Options: constant, yoy, step, input. Input requires setting the variable primary_price_series after model initialization'],
-                                                                                                     dtype='object')
-                hyperparameters.loc['byproduct_commodity_price_option', ['Value', 'Notes']] = np.array(['constant',
-                                                                                                        'str, how commodity prices are meant to evolve. Options: constant, yoy, step, input. Input requires setting the variable byproduct_price_series after model initialization'],
-                                                                                                       dtype='object')
-                hyperparameters.loc['primary_commodity_price_change', ['Value', 'Notes']] = np.array([10,
-                                                                                                      'percentage value, percent change in commodity price year-over-year (yoy) or in its one-year step.'],
-                                                                                                     dtype='object')
-                hyperparameters.loc['byproduct_commodity_price_change', ['Value', 'Notes']] = np.array([10,
-                                                                                                        'percentage value, percent change in commodity price year-over-year (yoy) or in its one-year step.'],
-                                                                                                       dtype='object')
-                #             hyperparameters.loc['',['Value','Notes']] = np.array([],dtype='object')
-                #             hyperparameters.loc['',['Value','Notes']] = np.array([],dtype='object')
-                #             hyperparameters.loc['',['Value','Notes']] = np.array([],dtype='object')
+                hyperparameters['reinitialize'] = True
+                hyperparameter_notes['reinitialize'] = 'bool, True runs the setup fn initialize_mine_life instead of pulling from init_mine_life.pkl'
+                hyperparameters['load_mine_life_init_from_pkl'] = False
+                hyperparameter_notes['load_mine_life_init_from_pkl'] = 'self explanatory'
+                hyperparameters['minesite_cost_response_to_grade_price'] = True
+                hyperparameter_notes['minesite_cost_response_to_grade_price'] = 'bool, True,minesite costs respond to ore grade decline as per slide 10 here: Group Research Folder_Olivetti/Displacement/04 Presentations/John/Weekly Updates/20210825 Generalization.pptx'
+                hyperparameters['use_reserves_for_closure'] = False
+                hyperparameter_notes['use_reserves_for_closure'] = 'bool, True forces mines to close when they run out of reserves, False allows otherwise. Should always use False'
+                hyperparameters['forever_sim'] = False
+                hyperparameter_notes['forever_sim'] = 'bool, if True allows the simulation to run until all mines have closed (or bauxite price series runs out of values), False only goes until set point'
+                hyperparameters['simulate_closure'] = True
+                hyperparameter_notes['simulate_closure'] = 'bool, whether to simulate 2019 operating mines and their closure, default Truebut can be set to False to test mine opening.'
+                hyperparameters['simulate_opening'] = True
+                hyperparameter_notes['simulate_opening'] = 'bool, whether to simulate new mine opening, default True but set False during mine opening evaluation so we dont end up in an infinite loop'
+                hyperparameters['reinitialize_incentive_mines'] = False
+                hyperparameter_notes['reinitialize_incentive_mines'] = 'bool, default False and True is not set up yet. Whether to create a new  incentive pool of mines or to use the pre-generated one, passing True requires supplying incentive_mine_hyperparameters, which can be accessed by calling self.output_incentive_mine_hyperparameters()'
+                hyperparameters['continuous_incentive'] = False
+                hyperparameter_notes['continuous_incentive'] = 'bool, if True, maintains the same set of incentive pool mines the entire time, dropping them from the incentive pool and adding them to the operating pool as they open. Hopefully this will eventually also include adding new mines to the incentive as reserves expand. If False, does not drop & samples from incentive pool each time; recommend changing incentive_mine_hyperparameters and setting reinitialize_incentive_mines=True if that is the case. Current default is False'
+                hyperparameters['years_for_roi'] = 10
+                hyperparameter_notes['years_for_roi'] = 'int, default 10, number of years simulated in simulate_incentive_mines() to determine NPV of incentive mines'
+                hyperparameters['follow_copper_opening_method'] = True
+                hyperparameter_notes['follow_copper_opening_method'] = 'bool, if True, generates an incentive pool for each year of the simulation, creates alterable subsample_series to track how many from the pool are sampled in each year'
+                hyperparameters['calibrate_copper_opening_method'] = True
+                hyperparameter_notes['calibrate_copper_opening_method'] = 'bool, should be False once the subsample_series is set up (sets up the subsample series for mine opening evaluation.'
 
-                hyperparameters.loc['random_state', 'Value'] = 20220208
+                hyperparameters['primary_commodity_price_option'] = 'constant'
+                hyperparameter_notes['primary_commodity_price_option'] = 'str, how commodity prices are meant to evolve. Options: constant, yoy, step, input. Input requires setting the variable primary_price_series after model initialization'
+                hyperparameters['byproduct_commodity_price_option'] = 'constant'
+                hyperparameter_notes['byproduct_commodity_price_option'] = 'str, how commodity prices are meant to evolve. Options: constant, yoy, step, input. Input requires setting the variable byproduct_price_series after model initialization'
+                hyperparameters['primary_commodity_price_change'] = 10
+                hyperparameter_notes['primary_commodity_price_change'] = 'percentage value, percent change in commodity price year-over-year (yoy) or in its one-year step.'
+                hyperparameters['byproduct_commodity_price_change'] = 10
+                hyperparameter_notes['byproduct_commodity_price_change'] = 'percentage value, percent change in commodity price year-over-year (yoy) or in its one-year step.'
+                #             hyperparameters['',['Value','Notes']] = np.array([],dtype='object')
+                #             hyperparameters['',['Value','Notes']] = np.array([],dtype='object')
+                #             hyperparameters['',['Value','Notes']] = np.array([],dtype='object')
+
+                hyperparameters['random_state'] = 20220208
 
             if 'parameters for byproducts' and self.byproduct:
                 if 'parameters for byproduct production and grade':
-                    hyperparameters.loc['byproduct_pri_production_fraction', 'Value'] = 0.1
-                    hyperparameters.loc['byproduct_host3_production_fraction', 'Value'] = 0
-                    hyperparameters.loc['byproduct_host2_production_fraction', 'Value'] = 0.4
-                    hyperparameters.loc['byproduct_host1_production_fraction', 'Value'] = 1 - hyperparameters.loc[
-                        ['byproduct_pri_production_fraction', 'byproduct_host2_production_fraction',
-                         'byproduct_host3_production_fraction'], 'Value'].sum()
+                    hyperparameters['byproduct_pri_production_fraction'] = 0.1
+                    hyperparameters['byproduct_host3_production_fraction'] = 0
+                    hyperparameters['byproduct_host2_production_fraction'] = 0.4
+                    hyperparameters['byproduct_host1_production_fraction'] = 1 - np.sum([hyperparameters[i] for i in ['byproduct_pri_production_fraction','byproduct_host3_production_fraction','byproduct_host2_production_fraction']])
 
-                    hyperparameters.loc['byproduct0_rr0', :] = 80, 'byproduct median recovery rate at simulation start'
-                    hyperparameters.loc['byproduct1_rr0', :] = 80, 'byproduct median recovery rate at simulation start'
-                    hyperparameters.loc['byproduct1_mine_rrmax',
-                    :] = 90, 'byproduct median recovery rate at simulation start'
-                    hyperparameters.loc['byproduct1_mine_tcm0',
-                    :] = 25, 'byproduct median total cash margin at simulation start'
-                    hyperparameters.loc['byproduct2_rr0', :] = 85, 'byproduct median recovery rate at simulation start'
-                    hyperparameters.loc['byproduct2_mine_rrmax',
-                    :] = 95, 'byproduct median recovery rate at simulation start'
-                    hyperparameters.loc['byproduct2_mine_tcm0',
-                    :] = 25, 'byproduct median total cash margin at simulation start'
-                    hyperparameters.loc['byproduct3_rr0', :] = 80, 'byproduct median recovery rate at simulation start'
-                    hyperparameters.loc['byproduct3_mine_rrmax',
-                    :] = 95, 'byproduct median recovery rate at simulation start'
-                    hyperparameters.loc['byproduct3_mine_tcm0',
-                    :] = 25, 'byproduct median total cash margin at simulation start'
-                    hyperparameters.loc['byproduct_rr_margin_elas',
-                    :] = 0.01, 'byproduct recovery rate elasticity to total cash margin'
-                    hyperparameters.loc['byproduct_production', 'Value'] = 4  # kt
-                    hyperparameters.loc['byproduct_production_mean', 'Value'] = 0.03  # kt
-                    hyperparameters.loc['byproduct_production_var', 'Value'] = 0.5
-                    hyperparameters.loc['byproduct_production_distribution', 'Value'] = 'lognorm'
+                    hyperparameters['byproduct0_rr0'] = 80
+                    hyperparameters['byproduct1_rr0'] = 80
+                    hyperparameters['byproduct1_mine_rrmax'] = 90
+                    hyperparameters['byproduct1_mine_tcm0'] = 25
+                    hyperparameters['byproduct2_rr0'] = 85
+                    hyperparameters['byproduct2_mine_rrmax'] = 95
+                    hyperparameters['byproduct2_mine_tcm0'] = 25
+                    hyperparameters['byproduct3_rr0'] = 80
+                    hyperparameters['byproduct3_mine_rrmax'] = 95
+                    hyperparameters['byproduct3_mine_tcm0'] = 25
+                    hyperparameters['byproduct_rr_margin_elas'] = 0.01
+                    hyperparameter_notes['byproduct0_rr0'] = 'byproduct median recovery rate at simulation start'
+                    hyperparameter_notes['byproduct1_rr0'] = 'byproduct median recovery rate at simulation start'
+                    hyperparameter_notes['byproduct1_mine_rrmax'] = 'byproduct median recovery rate at simulation start'
+                    hyperparameter_notes['byproduct1_mine_tcm0'] = 'byproduct median total cash margin at simulation start'
+                    hyperparameter_notes['byproduct2_rr0'] = 'byproduct median recovery rate at simulation start'
+                    hyperparameter_notes['byproduct2_mine_rrmax'] = 'byproduct median recovery rate at simulation start'
+                    hyperparameter_notes['byproduct2_mine_tcm0'] = 'byproduct median total cash margin at simulation start'
+                    hyperparameter_notes['byproduct3_rr0'] = 'byproduct median recovery rate at simulation start'
+                    hyperparameter_notes['byproduct3_mine_rrmax'] = 'byproduct median recovery rate at simulation start'
+                    hyperparameter_notes['byproduct3_mine_tcm0'] = 'byproduct median total cash margin at simulation start'
+                    hyperparameter_notes['byproduct_rr_margin_elas'] = 'byproduct recovery rate elasticity to total cash margin'
 
-                    hyperparameters.loc['byproduct_host1_grade_ratio_mean', 'Value'] = 20
-                    hyperparameters.loc['byproduct_host2_grade_ratio_mean', 'Value'] = 2
-                    hyperparameters.loc['byproduct_host3_grade_ratio_mean', 'Value'] = 10
-                    hyperparameters.loc['byproduct_host1_grade_ratio_var', 'Value'] = 1
-                    hyperparameters.loc['byproduct_host2_grade_ratio_var', 'Value'] = 1
-                    hyperparameters.loc['byproduct_host3_grade_ratio_var', 'Value'] = 1
-                    hyperparameters.loc['byproduct_host1_grade_ratio_distribution', 'Value'] = 'norm'
-                    hyperparameters.loc['byproduct_host2_grade_ratio_distribution', 'Value'] = 'norm'
-                    hyperparameters.loc['byproduct_host3_grade_ratio_distribution', 'Value'] = 'norm'
+                    hyperparameters['byproduct_production'] = 4  # kt
+                    hyperparameters['byproduct_production_mean'] = 0.03  # kt
+                    hyperparameters['byproduct_production_var'] = 0.5
+                    hyperparameters['byproduct_production_distribution'] = 'lognorm'
 
-                    hyperparameters.loc['byproduct_pri_ore_grade_mean', 'Value'] = 0.1
-                    hyperparameters.loc['byproduct_host1_ore_grade_mean', 'Value'] = 0.1
-                    hyperparameters.loc['byproduct_host2_ore_grade_mean', 'Value'] = 0.1
-                    hyperparameters.loc['byproduct_host3_ore_grade_mean', 'Value'] = 0.1
-                    hyperparameters.loc['byproduct_pri_ore_grade_var', 'Value'] = 0.3
-                    hyperparameters.loc['byproduct_host1_ore_grade_var', 'Value'] = 0.3
-                    hyperparameters.loc['byproduct_host2_ore_grade_var', 'Value'] = 0.3
-                    hyperparameters.loc['byproduct_host3_ore_grade_var', 'Value'] = 0.3
-                    hyperparameters.loc['byproduct_pri_ore_grade_distribution', 'Value'] = 'lognorm'
-                    hyperparameters.loc['byproduct_host1_ore_grade_distribution', 'Value'] = 'lognorm'
-                    hyperparameters.loc['byproduct_host2_ore_grade_distribution', 'Value'] = 'lognorm'
-                    hyperparameters.loc['byproduct_host3_ore_grade_distribution', 'Value'] = 'lognorm'
+                    hyperparameters['byproduct_host1_grade_ratio_mean'] = 20
+                    hyperparameters['byproduct_host2_grade_ratio_mean'] = 2
+                    hyperparameters['byproduct_host3_grade_ratio_mean'] = 10
+                    hyperparameters['byproduct_host1_grade_ratio_var'] = 1
+                    hyperparameters['byproduct_host2_grade_ratio_var'] = 1
+                    hyperparameters['byproduct_host3_grade_ratio_var'] = 1
+                    hyperparameters['byproduct_host1_grade_ratio_distribution'] = 'norm'
+                    hyperparameters['byproduct_host2_grade_ratio_distribution'] = 'norm'
+                    hyperparameters['byproduct_host3_grade_ratio_distribution'] = 'norm'
 
-                    hyperparameters.loc['byproduct_pri_sxew_fraction', 'Value'] = 0.5
-                    hyperparameters.loc['byproduct_host1_sxew_fraction', 'Value'] = 0.2
-                    hyperparameters.loc['byproduct_host2_sxew_fraction', 'Value'] = 0.5
-                    hyperparameters.loc['byproduct_host3_sxew_fraction', 'Value'] = 0.5
+                    hyperparameters['byproduct_pri_ore_grade_mean'] = 0.1
+                    hyperparameters['byproduct_host1_ore_grade_mean'] = 0.1
+                    hyperparameters['byproduct_host2_ore_grade_mean'] = 0.1
+                    hyperparameters['byproduct_host3_ore_grade_mean'] = 0.1
+                    hyperparameters['byproduct_pri_ore_grade_var'] = 0.3
+                    hyperparameters['byproduct_host1_ore_grade_var'] = 0.3
+                    hyperparameters['byproduct_host2_ore_grade_var'] = 0.3
+                    hyperparameters['byproduct_host3_ore_grade_var'] = 0.3
+                    hyperparameters['byproduct_pri_ore_grade_distribution'] = 'lognorm'
+                    hyperparameters['byproduct_host1_ore_grade_distribution'] = 'lognorm'
+                    hyperparameters['byproduct_host2_ore_grade_distribution'] = 'lognorm'
+                    hyperparameters['byproduct_host3_ore_grade_distribution'] = 'lognorm'
 
-                    hyperparameters.loc['byproduct_pri_cu_mean', 'Value'] = 0.85
-                    hyperparameters.loc['byproduct_host1_cu_mean', 'Value'] = 0.85
-                    hyperparameters.loc['byproduct_host2_cu_mean', 'Value'] = 0.85
-                    hyperparameters.loc['byproduct_host3_cu_mean', 'Value'] = 0.85
-                    hyperparameters.loc['byproduct_pri_cu_var', 'Value'] = 0.06
-                    hyperparameters.loc['byproduct_host1_cu_var', 'Value'] = 0.06
-                    hyperparameters.loc['byproduct_host2_cu_var', 'Value'] = 0.06
-                    hyperparameters.loc['byproduct_host3_cu_var', 'Value'] = 0.06
-                    hyperparameters.loc['byproduct_pri_cu_distribution', 'Value'] = 'lognorm'
-                    hyperparameters.loc['byproduct_host1_cu_distribution', 'Value'] = 'lognorm'
-                    hyperparameters.loc['byproduct_host2_cu_distribution', 'Value'] = 'lognorm'
-                    hyperparameters.loc['byproduct_host3_cu_distribution', 'Value'] = 'lognorm'
+                    hyperparameters['byproduct_pri_sxew_fraction'] = 0.5
+                    hyperparameters['byproduct_host1_sxew_fraction'] = 0.2
+                    hyperparameters['byproduct_host2_sxew_fraction'] = 0.5
+                    hyperparameters['byproduct_host3_sxew_fraction'] = 0.5
 
-                    hyperparameters.loc['byproduct_pri_payable_percent_mean', 'Value'] = 0.63
-                    hyperparameters.loc['byproduct_host1_payable_percent_mean', 'Value'] = 0.63
-                    hyperparameters.loc['byproduct_host2_payable_percent_mean', 'Value'] = 0.63
-                    hyperparameters.loc['byproduct_host3_payable_percent_mean', 'Value'] = 0.63
-                    hyperparameters.loc['byproduct_pri_payable_percent_var', 'Value'] = 1.83
-                    hyperparameters.loc['byproduct_host1_payable_percent_var', 'Value'] = 1.83
-                    hyperparameters.loc['byproduct_host2_payable_percent_var', 'Value'] = 1.83
-                    hyperparameters.loc['byproduct_host3_payable_percent_var', 'Value'] = 1.83
-                    hyperparameters.loc['byproduct_pri_payable_percent_distribution', 'Value'] = 'weibull_min'
-                    hyperparameters.loc['byproduct_host1_payable_percent_distribution', 'Value'] = 'weibull_min'
-                    hyperparameters.loc['byproduct_host2_payable_percent_distribution', 'Value'] = 'weibull_min'
-                    hyperparameters.loc['byproduct_host3_payable_percent_distribution', 'Value'] = 'weibull_min'
+                    hyperparameters['byproduct_pri_cu_mean'] = 0.85
+                    hyperparameters['byproduct_host1_cu_mean'] = 0.85
+                    hyperparameters['byproduct_host2_cu_mean'] = 0.85
+                    hyperparameters['byproduct_host3_cu_mean'] = 0.85
+                    hyperparameters['byproduct_pri_cu_var'] = 0.06
+                    hyperparameters['byproduct_host1_cu_var'] = 0.06
+                    hyperparameters['byproduct_host2_cu_var'] = 0.06
+                    hyperparameters['byproduct_host3_cu_var'] = 0.06
+                    hyperparameters['byproduct_pri_cu_distribution'] = 'lognorm'
+                    hyperparameters['byproduct_host1_cu_distribution'] = 'lognorm'
+                    hyperparameters['byproduct_host2_cu_distribution'] = 'lognorm'
+                    hyperparameters['byproduct_host3_cu_distribution'] = 'lognorm'
 
-                    hyperparameters.loc['byproduct_pri_rr_default_mean', 'Value'] = 13.996
-                    hyperparameters.loc['byproduct_host1_rr_default_mean', 'Value'] = 13.996
-                    hyperparameters.loc['byproduct_host2_rr_default_mean', 'Value'] = 13.996
-                    hyperparameters.loc['byproduct_host3_rr_default_mean', 'Value'] = 13.996
-                    hyperparameters.loc['byproduct_pri_rr_default_var', 'Value'] = 0.675
-                    hyperparameters.loc['byproduct_host1_rr_default_var', 'Value'] = 0.675
-                    hyperparameters.loc['byproduct_host2_rr_default_var', 'Value'] = 0.675
-                    hyperparameters.loc['byproduct_host3_rr_default_var', 'Value'] = 0.675
-                    hyperparameters.loc['byproduct_pri_rr_default_distribution', 'Value'] = 'lognorm'
-                    hyperparameters.loc['byproduct_host1_rr_default_distribution', 'Value'] = 'lognorm'
-                    hyperparameters.loc['byproduct_host2_rr_default_distribution', 'Value'] = 'lognorm'
-                    hyperparameters.loc['byproduct_host3_rr_default_distribution', 'Value'] = 'lognorm'
+                    hyperparameters['byproduct_pri_payable_percent_mean'] = 0.63
+                    hyperparameters['byproduct_host1_payable_percent_mean'] = 0.63
+                    hyperparameters['byproduct_host2_payable_percent_mean'] = 0.63
+                    hyperparameters['byproduct_host3_payable_percent_mean'] = 0.63
+                    hyperparameters['byproduct_pri_payable_percent_var'] = 1.83
+                    hyperparameters['byproduct_host1_payable_percent_var'] = 1.83
+                    hyperparameters['byproduct_host2_payable_percent_var'] = 1.83
+                    hyperparameters['byproduct_host3_payable_percent_var'] = 1.83
+                    hyperparameters['byproduct_pri_payable_percent_distribution'] = 'weibull_min'
+                    hyperparameters['byproduct_host1_payable_percent_distribution'] = 'weibull_min'
+                    hyperparameters['byproduct_host2_payable_percent_distribution'] = 'weibull_min'
+                    hyperparameters['byproduct_host3_payable_percent_distribution'] = 'weibull_min'
+
+                    hyperparameters['byproduct_pri_rr_default_mean'] = 13.996
+                    hyperparameters['byproduct_host1_rr_default_mean'] = 13.996
+                    hyperparameters['byproduct_host2_rr_default_mean'] = 13.996
+                    hyperparameters['byproduct_host3_rr_default_mean'] = 13.996
+                    hyperparameters['byproduct_pri_rr_default_var'] = 0.675
+                    hyperparameters['byproduct_host1_rr_default_var'] = 0.675
+                    hyperparameters['byproduct_host2_rr_default_var'] = 0.675
+                    hyperparameters['byproduct_host3_rr_default_var'] = 0.675
+                    hyperparameters['byproduct_pri_rr_default_distribution'] = 'lognorm'
+                    hyperparameters['byproduct_host1_rr_default_distribution'] = 'lognorm'
+                    hyperparameters['byproduct_host2_rr_default_distribution'] = 'lognorm'
+                    hyperparameters['byproduct_host3_rr_default_distribution'] = 'lognorm'
 
                 if 'byproduct costs':
-                    hyperparameters.loc['byproduct_commodity_price', 'Value'] = 1000  # USD/t
-                    hyperparameters.loc['byproduct_minesite_cost_mean', 'Value'] = 0  # USD/t
-                    hyperparameters.loc['byproduct_minesite_cost_var', 'Value'] = 1
-                    hyperparameters.loc['byproduct_minesite_cost_distribution', 'Value'] = 'lognorm'
+                    hyperparameters['byproduct_commodity_price'] = 1000  # USD/t
+                    hyperparameters['byproduct_minesite_cost_mean'] = 0  # USD/t
+                    hyperparameters['byproduct_minesite_cost_var'] = 1
+                    hyperparameters['byproduct_minesite_cost_distribution'] = 'lognorm'
 
-                    hyperparameters.loc['byproduct_host1_commodity_price', 'Value'] = 2000
-                    hyperparameters.loc['byproduct_host2_commodity_price', 'Value'] = 3000
-                    hyperparameters.loc['byproduct_host3_commodity_price', 'Value'] = 1000
+                    hyperparameters['byproduct_host1_commodity_price'] = 2000
+                    hyperparameters['byproduct_host2_commodity_price'] = 3000
+                    hyperparameters['byproduct_host3_commodity_price'] = 1000
 
-                    hyperparameters.loc['byproduct_host1_minesite_cost_ratio_mean', 'Value'] = 20
-                    hyperparameters.loc['byproduct_host2_minesite_cost_ratio_mean', 'Value'] = 2
-                    hyperparameters.loc['byproduct_host3_minesite_cost_ratio_mean', 'Value'] = 10
-                    hyperparameters.loc['byproduct_host1_minesite_cost_ratio_var', 'Value'] = 1
-                    hyperparameters.loc['byproduct_host2_minesite_cost_ratio_var', 'Value'] = 1
-                    hyperparameters.loc['byproduct_host3_minesite_cost_ratio_var', 'Value'] = 1
-                    hyperparameters.loc['byproduct_host1_minesite_cost_ratio_distribution', 'Value'] = 'norm'
-                    hyperparameters.loc['byproduct_host2_minesite_cost_ratio_distribution', 'Value'] = 'norm'
-                    hyperparameters.loc['byproduct_host3_minesite_cost_ratio_distribution', 'Value'] = 'norm'
+                    hyperparameters['byproduct_host1_minesite_cost_ratio_mean'] = 20
+                    hyperparameters['byproduct_host2_minesite_cost_ratio_mean'] = 2
+                    hyperparameters['byproduct_host3_minesite_cost_ratio_mean'] = 10
+                    hyperparameters['byproduct_host1_minesite_cost_ratio_var'] = 1
+                    hyperparameters['byproduct_host2_minesite_cost_ratio_var'] = 1
+                    hyperparameters['byproduct_host3_minesite_cost_ratio_var'] = 1
+                    hyperparameters['byproduct_host1_minesite_cost_ratio_distribution'] = 'norm'
+                    hyperparameters['byproduct_host2_minesite_cost_ratio_distribution'] = 'norm'
+                    hyperparameters['byproduct_host3_minesite_cost_ratio_distribution'] = 'norm'
 
-                    hyperparameters.loc['byproduct_host1_sus_capex_ratio_mean', 'Value'] = 20
-                    hyperparameters.loc['byproduct_host2_sus_capex_ratio_mean', 'Value'] = 2
-                    hyperparameters.loc['byproduct_host3_sus_capex_ratio_mean', 'Value'] = 10
-                    hyperparameters.loc['byproduct_host1_sus_capex_ratio_var', 'Value'] = 1
-                    hyperparameters.loc['byproduct_host2_sus_capex_ratio_var', 'Value'] = 1
-                    hyperparameters.loc['byproduct_host3_sus_capex_ratio_var', 'Value'] = 1
-                    hyperparameters.loc['byproduct_host1_sus_capex_ratio_distribution', 'Value'] = 'norm'
-                    hyperparameters.loc['byproduct_host2_sus_capex_ratio_distribution', 'Value'] = 'norm'
-                    hyperparameters.loc['byproduct_host3_sus_capex_ratio_distribution', 'Value'] = 'norm'
+                    hyperparameters['byproduct_host1_sus_capex_ratio_mean'] = 20
+                    hyperparameters['byproduct_host2_sus_capex_ratio_mean'] = 2
+                    hyperparameters['byproduct_host3_sus_capex_ratio_mean'] = 10
+                    hyperparameters['byproduct_host1_sus_capex_ratio_var'] = 1
+                    hyperparameters['byproduct_host2_sus_capex_ratio_var'] = 1
+                    hyperparameters['byproduct_host3_sus_capex_ratio_var'] = 1
+                    hyperparameters['byproduct_host1_sus_capex_ratio_distribution'] = 'norm'
+                    hyperparameters['byproduct_host2_sus_capex_ratio_distribution'] = 'norm'
+                    hyperparameters['byproduct_host3_sus_capex_ratio_distribution'] = 'norm'
 
-                    hyperparameters.loc['byproduct_host1_tcrc_ratio_mean', 'Value'] = 20
-                    hyperparameters.loc['byproduct_host2_tcrc_ratio_mean', 'Value'] = 2
-                    hyperparameters.loc['byproduct_host3_tcrc_ratio_mean', 'Value'] = 10
-                    hyperparameters.loc['byproduct_host1_tcrc_ratio_var', 'Value'] = 1
-                    hyperparameters.loc['byproduct_host2_tcrc_ratio_var', 'Value'] = 1
-                    hyperparameters.loc['byproduct_host3_tcrc_ratio_var', 'Value'] = 1
-                    hyperparameters.loc['byproduct_host1_tcrc_ratio_distribution', 'Value'] = 'norm'
-                    hyperparameters.loc['byproduct_host2_tcrc_ratio_distribution', 'Value'] = 'norm'
-                    hyperparameters.loc['byproduct_host3_tcrc_ratio_distribution', 'Value'] = 'norm'
+                    hyperparameters['byproduct_host1_tcrc_ratio_mean'] = 20
+                    hyperparameters['byproduct_host2_tcrc_ratio_mean'] = 2
+                    hyperparameters['byproduct_host3_tcrc_ratio_mean'] = 10
+                    hyperparameters['byproduct_host1_tcrc_ratio_var'] = 1
+                    hyperparameters['byproduct_host2_tcrc_ratio_var'] = 1
+                    hyperparameters['byproduct_host3_tcrc_ratio_var'] = 1
+                    hyperparameters['byproduct_host1_tcrc_ratio_distribution'] = 'norm'
+                    hyperparameters['byproduct_host2_tcrc_ratio_distribution'] = 'norm'
+                    hyperparameters['byproduct_host3_tcrc_ratio_distribution'] = 'norm'
 
-                    hyperparameters.loc[
-                        'byproduct_pri_minerisk_mean', 'Value'] = 9.4  # value for copper → ranges from 4 to 20, cutoffs are enforced
-                    hyperparameters.loc['byproduct_host1_minerisk_mean', 'Value'] = 9.4
-                    hyperparameters.loc['byproduct_host2_minerisk_mean', 'Value'] = 9.4
-                    hyperparameters.loc['byproduct_host3_minerisk_mean', 'Value'] = 9.4
-                    hyperparameters.loc['byproduct_pri_minerisk_var', 'Value'] = 1.35
-                    hyperparameters.loc['byproduct_host1_minerisk_var', 'Value'] = 1.35
-                    hyperparameters.loc['byproduct_host2_minerisk_var', 'Value'] = 1.35
-                    hyperparameters.loc['byproduct_host3_minerisk_var', 'Value'] = 1.35
-                    hyperparameters.loc['byproduct_pri_minerisk_distribution', 'Value'] = 'norm'
-                    hyperparameters.loc['byproduct_host1_minerisk_distribution', 'Value'] = 'norm'
-                    hyperparameters.loc['byproduct_host2_minerisk_distribution', 'Value'] = 'norm'
-                    hyperparameters.loc['byproduct_host3_minerisk_distribution', 'Value'] = 'norm'
+                    hyperparameters['byproduct_pri_minerisk_mean'] = 9.4  # value for copper → ranges from 4 to 20, cutoffs are enforced
+                    hyperparameters['byproduct_host1_minerisk_mean'] = 9.4
+                    hyperparameters['byproduct_host2_minerisk_mean'] = 9.4
+                    hyperparameters['byproduct_host3_minerisk_mean'] = 9.4
+                    hyperparameters['byproduct_pri_minerisk_var'] = 1.35
+                    hyperparameters['byproduct_host1_minerisk_var'] = 1.35
+                    hyperparameters['byproduct_host2_minerisk_var'] = 1.35
+                    hyperparameters['byproduct_host3_minerisk_var'] = 1.35
+                    hyperparameters['byproduct_pri_minerisk_distribution'] = 'norm'
+                    hyperparameters['byproduct_host1_minerisk_distribution'] = 'norm'
+                    hyperparameters['byproduct_host2_minerisk_distribution'] = 'norm'
+                    hyperparameters['byproduct_host3_minerisk_distribution'] = 'norm'
 
             if 'parameters for the incentive pool':
-                hyperparameters.loc['simulate_opening', :] = True, 'whether or not to simulate mine opening'
-                hyperparameters.loc['opening_flag_for_cu0',
-                :] = False, 'whether or not opening is currently happening and we have to suppress the recalculation of cu0'
-                hyperparameters.loc['incentive_subsample_init',
-                :] = 1000, 'initial value for incentive_subsample_series'
+                hyperparameters['simulate_opening'] = True
+                hyperparameter_notes['simulate_opening'] = 'whether or not to simulate mine opening'
+                hyperparameters['opening_flag_for_cu0'] = False
+                hyperparameter_notes['opening_flag_for_cu0'] = 'whether or not opening is currently happening and we have to suppress the recalculation of cu0'
+                hyperparameters['incentive_subsample_init'] = 1000
+                hyperparameter_notes['incentive_subsample_init'] = 'initial value for incentive_subsample_series'
 
-                hyperparameters.loc['annual_reserves_ratio_with_initial_production_const',
-                :] = 1.1, 'multiplies by annual demand to determine initial reserves used for incentive pool size'
-                hyperparameters.loc['annual_reserves_ratio_with_initial_production_slope',
-                :] = 0, 'linear change per year of annual demand to determine initial reserves used for incentive pool size, in fraction form (would input 0.1 for 10% increase per year)'
-                hyperparameters.loc['incentive_resources_contained_series', :] = np.array([pd.Series(
-                    hyperparameters['Value']['primary_production'] * hyperparameters['Value'][
-                        'annual_reserves_ratio_with_initial_production_const'], self.simulation_time),
-                                                                                           'the contained metal in the assumed resources, currently set to be a series with each year having contained metal in resources equal to one year of production'],
-                                                                                          dtype=object)
-                hyperparameters.loc['incentive_use_resources_contained_series',
-                :] = True, 'whether to use the incentive_resources_contained_series series for determining incentive pool size or to use the incentive_subsample_series series for the number of mines in each year'
-                hyperparameters.loc['primary_price_resources_contained_elas',
-                :] = 0.5, 'percent increase in the resources conatined/incentive pool size when price rises by 1%'
-                hyperparameters.loc['byproduct_price_resources_contained_elas',
-                :] = 0.05, 'percent increase in the resources conatined/incentive pool size when price rises by 1%'
-                hyperparameters.loc['reserves_ratio_price_lag',
-                :] = 7, 'lag on price change price(t-lag)/price(t-lag-1) used for informing incentive pool size change, paired with resources_contained_elas_primary_price (and byproduct if byproduct==True)'
-                hyperparameters.loc['incentive_subsample_series', :] = np.array(
-                    [pd.Series(hyperparameters['Value']['incentive_subsample_init'], self.simulation_time),
-                     'series with number of mines to select for subsample used for the incentive pool'], dtype=object)
-                hyperparameters.loc['incentive_perturbation_percent',
-                :] = 10, 'percent perturbation for the incentive pool parameters, on resampling from the operating mine pool'
+                hyperparameters['annual_reserves_ratio_with_initial_production_const'] = 1.1
+                hyperparameter_notes['annual_reserves_ratio_with_initial_production_const'] = 'multiplies by annual demand to determine initial reserves used for incentive pool size'
+                hyperparameters['annual_reserves_ratio_with_initial_production_slope'] = 0
+                hyperparameter_notes['annual_reserves_ratio_with_initial_production_slope'] = 'linear change per year of annual demand to determine initial reserves used for incentive pool size, in fraction form (would input 0.1 for 10% increase per year)'
+                hyperparameters['incentive_resources_contained_series'] = pd.Series(hyperparameters['primary_production'] * hyperparameters['annual_reserves_ratio_with_initial_production_const'], self.simulation_time)
+                hyperparameter_notes['incentive_resources_contained_series'] = 'the contained metal in the assumed resources, currently set to be a series with each year having contained metal in resources equal to one year of production'
 
-                hyperparameters.loc['incentive_roi_years',
-                :] = 10, 'Number of years of mine life to simulate to determine profitability for opening mines'
-                hyperparameters.loc['incentive_opening_method',
-                :] = 'unconstrained', 'options: xinkai_thesis, karan_generalization, unconstrained; xinkai_thesis is the tuning of the incentive subsample size to match demand, while karan_generalization is tuning of price to fill the supply-demand gap. unconstrained allows mine opening to occur unimpeded and TCRC evolves based on TCRC elasticity to SD imbalance to close the gap.'
-                hyperparameters.loc['calibrate_incentive_opening_method',
-                :] = False, 'whether to calibrate to minimize the demand gap if using the xinkai_thesis incentive_opening_method'
-                hyperparameters.loc['demand_series_method',
-                :] = 'yoy', 'Options: yoy or target; yoy is year-over-year percent change in demand, target is the percent change in demand by simulation end.'
-                hyperparameters.loc['demand_series_pct_change',
-                :] = 0.5, 'Percent change per year if demand_series_method is yoy, or percent change from initial to last simulation year if demand_series_method is target'
-                hyperparameters.loc['demand_series',
-                :] = 1, 'generated from demand_series_method and demand_series_pct_change in the update_operation_hyperparams function'
-                hyperparameters.loc['initial_ore_grade_decline',
-                :] = -0.05, 'Initial ore grade for new mines, elasticity to cumulative ore treated'
-                hyperparameters.loc['incentive_mine_cost_improvement', :] = hyperparameters['Value'][
-                                                                                'mine_cost_tech_improvements'], 'rate of cost decline year-over-year for the incentive pool'
+                hyperparameters['incentive_use_resources_contained_series'] = True
+                hyperparameter_notes['incentive_use_resources_contained_series'] = 'whether to use the incentive_resources_contained_series series for determining incentive pool size or to use the incentive_subsample_series series for the number of mines in each year'
+                hyperparameters['primary_price_resources_contained_elas'] = 0.5
+                hyperparameter_notes['primary_price_resources_contained_elas'] = 'percent increase in the resources conatined/incentive pool size when price rises by 1%'
+                hyperparameters['byproduct_price_resources_contained_elas'] = 0.05
+                hyperparameter_notes['byproduct_price_resources_contained_elas'] = 'percent increase in the resources conatined/incentive pool size when price rises by 1%'
+                hyperparameters['reserves_ratio_price_lag'] = 7
+                hyperparameter_notes['reserves_ratio_price_lag'] = 'lag on price change price(t-lag)/price(t-lag-1) used for informing incentive pool size change, paired with resources_contained_elas_primary_price (and byproduct if byproduct==True)'
+                hyperparameters['incentive_subsample_series'] = pd.Series(hyperparameters['incentive_subsample_init'], self.simulation_time)
+                hyperparameter_notes['incentive_subsample_series'] = 'series with number of mines to select for subsample used for the incentive pool'
+                hyperparameters['incentive_perturbation_percent'] = 10
+                hyperparameter_notes['incentive_perturbation_percent'] = 'percent perturbation for the incentive pool parameters, on resampling from the operating mine pool'
 
-                hyperparameters.loc['incentive_tune_tcrc',
-                :] = True, 'True means that in the karan_generalization method of tuning opening, we tune TCRC. False means we tune Commodity price.'
-                hyperparameters.loc['incentive_discount_rate',
-                :] = 0.1, 'fraction from 0-1, discount rate applied to opening mines for NPV calculation, effectively return on investment minimum required for opening.'
-                hyperparameters.loc['incentive_opening_probability',
-                :] = 0, 'fraction from 0-1, fraction of profitable mines that are capable of opening that actually undergo opening. Used to reduce TCRC values in incentive_open_karan_generalization(). Also used in unconstrained opening; if set to zero, allows this value to be set by the first n years of operation, otherwise it will be this value.'
-                hyperparameters.loc['incentive_require_tune_years',
-                :] = 0, 'requires incentive tuning for however many years such that supply=demand, with no requirements on incentive_opening_probability and allowing the given incentive_opening_probability to be used'
-                hyperparameters.loc['end_calibrate_years',
-                :] = 10, 'how many years after simulation start time to perform frac calibration in incentive_open_xinkai_thesis, unconstrained'
-                hyperparameters.loc['start_calibrate_years',
-                :] = 4, 'how many years after simulation start time to perform frac calibration in incentive_open_xinkai_thesis, unconstrained'
+                hyperparameters['incentive_roi_years'] = 10
+                hyperparameter_notes['incentive_roi_years'] = 'Number of years of mine life to simulate to determine profitability for opening mines'
+                hyperparameters['incentive_opening_method'] = 'unconstrained'
+                hyperparameter_notes['incentive_opening_method'] = 'options: xinkai_thesis, karan_generalization, unconstrained; xinkai_thesis is the tuning of the incentive subsample size to match demand, while karan_generalization is tuning of price to fill the supply-demand gap. unconstrained allows mine opening to occur unimpeded and TCRC evolves based on TCRC elasticity to SD imbalance to close the gap.'
+                hyperparameters['calibrate_incentive_opening_method'] = False
+                hyperparameter_notes['calibrate_incentive_opening_method'] = 'whether to calibrate to minimize the demand gap if using the xinkai_thesis incentive_opening_method'
+                hyperparameters['demand_series_method'] = 'yoy'
+                hyperparameter_notes['demand_series_method'] = 'Options: yoy or target; yoy is year-over-year percent change in demand, target is the percent change in demand by simulation end.'
+                hyperparameters['demand_series_pct_change'] = 0
+                hyperparameter_notes['demand_series_pct_change'] =5, 'Percent change per year if demand_series_method is yoy, or percent change from initial to last simulation year if demand_series_method is target'
+                hyperparameters['demand_series'] = 1
+                hyperparameter_notes['demand_series'] = 'generated from demand_series_method and demand_series_pct_change in the update_operation_hyperparams function'
+                hyperparameters['initial_ore_grade_decline'] = -0.05
+                hyperparameter_notes['initial_ore_grade_decline'] = 'Initial ore grade for new mines, elasticity to cumulative ore treated'
+                hyperparameters['incentive_mine_cost_improvement'] = hyperparameters['mine_cost_tech_improvements']
+                hyperparameter_notes['incentive_mine_cost_improvement'] = 'rate of cost decline year-over-year for the incentive pool'
 
-                hyperparameters.loc['reserve_frac_region1', 'Value'] = 0.19743337
-                hyperparameters.loc['reserve_frac_region2', 'Value'] = 0.08555446
-                hyperparameters.loc['reserve_frac_region3', 'Value'] = 0.03290556
-                hyperparameters.loc['reserve_frac_region4', 'Value'] = 0.24350115
-                hyperparameters.loc['reserve_frac_region5', 'Value'] = 0.44060546
+                hyperparameters['incentive_tune_tcrc'] = True
+                hyperparameter_notes['incentive_tune_tcrc'] = 'True means that in the karan_generalization method of tuning opening, we tune TCRC. False means we tune Commodity price.'
+                hyperparameters['incentive_discount_rate'] = 0.1
+                hyperparameter_notes['incentive_discount_rate'] = 'fraction from 0-1, discount rate applied to opening mines for NPV calculation, effectively return on investment minimum required for opening.'
+                hyperparameters['incentive_opening_probability'] = 0
+                hyperparameter_notes['incentive_opening_probability'] = 'fraction from 0-1, fraction of profitable mines that are capable of opening that actually undergo opening. Used to reduce TCRC values in incentive_open_karan_generalization(). Also used in unconstrained opening; if set to zero, allows this value to be set by the first n years of operation, otherwise it will be this value.'
+                hyperparameters['incentive_require_tune_years'] = 0
+                hyperparameter_notes['incentive_require_tune_years'] = 'requires incentive tuning for however many years such that supply=demand, with no requirements on incentive_opening_probability and allowing the given incentive_opening_probability to be used'
+                hyperparameters['end_calibrate_years'] = 10
+                hyperparameter_notes['end_calibrate_years'] = 'how many years after simulation start time to perform frac calibration in incentive_open_xinkai_thesis, unconstrained'
+                hyperparameters['start_calibrate_years'] = 4
+                hyperparameter_notes['start_calibrate_years'] = 'how many years after simulation start time to perform frac calibration in incentive_open_xinkai_thesis, unconstrained'
 
-                hyperparameters.loc['internal_price_formation',
-                :] = False, 'whether to use the supply-demand balance to determine price evolution internally or to use external inputs'
-                hyperparameters.loc['tcrc_sd_elas', :] = 0.1, 'TCRC elasticity to supply divided by demand'
-                hyperparameters.loc['price_sd_elas', :] = -0.1, 'Commodity price elasticity to supply divided by demand'
-                hyperparameters.loc['simulate_history_bool',
-                :] = False, 'Simulate some years beforehand, for particular use with incentive_opening_method==unconstrained, such that TCRC or commodity price can have a chance to equilibrate. The number of years needed to be simulated beforehand is determined by the demand_series_pct_change, as values close to zero need more years'
-                hyperparameters.loc['incentive_tuning_option',
-                :] = 'pid', 'options: pid or elas. PID uses proportion-integral-derivative tuning to reach out initial TCRC/commodity price value, primarily for simulating history. elas uses the simple elasticity approach from tcrc_sd_elas or price_sd_elas'
+                hyperparameters['reserve_frac_region1'] = 0.19743337
+                hyperparameters['reserve_frac_region2'] = 0.08555446
+                hyperparameters['reserve_frac_region3'] = 0.03290556
+                hyperparameters['reserve_frac_region4'] = 0.24350115
+                hyperparameters['reserve_frac_region5'] = 0.44060546
 
-                hyperparameters.loc['use_ml_to_accelerate',
-                :] = False, 'if True, tries using a machine learning model to predict which mines will open, using the real opening method once every several years so the model gets updated'
-                hyperparameters.loc['ml_accelerate_initialize_years',
-                :] = 20, 'Begin using the ML model after this many years have run, remembering that the first 10 years may be used for tuning to get the average fraction of profitable mines that open each year'
-                hyperparameters.loc['ml_accelerate_every_n_years',
-                :] = 2, 'Use the actual opening process every n years; use the ML process for the rest. Begins after the initial_years are finished'
+                hyperparameters['internal_price_formation'] = False
+                hyperparameter_notes['internal_price_formation'] = 'whether to use the supply-demand balance to determine price evolution internally or to use external inputs'
+                hyperparameters['tcrc_sd_elas'] = 0.1
+                hyperparameter_notes['tcrc_sd_elas'] = 'TCRC elasticity to supply divided by demand'
+                hyperparameters['price_sd_elas'] = -0.1
+                hyperparameter_notes['price_sd_elas'] = 'Commodity price elasticity to supply divided by demand'
+                hyperparameters['simulate_history_bool'] = False
+                hyperparameter_notes['simulate_history_bool'] = 'Simulate some years beforehand, for particular use with incentive_opening_method==unconstrained, such that TCRC or commodity price can have a chance to equilibrate. The number of years needed to be simulated beforehand is determined by the demand_series_pct_change, as values close to zero need more years'
+                hyperparameters['incentive_tuning_option'] = 'pid'
+                hyperparameter_notes['incentive_tuning_option'] = 'options: pid or elas. PID uses proportion-integral-derivative tuning to reach out initial TCRC/commodity price value, primarily for simulating history. elas uses the simple elasticity approach from tcrc_sd_elas or price_sd_elas'
+
+                hyperparameters['use_ml_to_accelerate'] = False
+                hyperparameter_notes['use_ml_to_accelerate'] = 'if True, tries using a machine learning model to predict which mines will open, using the real opening method once every several years so the model gets updated'
+                hyperparameters['ml_accelerate_initialize_years'] = 20
+                hyperparameter_notes['ml_accelerate_initialize_years'] = 'Begin using the ML model after this many years have run, remembering that the first 10 years may be used for tuning to get the average fraction of profitable mines that open each year'
+                hyperparameters['ml_accelerate_every_n_years'] = 2
+                hyperparameter_notes['ml_accelerate_every_n_years'] = 'Use the actual opening process every n years; use the ML process for the rest. Begins after the initial_years are finished'
 
             if 'adding notes':
                 # operating pool mass values
-                hyperparameters.loc[
-                    'primary_production', 'Notes'] = 'Total mine production in whatever units we are using, metal content of the primary (host) commodity'
-                hyperparameters.loc[
-                    'primary_production_mean', 'Notes'] = 'Mean mine production in whatever units we are using, metal content of the primary (host) commodity'
-                hyperparameters.loc[
-                    'primary_production_var', 'Notes'] = 'Variance of the mine production in whatever units we are using, metal content of the primary (host) commodity'
-                hyperparameters.loc[
-                    'primary_production_distribution', 'Notes'] = 'valid stats.distribution distribution name, e.g. lognorm, norm, etc. Should be something with loc and scale parameters'
-                hyperparameters.loc['primary_ore_grade_mean', 'Notes'] = 'mean ore grade (%) for the primary commodity'
-                hyperparameters.loc[
-                    'primary_ore_grade_var', 'Notes'] = 'ore grade variance (%) for the primary commodity'
-                hyperparameters.loc[
-                    'primary_ore_grade_distribution', 'Notes'] = 'distribution used for primary commodity ore grade, default lognormal'
-                hyperparameters.loc[
-                    'primary_cu_mean', 'Notes'] = 'mean capacity utilization of the primary mine (likely not necessary to consider this as just the primary, or at least secondary total CU would be the product of this and the secondary CU)'
-                hyperparameters.loc['primary_cu_var', 'Notes'] = 'capacity utilization of primary mine variance'
-                hyperparameters.loc[
-                    'primary_cu_distribution', 'Notes'] = 'distirbution for primary mine capacity utilization, default lognormal'
-                hyperparameters.loc[
-                    'primary_payable_percent_mean', 'Notes'] = 'mean for 100-(payable percent): 0.63 value from https://countertop.mit.edu:3048/notebooks/SQL/Mining%20database%20read.ipynb, section 12.3 Payable Percent, for weibull minimum distribution of 100-(payable percent)'
-                hyperparameters.loc[
-                    'primary_payable_percent_var', 'Notes'] = 'variance for 100-(payable percent): 1.83 value from https://countertop.mit.edu:3048/notebooks/SQL/Mining%20database%20read.ipynb, section 12.3 Payable Percent, for weibull minimum distribution of 100-(payable percent)'
-                hyperparameters.loc[
-                    'primary_payable_percent_distribution', 'Notes'] = 'distribution for 100-(payable percent): from https://countertop.mit.edu:3048/notebooks/SQL/Mining%20database%20read.ipynb, section 12.3 Payable Percent, for weibull minimum distribution of 100-(payable percent)'
-                hyperparameters.loc[
-                    'primary_rr_grade_corr_slope', 'Notes'] = 'slope used for calculating log(100-recovery rate) from log(head grade), referencing slide 41 of 20210825 Generalization.pptx and section 10 Recovery rate, https://countertop.mit.edu:3048/notebooks/SQL/Second%20round%20generalization%20mine%20parameters.ipynb'
-                hyperparameters.loc[
-                    'primary_rr_grade_corr_slope', 'Notes'] = 'constant used for calculating log(100-recovery rate) from log(head grade), referencing slide 41 of 20210825 Generalization.pptx and section 10 Recovery rate, https://countertop.mit.edu:3048/notebooks/SQL/Second%20round%20generalization%20mine%20parameters.ipynb'
-                hyperparameters.loc[
-                    'primary_recovery_rate_mean', 'Notes'] = 'mean for 100-(recovery rate): lognormal distribution, using the mean of head grade to calculate the mean recovery rate value with constant standard deviation (average from each material), referencing slide 41 of 20210825 Generalization.pptx and section 10 Recovery rate (https://countertop.mit.edu:3048/notebooks/SQL/Mining%20database%20read.ipynb)as a function of ore grade. '
-                hyperparameters.loc[
-                    'primary_recovery_rate_var', 'Notes'] = 'variance for 100-(recovery rate): lognormal distribution, using the mean of head grade to calculate the mean recovery rate value with constant standard deviation (average from each material), referencing slide 41 of 20210825 Generalization.pptx and section 10 Recovery rate (https://countertop.mit.edu:3048/notebooks/SQL/Mining%20database%20read.ipynb) as a function of ore grade. '
-                hyperparameters.loc[
-                    'primary_recovery_rate_distribution', 'Notes'] = 'distribution for (100-recovery rate): lognormal distribution, using the mean of head grade to calculate the mean recovery rate value with constant standard deviation (average from each material), referencing slide 41 of 20210825 Generalization.pptx and section 10 Recovery rate (https://countertop.mit.edu:3048/notebooks/SQL/Mining%20database%20read.ipynb) as a function of ore grade. '
-                hyperparameters.loc[
-                    'primary_recovery_rate_shuffle_param', 'Notes'] = 'recovery rates are ordered to match the order of grade to retain correlation, then shuffled so the correlation is not perfect. This parameter (called part) passed to the partial shuffle function for the correlation between recovery rate and head grade; higher value = more shuffling'
-                hyperparameters.loc[
-                    'primary_reserves_mean', 'Notes'] = 'mean for primary reserves divided by ore treated. 11.04953 value from https://countertop.mit.edu:3048/notebooks/SQL/Second%20round%20generalization%20mine%20parameters.ipynb, use the ratio between reserves and ore treated in each year, finding lognormal distribution'
-                hyperparameters.loc[
-                    'primary_reserves_var', 'Notes'] = 'variance for primary reserves divided by ore treated. 0.902357 value from https://countertop.mit.edu:3048/notebooks/SQL/Second%20round%20generalization%20mine%20parameters.ipynb, use the ratio between reserves and ore treated in each year, finding lognormal distribution'
-                hyperparameters.loc[
-                    'primary_reserves_distribution', 'Notes'] = 'distribution for primary reserves divided by ore treated. lognormal values from https://countertop.mit.edu:3048/notebooks/SQL/Second%20round%20generalization%20mine%20parameters.ipynb, use the ratio between reserves and ore treated in each year, finding lognormal distribution'
-                hyperparameters.loc[
-                    'primary_reserves_reported', 'Notes'] = 'reserves reported for that year; tunes the operating mine pool such that its total reserves matches this value. Can be given in terms of metal content or total ore available, just have to adjust the primary_reserves_reported_basis variable in this df. Setting it to zero allows the generated value to be used.'
-                hyperparameters.loc[
-                    'primary_reserves_reported_basis', 'Notes'] = 'ore, metal, or none basis - ore: mass of ore reported as reserves (SNL style), metal: metal content of reserves reported, none: use the generated values without adjustment'
+                hyperparameter_notes['primary_production'] = 'Total mine production in whatever units we are using, metal content of the primary (host) commodity'
+                hyperparameter_notes['primary_production_mean'] = 'Mean mine production in whatever units we are using, metal content of the primary (host) commodity'
+                hyperparameter_notes['primary_production_var'] = 'Variance of the mine production in whatever units we are using, metal content of the primary (host) commodity'
+                hyperparameter_notes['primary_production_distribution'] = 'valid stats.distribution distribution name, e.g. lognorm, norm, etc. Should be something with loc and scale parameters'
+                hyperparameter_notes['primary_ore_grade_mean'] = 'mean ore grade (%) for the primary commodity'
+                hyperparameter_notes['primary_ore_grade_var'] = 'ore grade variance (%) for the primary commodity'
+                hyperparameter_notes['primary_ore_grade_distribution'] = 'distribution used for primary commodity ore grade, default lognormal'
+                hyperparameter_notes['primary_cu_mean'] = 'mean capacity utilization of the primary mine (likely not necessary to consider this as just the primary, or at least secondary total CU would be the product of this and the secondary CU)'
+                hyperparameter_notes['primary_cu_var'] = 'capacity utilization of primary mine variance'
+                hyperparameter_notes['primary_cu_distribution'] = 'distirbution for primary mine capacity utilization, default lognormal'
+                hyperparameter_notes['primary_payable_percent_mean'] = 'mean for 100-(payable percent): 0.63 value from https://countertop.mit.edu:3048/notebooks/SQL/Mining%20database%20read.ipynb, section 12.3 Payable Percent, for weibull minimum distribution of 100-(payable percent)'
+                hyperparameter_notes['primary_payable_percent_var'] = 'variance for 100-(payable percent): 1.83 value from https://countertop.mit.edu:3048/notebooks/SQL/Mining%20database%20read.ipynb, section 12.3 Payable Percent, for weibull minimum distribution of 100-(payable percent)'
+                hyperparameter_notes['primary_payable_percent_distribution'] = 'distribution for 100-(payable percent): from https://countertop.mit.edu:3048/notebooks/SQL/Mining%20database%20read.ipynb, section 12.3 Payable Percent, for weibull minimum distribution of 100-(payable percent)'
+                hyperparameter_notes['primary_rr_grade_corr_slope'] = 'slope used for calculating log(100-recovery rate) from log(head grade), referencing slide 41 of 20210825 Generalization.pptx and section 10 Recovery rate, https://countertop.mit.edu:3048/notebooks/SQL/Second%20round%20generalization%20mine%20parameters.ipynb'
+                hyperparameter_notes['primary_rr_grade_corr_slope'] = 'constant used for calculating log(100-recovery rate) from log(head grade), referencing slide 41 of 20210825 Generalization.pptx and section 10 Recovery rate, https://countertop.mit.edu:3048/notebooks/SQL/Second%20round%20generalization%20mine%20parameters.ipynb'
+                hyperparameter_notes['primary_recovery_rate_mean'] = 'mean for 100-(recovery rate): lognormal distribution, using the mean of head grade to calculate the mean recovery rate value with constant standard deviation (average from each material), referencing slide 41 of 20210825 Generalization.pptx and section 10 Recovery rate (https://countertop.mit.edu:3048/notebooks/SQL/Mining%20database%20read.ipynb)as a function of ore grade. '
+                hyperparameter_notes['primary_recovery_rate_var'] = 'variance for 100-(recovery rate): lognormal distribution, using the mean of head grade to calculate the mean recovery rate value with constant standard deviation (average from each material), referencing slide 41 of 20210825 Generalization.pptx and section 10 Recovery rate (https://countertop.mit.edu:3048/notebooks/SQL/Mining%20database%20read.ipynb) as a function of ore grade. '
+                hyperparameter_notes['primary_recovery_rate_distribution'] = 'distribution for (100-recovery rate): lognormal distribution, using the mean of head grade to calculate the mean recovery rate value with constant standard deviation (average from each material), referencing slide 41 of 20210825 Generalization.pptx and section 10 Recovery rate (https://countertop.mit.edu:3048/notebooks/SQL/Mining%20database%20read.ipynb) as a function of ore grade. '
+                hyperparameter_notes['primary_recovery_rate_shuffle_param'] = 'recovery rates are ordered to match the order of grade to retain correlation, then shuffled so the correlation is not perfect. This parameter (called part) passed to the partial shuffle function for the correlation between recovery rate and head grade; higher value = more shuffling'
+                hyperparameter_notes['primary_reserves_mean'] = 'mean for primary reserves divided by ore treated. 11.04953 value from https://countertop.mit.edu:3048/notebooks/SQL/Second%20round%20generalization%20mine%20parameters.ipynb, use the ratio between reserves and ore treated in each year, finding lognormal distribution'
+                hyperparameter_notes['primary_reserves_var'] = 'variance for primary reserves divided by ore treated. 0.902357 value from https://countertop.mit.edu:3048/notebooks/SQL/Second%20round%20generalization%20mine%20parameters.ipynb, use the ratio between reserves and ore treated in each year, finding lognormal distribution'
+                hyperparameter_notes['primary_reserves_distribution'] = 'distribution for primary reserves divided by ore treated. lognormal values from https://countertop.mit.edu:3048/notebooks/SQL/Second%20round%20generalization%20mine%20parameters.ipynb, use the ratio between reserves and ore treated in each year, finding lognormal distribution'
+                hyperparameter_notes['primary_reserves_reported'] = 'reserves reported for that year; tunes the operating mine pool such that its total reserves matches this value. Can be given in terms of metal content or total ore available, just have to adjust the primary_reserves_reported_basis variable in this df. Setting it to zero allows the generated value to be used.'
+                hyperparameter_notes['primary_reserves_reported_basis'] = 'ore, metal, or none basis - ore: mass of ore reported as reserves (SNL style), metal: metal content of reserves reported, none: use the generated values without adjustment'
 
-                hyperparameters.loc['production_frac_region1', 'Notes'] = 'region fraction of global production in 2019'
-                hyperparameters.loc['production_frac_region2', 'Notes'] = 'region fraction of global production in 2019'
-                hyperparameters.loc['production_frac_region3', 'Notes'] = 'region fraction of global production in 2019'
-                hyperparameters.loc['production_frac_region4', 'Notes'] = 'region fraction of global production in 2019'
-                hyperparameters.loc[
-                    'production_frac_region5', 'Notes'] = 'region fraction of global production in 2019, calculated from the remainder of the other 4'
+                hyperparameter_notes['production_frac_region1'] = 'region fraction of global production in 2019'
+                hyperparameter_notes['production_frac_region2'] = 'region fraction of global production in 2019'
+                hyperparameter_notes['production_frac_region3'] = 'region fraction of global production in 2019'
+                hyperparameter_notes['production_frac_region4'] = 'region fraction of global production in 2019'
+                hyperparameter_notes[
+                    'production_frac_region5'] = 'region fraction of global production in 2019, calculated from the remainder of the other 4'
 
                 # Prices
-                hyperparameters.loc[
-                    'primary_minesite_cost_mean', 'Notes'] = 'mean minesite cost for the primary commodity. Set to zero to use mine type, risk, and ore grade to generate the cost distribution instead'
-                hyperparameters.loc[
-                    'primary_minesite_cost_var', 'Notes'] = 'minesite cost variance for the primary commodity. Is not used if the mean value is set to zero'
-                hyperparameters.loc[
-                    'primary_minesite_cost_distribution', 'Notes'] = 'minesite cost distribution type (e.g. lognormal) for the primary commodity. Is not used if the mean value is set to zero'
+                hyperparameter_notes['primary_minesite_cost_mean'] = 'mean minesite cost for the primary commodity. Set to zero to use mine type, risk, and ore grade to generate the cost distribution instead'
+                hyperparameter_notes['primary_minesite_cost_var'] = 'minesite cost variance for the primary commodity. Is not used if the mean value is set to zero'
+                hyperparameter_notes['primary_minesite_cost_distribution'] = 'minesite cost distribution type (e.g. lognormal) for the primary commodity. Is not used if the mean value is set to zero'
 
-                hyperparameters.loc[
-                    'minetype_prod_frac_underground', 'Notes'] = 'fraction of mines using mine type underground; not used if primary_minesite_cost_mean is nonzero'
-                hyperparameters.loc[
-                    'minetype_prod_frac_openpit', 'Notes'] = 'fraction of mines using mine type openpit; not used if primary_minesite_cost_mean is nonzero'
-                hyperparameters.loc[
-                    'minetype_prod_frac_tailings', 'Notes'] = 'fraction of mines using mine type tailings; not used if primary_minesite_cost_mean is nonzero'
-                hyperparameters.loc[
-                    'minetype_prod_frac_stockpile', 'Notes'] = 'fraction of mines using mine type stockpile; not used if primary_minesite_cost_mean is nonzero'
-                hyperparameters.loc[
-                    'minetype_prod_frac_placer', 'Notes'] = 'fraction of mines using mine type placer; not used if primary_minesite_cost_mean is nonzero'
+                hyperparameter_notes['minetype_prod_frac_underground'] = 'fraction of mines using mine type underground; not used if primary_minesite_cost_mean is nonzero'
+                hyperparameter_notes['minetype_prod_frac_openpit'] = 'fraction of mines using mine type openpit; not used if primary_minesite_cost_mean is nonzero'
+                hyperparameter_notes['minetype_prod_frac_tailings'] = 'fraction of mines using mine type tailings; not used if primary_minesite_cost_mean is nonzero'
+                hyperparameter_notes['minetype_prod_frac_stockpile'] = 'fraction of mines using mine type stockpile; not used if primary_minesite_cost_mean is nonzero'
+                hyperparameter_notes['minetype_prod_frac_placer'] = 'fraction of mines using mine type placer; not used if primary_minesite_cost_mean is nonzero'
 
-                hyperparameters.loc[
-                    'minerisk_mean', 'Notes'] = 'mean value. Risk indicator is the sum of political, operational, terrorism, and security risks, which range from insignificant (1) to extreme (5). Therefore the minimum value is 4 and the maximum value is 20. Not used if primary_minesite_cost_mean is nonzero'
-                hyperparameters.loc[
-                    'minerisk_var', 'Notes'] = 'variance. Risk indicator is the sum of political, operational, terrorism, and security risks, which range from insignificant (1) to extreme (5). Therefore the minimum value is 4 and the maximum value is 20. Not used if primary_minesite_cost_mean is nonzero'
-                hyperparameters.loc[
-                    'minerisk_distribution', 'Notes'] = 'distribution, assumed normal. Risk indicator is the sum of political, operational, terrorism, and security risks, which range from insignificant (1) to extreme (5). Therefore the minimum value is 4 and the maximum value is 20. Not used if primary_minesite_cost_mean is nonzero'
+                hyperparameter_notes['minerisk_mean'] = 'mean value. Risk indicator is the sum of political, operational, terrorism, and security risks, which range from insignificant (1) to extreme (5). Therefore the minimum value is 4 and the maximum value is 20. Not used if primary_minesite_cost_mean is nonzero'
+                hyperparameter_notes['minerisk_var'] = 'variance. Risk indicator is the sum of political, operational, terrorism, and security risks, which range from insignificant (1) to extreme (5). Therefore the minimum value is 4 and the maximum value is 20. Not used if primary_minesite_cost_mean is nonzero'
+                hyperparameter_notes['minerisk_distribution'] = 'distribution, assumed normal. Risk indicator is the sum of political, operational, terrorism, and security risks, which range from insignificant (1) to extreme (5). Therefore the minimum value is 4 and the maximum value is 20. Not used if primary_minesite_cost_mean is nonzero'
 
-                hyperparameters.loc[
-                    'primary_minesite_cost_regression2use', 'Notes'] = 'options: linear_107, bayesian_108, linear_110_price, linear_111_price_tcm; not used if primary_minesite_cost_mean>0. First component (linear/bayesian) references regression type, number references slide in Displacement\04 Presentations\John\Weekly Updates\20210825 Generalization.pptx. Inclusion of \'price\' at the end indicates to use the regression that included commodity price. Inclusion of \'tcm\' indicates the regression was performed on total cash margin excl tcrc rather than minesite cost, and determines the primary_minesite_cost_flag'
-                hyperparameters.loc[
-                    'primary_minesite_cost_flag', 'Notes'] = 'True sets to generate minesite costs and total cash margin using the regressions on minesite cost; False sets to generate the same using the regressions on total cash margin (excl TCRC). Based on whether primary_minesite_cost_regression2use contains str tcm.'
-
-                hyperparameters.loc[
-                    'primary_scapex_slope_capacity', 'Notes'] = 'slope from regression of sustaining CAPEX on capacity, from 04 Presentations\John\Weekly Updates\20210825 Generalization.pptx, slide 34'
-                hyperparameters.loc[
-                    'primary_scapex_constant_capacity', 'Notes'] = 'constant from regression of sustaining CAPEX on capacity, from 04 Presentations\John\Weekly Updates\20210825 Generalization.pptx, slide 34'
+                hyperparameter_notes['primary_minesite_cost_regression2use'] = 'options: linear_107, bayesian_108, linear_110_price, linear_111_price_tcm; not used if primary_minesite_cost_mean>0. First component (linear/bayesian) references regression type, number references slide in Displacement\04 Presentations\John\Weekly Updates\20210825 Generalization.pptx. Inclusion of \'price\' at the end indicates to use the regression that included commodity price. Inclusion of \'tcm\' indicates the regression was performed on total cash margin excl tcrc rather than minesite cost, and determines the primary_minesite_cost_flag'
+                hyperparameter_notes['primary_minesite_cost_flag'] = 'True sets to generate minesite costs and total cash margin using the regressions on minesite cost; False sets to generate the same using the regressions on total cash margin (excl TCRC). Based on whether primary_minesite_cost_regression2use contains str tcm.'
+                hyperparameter_notes['primary_scapex_slope_capacity'] = 'slope from regression of sustaining CAPEX on capacity, from 04 Presentations\John\Weekly Updates\20210825 Generalization.pptx, slide 34'
+                hyperparameter_notes['primary_scapex_constant_capacity'] = 'constant from regression of sustaining CAPEX on capacity, from 04 Presentations\John\Weekly Updates\20210825 Generalization.pptx, slide 34'
 
                 # Simulation
-                hyperparameters.loc[
-                    'primary_oge_s', 'Notes'] = 'parameters to generate (1-OGE) for lognormal distribution, found from looking at all mines in https://countertop.mit.edu:3048/notebooks/SQL/Mining%20database%20read.ipynb, section 12.2, where it says \'parameters used for generalization\'.'
-                hyperparameters.loc[
-                    'primary_oge_loc', 'Notes'] = 'parameters to generate (1-OGE) for lognormal distribution, found from looking at all mines in https://countertop.mit.edu:3048/notebooks/SQL/Mining%20database%20read.ipynb, section 12.2, where it says \'parameters used for generalization\'.'
-                hyperparameters.loc[
-                    'primary_oge_scale', 'Notes'] = 'parameters to generate (1-OGE) for lognormal distribution, found from looking at all mines in https://countertop.mit.edu:3048/notebooks/SQL/Mining%20database%20read.ipynb, section 12.2, where it says \'parameters used for generalization\'.'
+                hyperparameter_notes['primary_oge_s'] = 'parameters to generate (1-OGE) for lognormal distribution, found from looking at all mines in https://countertop.mit.edu:3048/notebooks/SQL/Mining%20database%20read.ipynb, section 12.2, where it says \'parameters used for generalization\'.'
+                hyperparameter_notes['primary_oge_loc'] = 'parameters to generate (1-OGE) for lognormal distribution, found from looking at all mines in https://countertop.mit.edu:3048/notebooks/SQL/Mining%20database%20read.ipynb, section 12.2, where it says \'parameters used for generalization\'.'
+                hyperparameter_notes['primary_oge_scale'] = 'parameters to generate (1-OGE) for lognormal distribution, found from looking at all mines in https://countertop.mit.edu:3048/notebooks/SQL/Mining%20database%20read.ipynb, section 12.2, where it says \'parameters used for generalization\'.'
 
-                hyperparameters.loc[
-                    'mine_cu_margin_elas', 'Notes'] = 'capacity utlization elasticity to total cash margin, current value is approximate result of regression attempts; see slide 42 in Group Research Folder_Olivetti\Displacement\04 Presentations\John\Weekly Updates\20210825 Generalization.pptx',
-                hyperparameters.loc['mine_cost_og_elas', 'Notes'] = 'minesite cost elasticity to ore grade decline'
-                hyperparameters.loc['mine_cost_price_elas', 'Notes'] = 'minesite cost elasticity to commodity price'
-                hyperparameters.loc[
-                    'mine_cu0', 'Notes'] = 'median capacity utlization in 2019, used to determine how mines change CU due to TCM'
-                hyperparameters.loc[
-                    'mine_tcm0', 'Notes'] = 'median total cash margin in 2019, used to determine how mines change CU due to TCM'
-                hyperparameters.loc[
-                    'discount_rate', 'Notes'] = 'discount rate (fraction, not percent - 0.1=10%), used for NPV/IRR calculation in mine opening decision'
-                hyperparameters.loc[
-                    'ramp_down_cu', 'Notes'] = 'capacity utilization during ramp down; float less than 1, default 0.4'
-                hyperparameters.loc[
-                    'ramp_up_cu', 'Notes'] = 'capacity utilization during ramp up, float less than 1, default 0.4'
-                hyperparameters.loc[
-                    'ramp_up_years', 'Notes'] = 'number of years allotted for ramp up (currently use total dCAPEX distributed among those years, so shortening would make each year of dCAPEX more expensive), int default 3'
-                hyperparameters.loc[
-                    'close_price_method', 'Notes'] = 'method used for price expected used for mine closing - mean, max, alonso-ayuso, or probabilistic are supported - if using probabilistic you can adjust the close_probability_split variables'
-                hyperparameters.loc[
-                    'close_years_back', 'Notes'] = 'number of years to use for rolling mean/max/min values when evaluating mine closing'
-                hyperparameters.loc[
-                    'years_for_roi', 'Notes'] = 'years for return on investment when evaluating mine opening - number of years of mine life to simulate for IRR calculation'
-                hyperparameters.loc[
-                    'close_probability_split_max', 'Notes'] = 'for the probabilistic closing method, probability given to the rolling close_years_back max'
-                hyperparameters.loc[
-                    'close_probability_split_mean', 'Notes'] = 'for the probabilistic closing method, probability given to the rolling close_years_back mean'
-                hyperparameters.loc[
-                    'close_probability_split_min', 'Notes'] = 'for the probabilistic closing method, probability given to the rolling close_years_back min - make sure these three sum to 1'
-                hyperparameters.loc['random_state', 'Notes'] = 'random state int for sampling'
-                hyperparameters.loc['reserve_frac_region1', 'Notes'] = 'region reserve fraction of global total in 2019'
-                hyperparameters.loc['reserve_frac_region2', 'Notes'] = 'region reserve fraction of global total in 2019'
-                hyperparameters.loc['reserve_frac_region3', 'Notes'] = 'region reserve fraction of global total in 2019'
-                hyperparameters.loc['reserve_frac_region4', 'Notes'] = 'region reserve fraction of global total in 2019'
-                hyperparameters.loc['reserve_frac_region5', 'Notes'] = 'region reserve fraction of global total in 2019'
+                hyperparameter_notes['mine_cu_margin_elas'] = 'capacity utlization elasticity to total cash margin, current value is approximate result of regression attempts; see slide 42 in Group Research Folder_Olivetti\Displacement\04 Presentations\John\Weekly Updates\20210825 Generalization.pptx',
+                hyperparameter_notes['mine_cost_og_elas'] = 'minesite cost elasticity to ore grade decline'
+                hyperparameter_notes['mine_cost_price_elas'] = 'minesite cost elasticity to commodity price'
+                hyperparameter_notes['mine_cu0'] = 'median capacity utlization in 2019, used to determine how mines change CU due to TCM'
+                hyperparameter_notes['mine_tcm0'] = 'median total cash margin in 2019, used to determine how mines change CU due to TCM'
+                hyperparameter_notes['discount_rate'] = 'discount rate (fraction, not percent - 0.1=10%), used for NPV/IRR calculation in mine opening decision'
+                hyperparameter_notes['ramp_down_cu'] = 'capacity utilization during ramp down; float less than 1, default 0.4'
+                hyperparameter_notes['ramp_up_cu'] = 'capacity utilization during ramp up, float less than 1, default 0.4'
+                hyperparameter_notes['ramp_up_years'] = 'number of years allotted for ramp up (currently use total dCAPEX distributed among those years, so shortening would make each year of dCAPEX more expensive), int default 3'
+                hyperparameter_notes['close_price_method'] = 'method used for price expected used for mine closing - mean, max, alonso-ayuso, or probabilistic are supported - if using probabilistic you can adjust the close_probability_split variables'
+                hyperparameter_notes['close_years_back'] = 'number of years to use for rolling mean/max/min values when evaluating mine closing'
+                hyperparameter_notes['years_for_roi'] = 'years for return on investment when evaluating mine opening - number of years of mine life to simulate for IRR calculation'
+                hyperparameter_notes['close_probability_split_max'] = 'for the probabilistic closing method, probability given to the rolling close_years_back max'
+                hyperparameter_notes['close_probability_split_mean'] = 'for the probabilistic closing method, probability given to the rolling close_years_back mean'
+                hyperparameter_notes['close_probability_split_min'] = 'for the probabilistic closing method, probability given to the rolling close_years_back min - make sure these three sum to 1'
+                hyperparameter_notes['random_state'] = 'random state int for sampling'
+                hyperparameter_notes['reserve_frac_region1'] = 'region reserve fraction of global total in 2019'
+                hyperparameter_notes['reserve_frac_region2'] = 'region reserve fraction of global total in 2019'
+                hyperparameter_notes['reserve_frac_region3'] = 'region reserve fraction of global total in 2019'
+                hyperparameter_notes['reserve_frac_region4'] = 'region reserve fraction of global total in 2019'
+                hyperparameter_notes['reserve_frac_region5'] = 'region reserve fraction of global total in 2019'
 
-            initial_demand = hyperparameters['Value']['primary_production']
-            change = hyperparameters['Value']['demand_series_pct_change'] / 100 + 1
+            initial_demand = hyperparameters['primary_production']
+            change = hyperparameters['demand_series_pct_change'] / 100 + 1
             sim_time = self.simulation_time
-            if hyperparameters['Value']['demand_series_method'] == 'yoy':
-                hyperparameters.loc['demand_series', :] = np.array(
-                    [pd.Series([initial_demand * change ** (j - sim_time[0]) for j in sim_time], sim_time),
-                     hyperparameters['Notes']['demand_series']], dtype=object)
-            elif hyperparameters['Value']['demand_series_method'] == 'target':
-                hyperparameters.loc['demand_series', :] = np.array(
-                    [pd.Series(np.linspace(initial_demand, initial_demand * change, len(sim_time)), sim_time),
-                     hyperparameters['Notes']['demand_series']], dtype=object)
-            self.demand_series = hyperparameters['Value']['demand_series']
+            if hyperparameters['demand_series_method'] == 'yoy':
+                hyperparameters['demand_series'] = pd.Series([initial_demand * change ** (j - sim_time[0]) for j in sim_time], sim_time)
+            elif hyperparameters['demand_series_method'] == 'target':
+                hyperparameters['demand_series'] = pd.Series(np.linspace(initial_demand, initial_demand * change, len(sim_time)), sim_time)
+            self.demand_series = hyperparameters['demand_series']
 
-            incent_series = [i * (hyperparameters['Value']['annual_reserves_ratio_with_initial_production_const'] + j)
+            incent_series = [i * (hyperparameters['annual_reserves_ratio_with_initial_production_const'] + j)
                              for i, j in zip(self.demand_series.values,
-                                             [hyperparameters['Value'][
+                                             [hyperparameters[
                                                   'annual_reserves_ratio_with_initial_production_slope'] * (
                                                           y - self.simulation_time[0]) for y in self.simulation_time])]
-            hyperparameters.loc['incentive_resources_contained_series', :] = np.array(
-                [pd.Series(incent_series, self.simulation_time),
-                 'the contained metal in the assumed resources, currently set to be a series with each year having contained metal in resources equal to one year of production'],
-                dtype=object)
-            hyperparameters.loc['incentive_subsample_series', :] = np.array(
-                [pd.Series(hyperparameters['Value']['incentive_subsample_init'], self.simulation_time),
-                 'series with number of mines to select for subsample used for the incentive pool'], dtype=object)
-            self.resources_contained_series = hyperparameters['Value']['incentive_resources_contained_series']
-            self.subsample_series = hyperparameters['Value']['incentive_subsample_series']
+            hyperparameters['incentive_resources_contained_series'] = pd.Series(incent_series, self.simulation_time)
+            hyperparameter_notes['incentive_resources_contained_series'] = 'the contained metal in the assumed resources, currently set to be a series with each year having contained metal in resources equal to one year of production'
+            hyperparameters['incentive_subsample_series'] = pd.Series(hyperparameters['incentive_subsample_init'], self.simulation_time)
+            hyperparameter_notes['incentive_subsample_series'] = 'series with number of mines to select for subsample used for the incentive pool'
+            self.resources_contained_series = hyperparameters['incentive_resources_contained_series']
+            self.subsample_series = hyperparameters['incentive_subsample_series']
 
-            self.hyperparam = hyperparameters.copy()
+            self.hyperparam = hyperparameters
+            self.hyperparam_notes = hyperparameter_notes
 
         elif type(hyperparam) == str:
             if hyperparam.split('.')[-1] == 'pkl':
@@ -847,220 +765,220 @@ class miningModel:
             raise ValueError(
                 'Mining module initialization failed, incorrect hyperparam input (should be integer/zero to allow self-generation, string for filepath (excel or pickle file), or dataframe if it already exists)')
         self.mine_cu_margin_elas, self.mine_cost_og_elas, self.mine_cost_price_elas, self.mine_cu0, self.mine_tcm0, self.discount_rate, self.ramp_down_cu, self.ramp_up_cu, self.ramp_up_years = \
-            self.hyperparam['Value'][['mine_cu_margin_elas', 'mine_cost_og_elas', 'mine_cost_price_elas',
+            [self.hyperparam[i] for i in ['mine_cu_margin_elas', 'mine_cost_og_elas', 'mine_cost_price_elas',
                                       'mine_cu0', 'mine_tcm0', 'discount_rate', 'ramp_down_cu', 'ramp_up_cu',
                                       'ramp_up_years']]
 
     def update_operation_hyperparams(self, innie=0):
-        hyperparameters = self.hyperparam.copy()
+        hyperparameters = self.hyperparam
         if type(innie) == int:
             mines = self.mines.copy()
-            if not hyperparameters['Value']['opening_flag_for_cu0']:
-                hyperparameters.loc['mine_cu0', 'Value'] = mines['Capacity utilization'].median()
-                hyperparameters.loc['mine_tcm0', 'Value'] = mines['Total cash margin (USD/t)'].median()
+            if not hyperparameters['opening_flag_for_cu0']:
+                hyperparameters['mine_cu0'] = mines['Capacity utilization'].median()
+                hyperparameters['mine_tcm0'] = mines['Total cash margin (USD/t)'].median()
             if self.byproduct:
                 byp = 'Byproduct ' if 'Byproduct Total cash margin (USD/t)' in mines.columns else ''
                 for i in np.arange(1, 4):
-                    hyperparameters.loc['byproduct' + str(i) + '_rr0', 'Value'] = mines.loc[
+                    hyperparameters['byproduct' + str(i) + '_rr0'] = mines.loc[
                         (mines['Byproduct ID'] == i) & (
                                     mines[byp + 'Total cash margin (USD/t)'] > 0), 'Recovery rate (%)'].median()
-                    hyperparameters.loc['byproduct' + str(i) + '_mine_tcm0', 'Value'] = mines.loc[
+                    hyperparameters['byproduct' + str(i) + '_mine_tcm0'] = mines.loc[
                         (mines['Byproduct ID'] == i) & (mines[
                                                             byp + 'Total cash margin (USD/t)'] > 0), byp + 'Total cash margin (USD/t)'].median()
         else:
             mines = innie.copy()
-            if not hyperparameters['Value']['opening_flag_for_cu0']:
-                hyperparameters.loc['mine_cu0', 'Value'] = np.median(mines.capacity_utilization)
-                hyperparameters.loc['mine_tcm0', 'Value'] = np.median(mines.total_cash_margin_usdpt)
+            if not hyperparameters['opening_flag_for_cu0']:
+                hyperparameters['mine_cu0'] = np.median(mines.capacity_utilization)
+                hyperparameters['mine_tcm0'] = np.median(mines.total_cash_margin_usdpt)
             if self.byproduct:
                 byp = 'byproduct_' if 'byproduct_total_cash_margin_usdpt' in mines.columns else ''
                 for i in np.arange(1, 4):
-                    hyperparameters.loc['byproduct' + str(i) + '_rr0', 'Value'] = np.median(mines.recovery_rate_pct[(
+                    hyperparameters['byproduct' + str(i) + '_rr0'] = np.median(mines.recovery_rate_pct[(
                                                                                                                                 mines.byproduct_id == i) & (
                                                                                                                                 getattr(
                                                                                                                                     mines,
                                                                                                                                     byp + 'total_cash_margin_usdpt') > 0)])
-                    hyperparameters.loc['byproduct' + str(i) + '_mine_tcm0', 'Value'] = np.median(
+                    hyperparameters['byproduct' + str(i) + '_mine_tcm0'] = np.median(
                         getattr(mines, byp + 'total_cash_margin_usdpt')[
                             (mines['Byproduct ID'] == i) & (getattr(mines, byp + 'total_cash_margin_usdpt') > 0)])
 
-        # if hyperparameters['Value']['commodity']!='Au':
-        #     hyperparameters.loc['annual_reserves_ratio_with_initial_production_const','Value'] = 8
+        # if hyperparameters['commodity']!='Au':
+        #     hyperparameters['annual_reserves_ratio_with_initial_production_const','Value'] = 8
         self.hyperparam = hyperparameters.copy()
-        if (hyperparameters['Value']['primary_sxew_fraction_series'] == 0).all():
+        if (hyperparameters['primary_sxew_fraction_series'] == 0).all():
             self.sxew_fraction_series = pd.Series(
-                hyperparameters['Value']['primary_sxew_fraction'] + hyperparameters['Value'][
+                hyperparameters['primary_sxew_fraction'] + hyperparameters[
                     'primary_sxew_fraction_change'] * (self.simulation_time - self.i), self.simulation_time)
             self.sxew_fraction_series.loc[self.sxew_fraction_series < 0] = 0
             self.sxew_fraction_series.loc[self.sxew_fraction_series > 1] = 1
 
     def add_minesite_cost_regression_params(self, hyperparameters_):
         hyperparameters = hyperparameters_.copy()
-        reg2use = hyperparameters['Value']['primary_minesite_cost_regression2use']
+        reg2use = hyperparameters['primary_minesite_cost_regression2use']
         #             log(minesite cost) = alpha + beta*log(commodity price) + gamma*log(head grade)
         #                + delta*(numerical risk) + epsilon*placer (mine type)
         #                + theta*stockpile + eta*tailings + rho*underground + zeta*sxew
 
         if reg2use == 'linear_107':  # see slide 107 or 110 left-hand-side table in C:\Users\ryter\Dropbox (MIT)\Group Research Folder_Olivetti\Displacement\04 Presentations\John\Weekly Updates\20210825 Generalization.pptx
-            hyperparameters.loc['primary_minesite_cost_alpha', 'Value'] = 7.4083
-            hyperparameters.loc['primary_minesite_cost_beta', 'Value'] = 0
-            hyperparameters.loc['primary_minesite_cost_gamma', 'Value'] = -1.033
-            hyperparameters.loc['primary_minesite_cost_delta', 'Value'] = 0.0173
-            hyperparameters.loc['primary_minesite_cost_epsilon', 'Value'] = -1.5532
-            hyperparameters.loc['primary_minesite_cost_theta', 'Value'] = 0.5164
-            hyperparameters.loc['primary_minesite_cost_eta', 'Value'] = -0.8997
-            hyperparameters.loc['primary_minesite_cost_rho', 'Value'] = 0.7629
-            hyperparameters.loc['primary_minesite_cost_zeta', 'Value'] = 0
+            hyperparameters['primary_minesite_cost_alpha'] = 7.4083
+            hyperparameters['primary_minesite_cost_beta'] = 0
+            hyperparameters['primary_minesite_cost_gamma'] = -1.033
+            hyperparameters['primary_minesite_cost_delta'] = 0.0173
+            hyperparameters['primary_minesite_cost_epsilon'] = -1.5532
+            hyperparameters['primary_minesite_cost_theta'] = 0.5164
+            hyperparameters['primary_minesite_cost_eta'] = -0.8997
+            hyperparameters['primary_minesite_cost_rho'] = 0.7629
+            hyperparameters['primary_minesite_cost_zeta'] = 0
         elif reg2use == 'bayesian_108':  # see slide 108 in C:\Users\ryter\Dropbox (MIT)\Group Research Folder_Olivetti\Displacement\04 Presentations\John\Weekly Updates\20210825 Generalization.pptx
-            hyperparameters.loc['primary_minesite_cost_alpha', 'Value'] = 10.4893
-            hyperparameters.loc['primary_minesite_cost_beta', 'Value'] = 0
-            hyperparameters.loc['primary_minesite_cost_gamma', 'Value'] = -0.547
-            hyperparameters.loc['primary_minesite_cost_delta', 'Value'] = 0.121
-            hyperparameters.loc['primary_minesite_cost_epsilon', 'Value'] = -0.5466
-            hyperparameters.loc['primary_minesite_cost_theta', 'Value'] = -0.5837
-            hyperparameters.loc['primary_minesite_cost_eta', 'Value'] = -0.9168
-            hyperparameters.loc['primary_minesite_cost_rho', 'Value'] = 1.4692
-            hyperparameters.loc['primary_minesite_cost_zeta', 'Value'] = 0
+            hyperparameters['primary_minesite_cost_alpha'] = 10.4893
+            hyperparameters['primary_minesite_cost_beta'] = 0
+            hyperparameters['primary_minesite_cost_gamma'] = -0.547
+            hyperparameters['primary_minesite_cost_delta'] = 0.121
+            hyperparameters['primary_minesite_cost_epsilon'] = -0.5466
+            hyperparameters['primary_minesite_cost_theta'] = -0.5837
+            hyperparameters['primary_minesite_cost_eta'] = -0.9168
+            hyperparameters['primary_minesite_cost_rho'] = 1.4692
+            hyperparameters['primary_minesite_cost_zeta'] = 0
         elif reg2use == 'linear_110_price':  # see slide 110 right-hand-side table in C:\Users\ryter\Dropbox (MIT)\Group Research Folder_Olivetti\Displacement\04 Presentations\John\Weekly Updates\20210825 Generalization.pptx
-            hyperparameters.loc['primary_minesite_cost_alpha', 'Value'] = 0.5236
-            hyperparameters.loc['primary_minesite_cost_beta', 'Value'] = 0.8453
-            hyperparameters.loc['primary_minesite_cost_gamma', 'Value'] = -0.1932
-            hyperparameters.loc['primary_minesite_cost_delta', 'Value'] = -0.015
-            hyperparameters.loc['primary_minesite_cost_epsilon', 'Value'] = 0
-            hyperparameters.loc['primary_minesite_cost_theta', 'Value'] = 0.2122
-            hyperparameters.loc['primary_minesite_cost_eta', 'Value'] = -0.3076
-            hyperparameters.loc['primary_minesite_cost_rho', 'Value'] = 0.1097
-            hyperparameters.loc['primary_minesite_cost_zeta', 'Value'] = 0
+            hyperparameters['primary_minesite_cost_alpha'] = 0.5236
+            hyperparameters['primary_minesite_cost_beta'] = 0.8453
+            hyperparameters['primary_minesite_cost_gamma'] = -0.1932
+            hyperparameters['primary_minesite_cost_delta'] = -0.015
+            hyperparameters['primary_minesite_cost_epsilon'] = 0
+            hyperparameters['primary_minesite_cost_theta'] = 0.2122
+            hyperparameters['primary_minesite_cost_eta'] = -0.3076
+            hyperparameters['primary_minesite_cost_rho'] = 0.1097
+            hyperparameters['primary_minesite_cost_zeta'] = 0
         elif reg2use == 'linear_111_price_tcm':  # see slide 111 right-hand-side table in C:\Users\ryter\Dropbox (MIT)\Group Research Folder_Olivetti\Displacement\04 Presentations\John\Weekly Updates\20210825 Generalization.pptx
-            hyperparameters.loc['primary_minesite_cost_alpha', 'Value'] = -2.0374
-            hyperparameters.loc['primary_minesite_cost_beta', 'Value'] = 1.1396
-            hyperparameters.loc['primary_minesite_cost_gamma', 'Value'] = 0.1615
-            hyperparameters.loc['primary_minesite_cost_delta', 'Value'] = 0.0039
-            hyperparameters.loc['primary_minesite_cost_epsilon', 'Value'] = 0.1717
-            hyperparameters.loc['primary_minesite_cost_theta', 'Value'] = -0.2465
-            hyperparameters.loc['primary_minesite_cost_eta', 'Value'] = 0.2974
-            hyperparameters.loc['primary_minesite_cost_rho', 'Value'] = -0.0934
-            hyperparameters.loc['primary_minesite_cost_zeta', 'Value'] = 0
+            hyperparameters['primary_minesite_cost_alpha'] = -2.0374
+            hyperparameters['primary_minesite_cost_beta'] = 1.1396
+            hyperparameters['primary_minesite_cost_gamma'] = 0.1615
+            hyperparameters['primary_minesite_cost_delta'] = 0.0039
+            hyperparameters['primary_minesite_cost_epsilon'] = 0.1717
+            hyperparameters['primary_minesite_cost_theta'] = -0.2465
+            hyperparameters['primary_minesite_cost_eta'] = 0.2974
+            hyperparameters['primary_minesite_cost_rho'] = -0.0934
+            hyperparameters['primary_minesite_cost_zeta'] = 0
         elif reg2use == 'linear_112_price_sx':  # updated total minesite cost see slide 112 left-hand-side table in C:\Users\ryter\Dropbox (MIT)\Group Research Folder_Olivetti\Displacement\04 Presentations\John\Weekly Updates\20210825 Generalization.pptx
-            hyperparameters.loc['primary_minesite_cost_alpha', 'Value'] = 0.4683
-            hyperparameters.loc['primary_minesite_cost_beta', 'Value'] = 0.8456
-            hyperparameters.loc['primary_minesite_cost_gamma', 'Value'] = -0.1924
-            hyperparameters.loc['primary_minesite_cost_delta', 'Value'] = -0.0125
-            hyperparameters.loc['primary_minesite_cost_epsilon', 'Value'] = 0.1004
-            hyperparameters.loc['primary_minesite_cost_theta', 'Value'] = 0.1910
-            hyperparameters.loc['primary_minesite_cost_eta', 'Value'] = -0.3044
-            hyperparameters.loc['primary_minesite_cost_rho', 'Value'] = 0.1288
-            hyperparameters.loc['primary_minesite_cost_zeta', 'Value'] = 0.1285
+            hyperparameters['primary_minesite_cost_alpha'] = 0.4683
+            hyperparameters['primary_minesite_cost_beta'] = 0.8456
+            hyperparameters['primary_minesite_cost_gamma'] = -0.1924
+            hyperparameters['primary_minesite_cost_delta'] = -0.0125
+            hyperparameters['primary_minesite_cost_epsilon'] = 0.1004
+            hyperparameters['primary_minesite_cost_theta'] = 0.1910
+            hyperparameters['primary_minesite_cost_eta'] = -0.3044
+            hyperparameters['primary_minesite_cost_rho'] = 0.1288
+            hyperparameters['primary_minesite_cost_zeta'] = 0.1285
         elif reg2use == 'linear_112_price_tcm_sx':  # updated total cash margin, see slide 112 right-hand-side table in C:\Users\ryter\Dropbox (MIT)\Group Research Folder_Olivetti\Displacement\04 Presentations\John\Weekly Updates\20210825 Generalization.pptx
-            hyperparameters.loc['primary_minesite_cost_alpha', 'Value'] = -2.0096
-            hyperparameters.loc['primary_minesite_cost_beta', 'Value'] = 1.1392
-            hyperparameters.loc['primary_minesite_cost_gamma', 'Value'] = 0.1608
-            hyperparameters.loc['primary_minesite_cost_delta', 'Value'] = 0.0027
-            hyperparameters.loc['primary_minesite_cost_epsilon', 'Value'] = 0.1579
-            hyperparameters.loc['primary_minesite_cost_theta', 'Value'] = -0.2338
-            hyperparameters.loc['primary_minesite_cost_eta', 'Value'] = 0.2975
-            hyperparameters.loc['primary_minesite_cost_rho', 'Value'] = -0.1020
-            hyperparameters.loc['primary_minesite_cost_zeta', 'Value'] = -0.0583
+            hyperparameters['primary_minesite_cost_alpha'] = -2.0096
+            hyperparameters['primary_minesite_cost_beta'] = 1.1392
+            hyperparameters['primary_minesite_cost_gamma'] = 0.1608
+            hyperparameters['primary_minesite_cost_delta'] = 0.0027
+            hyperparameters['primary_minesite_cost_epsilon'] = 0.1579
+            hyperparameters['primary_minesite_cost_theta'] = -0.2338
+            hyperparameters['primary_minesite_cost_eta'] = 0.2975
+            hyperparameters['primary_minesite_cost_rho'] = -0.1020
+            hyperparameters['primary_minesite_cost_zeta'] = -0.0583
         elif reg2use == 'linear_113_price_tcm_sx':  # updated total cash margin, see slide 113 right-hand-side table in C:\Users\ryter\Dropbox (MIT)\Group Research Folder_Olivetti\Displacement\04 Presentations\John\Weekly Updates\20210825 Generalization.pptx
-            hyperparameters.loc['primary_minesite_cost_alpha', 'Value'] = -1.9868
-            hyperparameters.loc['primary_minesite_cost_beta', 'Value'] = 1.1396
-            hyperparameters.loc['primary_minesite_cost_gamma', 'Value'] = 0.1611
-            hyperparameters.loc['primary_minesite_cost_delta', 'Value'] = 0
-            hyperparameters.loc['primary_minesite_cost_epsilon', 'Value'] = 0.1628
-            hyperparameters.loc['primary_minesite_cost_theta', 'Value'] = -0.2338
-            hyperparameters.loc['primary_minesite_cost_eta', 'Value'] = 0.2968
-            hyperparameters.loc['primary_minesite_cost_rho', 'Value'] = -0.1032
-            hyperparameters.loc['primary_minesite_cost_zeta', 'Value'] = -0.0596
+            hyperparameters['primary_minesite_cost_alpha'] = -1.9868
+            hyperparameters['primary_minesite_cost_beta'] = 1.1396
+            hyperparameters['primary_minesite_cost_gamma'] = 0.1611
+            hyperparameters['primary_minesite_cost_delta'] = 0
+            hyperparameters['primary_minesite_cost_epsilon'] = 0.1628
+            hyperparameters['primary_minesite_cost_theta'] = -0.2338
+            hyperparameters['primary_minesite_cost_eta'] = 0.2968
+            hyperparameters['primary_minesite_cost_rho'] = -0.1032
+            hyperparameters['primary_minesite_cost_zeta'] = -0.0596
 
-        reg2use = hyperparameters['Value']['primary_tcrc_regression2use']
+        reg2use = hyperparameters['primary_tcrc_regression2use']
         #             log(tcrc) = alpha + beta*log(commodity price) + gamma*log(head grade)
         #                 + delta*risk + epsilon*sxew + theta*dore (refining type)
         if reg2use == 'linear_114_reftype':  # see slide 113 left-hand-side table in C:\Users\ryter\Dropbox (MIT)\Group Research Folder_Olivetti\Displacement\04 Presentations\John\Weekly Updates\20210825 Generalization.pptx
-            hyperparameters.loc['primary_tcrc_alpha', 'Value'] = -2.4186
-            hyperparameters.loc['primary_tcrc_beta', 'Value'] = 0.9314
-            hyperparameters.loc['primary_tcrc_gamma', 'Value'] = -0.0316
-            hyperparameters.loc['primary_tcrc_delta', 'Value'] = 0.0083
-            hyperparameters.loc['primary_tcrc_epsilon', 'Value'] = -0.1199
-            hyperparameters.loc['primary_tcrc_theta', 'Value'] = -2.3439
-            hyperparameters.loc['primary_tcrc_eta', 'Value'] = 0
+            hyperparameters['primary_tcrc_alpha'] = -2.4186
+            hyperparameters['primary_tcrc_beta'] = 0.9314
+            hyperparameters['primary_tcrc_gamma'] = -0.0316
+            hyperparameters['primary_tcrc_delta'] = 0.0083
+            hyperparameters['primary_tcrc_epsilon'] = -0.1199
+            hyperparameters['primary_tcrc_theta'] = -2.3439
+            hyperparameters['primary_tcrc_eta'] = 0
         elif reg2use == 'linear_114':  # see slide 113 upper-right table in C:\Users\ryter\Dropbox (MIT)\Group Research Folder_Olivetti\Displacement\04 Presentations\John\Weekly Updates\20210825 Generalization.pptx
-            hyperparameters.loc['primary_tcrc_alpha', 'Value'] = -2.3840
-            hyperparameters.loc['primary_tcrc_beta', 'Value'] = 0.9379
-            hyperparameters.loc['primary_tcrc_gamma', 'Value'] = -0.0233
-            hyperparameters.loc['primary_tcrc_delta', 'Value'] = 0
-            hyperparameters.loc['primary_tcrc_epsilon', 'Value'] = -0.0820
-            hyperparameters.loc['primary_tcrc_theta', 'Value'] = -2.3451
-            hyperparameters.loc['primary_tcrc_eta', 'Value'] = 0
+            hyperparameters['primary_tcrc_alpha'] = -2.3840
+            hyperparameters['primary_tcrc_beta'] = 0.9379
+            hyperparameters['primary_tcrc_gamma'] = -0.0233
+            hyperparameters['primary_tcrc_delta'] = 0
+            hyperparameters['primary_tcrc_epsilon'] = -0.0820
+            hyperparameters['primary_tcrc_theta'] = -2.3451
+            hyperparameters['primary_tcrc_eta'] = 0
 
-        reg2use = hyperparameters['Value']['primary_scapex_regression2use']
+        reg2use = hyperparameters['primary_scapex_regression2use']
         #             log(sCAPEX) = alpha + beta*log(commodity price) + gamma*log(head grade)
         #                 + delta*log(capacity) + epsilon*placer + theta*stockpile + eta*tailings + rho*underground + zeta*sxew
         if reg2use == 'linear_117_price_cap_sx':  # see slide 116 right-hand-side table in C:\Users\ryter\Dropbox (MIT)\Group Research Folder_Olivetti\Displacement\04 Presentations\John\Weekly Updates\20210825 Generalization.pptx
-            hyperparameters.loc['primary_scapex_alpha', 'Value'] = -12.5802
-            hyperparameters.loc['primary_scapex_beta', 'Value'] = 0.7334
-            hyperparameters.loc['primary_scapex_gamma', 'Value'] = 0.6660
-            hyperparameters.loc['primary_scapex_delta', 'Value'] = 0.9773
-            hyperparameters.loc['primary_scapex_epsilon', 'Value'] = 0
-            hyperparameters.loc['primary_scapex_theta', 'Value'] = 0
-            hyperparameters.loc['primary_scapex_eta', 'Value'] = 0
-            hyperparameters.loc['primary_scapex_rho', 'Value'] = 0.7989
-            hyperparameters.loc['primary_scapex_zeta', 'Value'] = 0.6115
+            hyperparameters['primary_scapex_alpha'] = -12.5802
+            hyperparameters['primary_scapex_beta'] = 0.7334
+            hyperparameters['primary_scapex_gamma'] = 0.6660
+            hyperparameters['primary_scapex_delta'] = 0.9773
+            hyperparameters['primary_scapex_epsilon'] = 0
+            hyperparameters['primary_scapex_theta'] = 0
+            hyperparameters['primary_scapex_eta'] = 0
+            hyperparameters['primary_scapex_rho'] = 0.7989
+            hyperparameters['primary_scapex_zeta'] = 0.6115
         elif reg2use == 'linear_119_cap_sx':  # see slide 118 right-hand-side table in C:\Users\ryter\Dropbox (MIT)\Group Research Folder_Olivetti\Displacement\04 Presentations\John\Weekly Updates\20210825 Generalization.pptx
-            hyperparameters.loc['primary_scapex_alpha', 'Value'] = -5.3354
-            hyperparameters.loc['primary_scapex_beta', 'Value'] = 0
-            hyperparameters.loc['primary_scapex_gamma', 'Value'] = -0.0761
-            hyperparameters.loc['primary_scapex_delta', 'Value'] = 0.8564
-            hyperparameters.loc['primary_scapex_epsilon', 'Value'] = 0
-            hyperparameters.loc['primary_scapex_theta', 'Value'] = -0.2043
-            hyperparameters.loc['primary_scapex_eta', 'Value'] = -0.6806
-            hyperparameters.loc['primary_scapex_rho', 'Value'] = 1.2780
-            hyperparameters.loc['primary_scapex_zeta', 'Value'] = 0.9657
+            hyperparameters['primary_scapex_alpha'] = -5.3354
+            hyperparameters['primary_scapex_beta'] = 0
+            hyperparameters['primary_scapex_gamma'] = -0.0761
+            hyperparameters['primary_scapex_delta'] = 0.8564
+            hyperparameters['primary_scapex_epsilon'] = 0
+            hyperparameters['primary_scapex_theta'] = -0.2043
+            hyperparameters['primary_scapex_eta'] = -0.6806
+            hyperparameters['primary_scapex_rho'] = 1.2780
+            hyperparameters['primary_scapex_zeta'] = 0.9657
         elif reg2use == 'linear_123_norm':  # see slide 123 right-hand-side table in C:\Users\ryter\Dropbox (MIT)\Group Research Folder_Olivetti\Displacement\04 Presentations\John\Weekly Updates\20210825 Generalization.pptx
-            hyperparameters.loc['primary_scapex_alpha', 'Value'] = -12.8678
-            hyperparameters.loc['primary_scapex_beta', 'Value'] = 0.7479
-            hyperparameters.loc['primary_scapex_gamma', 'Value'] = 0.6828
-            hyperparameters.loc['primary_scapex_delta', 'Value'] = 0
-            hyperparameters.loc['primary_scapex_epsilon', 'Value'] = 0
-            hyperparameters.loc['primary_scapex_theta', 'Value'] = -0.5241
-            hyperparameters.loc['primary_scapex_eta', 'Value'] = -0.5690
-            hyperparameters.loc['primary_scapex_rho', 'Value'] = 0.7977
-            hyperparameters.loc['primary_scapex_zeta', 'Value'] = 0.6478
+            hyperparameters['primary_scapex_alpha'] = -12.8678
+            hyperparameters['primary_scapex_beta'] = 0.7479
+            hyperparameters['primary_scapex_gamma'] = 0.6828
+            hyperparameters['primary_scapex_delta'] = 0
+            hyperparameters['primary_scapex_epsilon'] = 0
+            hyperparameters['primary_scapex_theta'] = -0.5241
+            hyperparameters['primary_scapex_eta'] = -0.5690
+            hyperparameters['primary_scapex_rho'] = 0.7977
+            hyperparameters['primary_scapex_zeta'] = 0.6478
 
-        reg2use = hyperparameters['Value']['primary_dcapex_regression2use']
+        reg2use = hyperparameters['primary_dcapex_regression2use']
         if reg2use == 'linear_124_norm':
-            hyperparameters.loc['primary_dcapex_alpha', 'Value'] = -10.9607
-            hyperparameters.loc['primary_dcapex_beta', 'Value'] = 0.7492
-            hyperparameters.loc['primary_dcapex_gamma', 'Value'] = 0.7747
-            hyperparameters.loc['primary_dcapex_delta', 'Value'] = 0
-            hyperparameters.loc['primary_dcapex_epsilon', 'Value'] = 0
-            hyperparameters.loc['primary_dcapex_theta', 'Value'] = -6.3580
-            hyperparameters.loc['primary_dcapex_eta', 'Value'] = -0.9672
-            hyperparameters.loc['primary_dcapex_rho', 'Value'] = -0.1271
-            hyperparameters.loc['primary_dcapex_zeta', 'Value'] = 0.2337
+            hyperparameters['primary_dcapex_alpha'] = -10.9607
+            hyperparameters['primary_dcapex_beta'] = 0.7492
+            hyperparameters['primary_dcapex_gamma'] = 0.7747
+            hyperparameters['primary_dcapex_delta'] = 0
+            hyperparameters['primary_dcapex_epsilon'] = 0
+            hyperparameters['primary_dcapex_theta'] = -6.3580
+            hyperparameters['primary_dcapex_eta'] = -0.9672
+            hyperparameters['primary_dcapex_rho'] = -0.1271
+            hyperparameters['primary_dcapex_zeta'] = 0.2337
 
-        reg2use = hyperparameters['Value']['primary_overhead_regression2use']
+        reg2use = hyperparameters['primary_overhead_regression2use']
         if reg2use == 'linear_194':
             #             log(Overhead ($M)) = alpha + beta*log(commodity price) + gamma*log(head grade)
             #                 + delta*log(ore treated) + epsilon*placer + theta*stockpile + eta*tailings + rho*underground + zeta*sxew
-            hyperparameters.loc['primary_overhead_alpha', 'Value'] = -4.2003
-            hyperparameters.loc['primary_overhead_beta', 'Value'] = 0
-            hyperparameters.loc['primary_overhead_gamma', 'Value'] = -0.0519
-            hyperparameters.loc['primary_overhead_delta', 'Value'] = 0.6501
-            hyperparameters.loc['primary_overhead_epsilon', 'Value'] = -1.7948
-            hyperparameters.loc['primary_overhead_theta', 'Value'] = -0.3298
-            hyperparameters.loc['primary_overhead_eta', 'Value'] = -2.1639
-            hyperparameters.loc['primary_overhead_rho', 'Value'] = 0.6356
-            hyperparameters.loc['primary_overhead_zeta', 'Value'] = -0.0841
+            hyperparameters['primary_overhead_alpha'] = -4.2003
+            hyperparameters['primary_overhead_beta'] = 0
+            hyperparameters['primary_overhead_gamma'] = -0.0519
+            hyperparameters['primary_overhead_delta'] = 0.6501
+            hyperparameters['primary_overhead_epsilon'] = -1.7948
+            hyperparameters['primary_overhead_theta'] = -0.3298
+            hyperparameters['primary_overhead_eta'] = -2.1639
+            hyperparameters['primary_overhead_rho'] = 0.6356
+            hyperparameters['primary_overhead_zeta'] = -0.0841
         elif reg2use == 'None':
-            hyperparameters.loc['primary_overhead_alpha', 'Value'] = np.log(0.1)
-            hyperparameters.loc['primary_overhead_beta', 'Value'] = 0
-            hyperparameters.loc['primary_overhead_gamma', 'Value'] = 0
-            hyperparameters.loc['primary_overhead_delta', 'Value'] = 0
-            hyperparameters.loc['primary_overhead_epsilon', 'Value'] = 0
-            hyperparameters.loc['primary_overhead_theta', 'Value'] = 0
-            hyperparameters.loc['primary_overhead_eta', 'Value'] = 0
-            hyperparameters.loc['primary_overhead_rho', 'Value'] = 0
-            hyperparameters.loc['primary_overhead_zeta', 'Value'] = 0
+            hyperparameters['primary_overhead_alpha'] = np.log(0.1)
+            hyperparameters['primary_overhead_beta'] = 0
+            hyperparameters['primary_overhead_gamma'] = 0
+            hyperparameters['primary_overhead_delta'] = 0
+            hyperparameters['primary_overhead_epsilon'] = 0
+            hyperparameters['primary_overhead_theta'] = 0
+            hyperparameters['primary_overhead_eta'] = 0
+            hyperparameters['primary_overhead_rho'] = 0
+            hyperparameters['primary_overhead_zeta'] = 0
 
         return hyperparameters
 
@@ -1071,55 +989,46 @@ class miningModel:
         that could have been altered by such changes.
         '''
         hyperparameters = self.hyperparam
-        hyperparameters.loc['production_frac_region5', 'Value'] = 1 - hyperparameters.loc[
-                                                                      'production_frac_region1':'production_frac_region4',
-                                                                      'Value'].sum()
-        hyperparameters.loc['minetype_prod_frac_placer', 'Value'] = 1 - hyperparameters.loc[
-                                                                        'minetype_prod_frac_underground':'minetype_prod_frac_stockpile',
-                                                                        'Value'].sum()
-        hyperparameters = self.add_minesite_cost_regression_params(hyperparameters)
-        hyperparameters.loc['primary_tcm_flag', 'Value'] = 'tcm' in hyperparameters['Value'][
-            'primary_minesite_cost_regression2use']
-        hyperparameters.loc['primary_rr_negative', 'Value'] = False
+        hyperparameters['production_frac_region5'] = 1 - np.sum([hyperparameters[i] for i in ['production_frac_region1','production_frac_region2','production_frac_region3','production_frac_region4']])
+        hyperparameters['minetype_prod_frac_placer'] = 1 - np.sum([hyperparameters[i] for i in ['minetype_prod_frac_underground','minetype_prod_frac_openpit','minetype_prod_frac_tailings','minetype_prod_frac_stockpile']])
+        if self.byproduct:
+            hyperparameters['byproduct_host1_production_fraction'] = 1 - np.sum([hyperparameters[i] for i in ['byproduct_pri_production_fraction','byproduct_host3_production_fraction','byproduct_host2_production_fraction']])
 
-        initial_demand = hyperparameters['Value']['primary_production']
-        change = hyperparameters['Value']['demand_series_pct_change'] / 100 + 1
+
+        hyperparameters = self.add_minesite_cost_regression_params(hyperparameters)
+        hyperparameters['primary_tcm_flag'] = 'tcm' in hyperparameters[
+            'primary_minesite_cost_regression2use']
+        hyperparameters['primary_rr_negative'] = False
+
+        initial_demand = hyperparameters['primary_production']
+        change = hyperparameters['demand_series_pct_change'] / 100 + 1
         sim_time = self.simulation_time
-        if hyperparameters['Value']['demand_series_method'] == 'yoy':
-            hyperparameters.loc['demand_series', :] = np.array(
-                [pd.Series([initial_demand * change ** (j - sim_time[0]) for j in sim_time], sim_time),
-                 hyperparameters['Notes']['demand_series']], dtype=object)
-            self.demand_series = hyperparameters['Value']['demand_series']
-        elif hyperparameters['Value']['demand_series_method'] == 'target':
-            hyperparameters.loc['demand_series', :] = np.array(
-                [pd.Series(np.linspace(initial_demand, initial_demand * change, len(sim_time)), sim_time),
-                 hyperparameters['Notes']['demand_series']], dtype=object)
-            self.demand_series = hyperparameters['Value']['demand_series']
+        if hyperparameters['demand_series_method'] == 'yoy':
+            hyperparameters['demand_series'] = pd.Series([initial_demand * change ** (j - sim_time[0]) for j in sim_time], sim_time)
+            self.demand_series = hyperparameters['demand_series']
+        elif hyperparameters['demand_series_method'] == 'target':
+            hyperparameters['demand_series'] = pd.Series(np.linspace(initial_demand, initial_demand * change, len(sim_time)), sim_time)
+            self.demand_series = hyperparameters['demand_series']
         elif self.verbosity > 1:
             print('using whatever value has already been assigned to demand_series')
 
-        incent_series = [i * (hyperparameters['Value']['annual_reserves_ratio_with_initial_production_const'] + j)
+        incent_series = [i * (hyperparameters['annual_reserves_ratio_with_initial_production_const'] + j)
                          for i, j in zip(self.demand_series.values,
-                                         [hyperparameters['Value'][
+                                         [hyperparameters[
                                               'annual_reserves_ratio_with_initial_production_slope'] * (
                                                       y - self.simulation_time[0]) for y in self.simulation_time])]
-        hyperparameters.loc['incentive_resources_contained_series', :] = np.array(
-            [pd.Series(incent_series, self.simulation_time),
-             'the contained metal in the assumed resources, currently set to be a series with each year having contained metal in resources equal to one year of production'],
-            dtype=object)
-        hyperparameters.loc['incentive_subsample_series', :] = np.array(
-            [pd.Series(hyperparameters['Value']['incentive_subsample_init'], self.simulation_time),
-             'series with number of mines to select for subsample used for the incentive pool'], dtype=object)
-        self.resources_contained_series = hyperparameters['Value']['incentive_resources_contained_series']
-        self.subsample_series = hyperparameters['Value']['incentive_subsample_series']
+        hyperparameters['incentive_resources_contained_series'] = pd.Series(incent_series, self.simulation_time)
+        hyperparameters['incentive_subsample_series'] = pd.Series(hyperparameters['incentive_subsample_init'], self.simulation_time)
+        self.resources_contained_series = hyperparameters['incentive_resources_contained_series']
+        self.subsample_series = hyperparameters['incentive_subsample_series']
 
         self.hyperparam = hyperparameters
 
     def generate_production_region(self):
         '''updates self.mines, first function called.'''
         seed(self.rs)
-        hyperparam = self.hyperparam.copy()
-        h = self.hyperparam['Value'].copy()
+        hyperparam = self.hyperparam
+        h = self.hyperparam
         pri_dist = getattr(stats, h['primary_production_distribution'])
         pri_prod = h['primary_production']
         pri_prod_mean_frac = h['primary_production_mean']
@@ -1190,15 +1099,16 @@ class miningModel:
         # mines.ramp_up_flag = np.append(mines.ramp_up_flag,[0])
         # mines.production_kt = mines.production_fraction*pri_prod
 
-        regions = [i for i in hyperparam.index if 'production_frac_region' in i]
+        regions = [i for i in hyperparam if 'production_frac_region' in i]
+        region_fractions = [hyperparam[i] for i in hyperparam if 'production_frac_region' in i]
         mines['Region'] = np.nan
         for i in regions:
             int_version = int(i.replace('production_frac_region', ''))
             ind = mines.loc[(mines.Region.isna()), 'Production fraction'].cumsum()
-            ind = ind.loc[ind < hyperparam['Value'][i] * production_fraction].index
+            ind = ind.loc[ind < hyperparam[i] * production_fraction].index
             mines.loc[ind, 'Region'] = int_version
         mines.loc[mines.Region.isna(), 'Region'] = int(
-            hyperparam.loc[regions, 'Value'].astype(float).idxmax().replace('production_frac_region', ''))
+            regions[np.argmax(region_fractions)].replace('production_frac_region', ''))
 
         mines['Simulation start ore treated (kt)'] = np.nan
         mines['Ramp down flag'] = False
@@ -1213,6 +1123,14 @@ class miningModel:
         mines['Discount'] = 1
         mines['Initial price (USD/t)'] = np.nan
         mines['Commodity price (USD/t)'] = h['primary_commodity_price']
+        mines['Capacity utilization expect'] = np.nan
+        mines['CU ramp following'] = np.nan
+        mines['Generated TCRC (USD/t)'] = np.nan
+        mines['Ore treat expect (kt)'] = np.nan
+        mines['Ore treat ramp following (kt)'] = np.nan
+        mines['Price expect (USD/t)'] = np.nan
+        mines['Real index'] = np.nan
+        mines['TCRC expect (USD/t)'] = np.nan
         self.mines = mines.copy()
 
     def generate_grade_and_masses(self):
@@ -1222,7 +1140,7 @@ class miningModel:
         we are randomly assigning grades and don\'t have a good way
         to correct for this.
         '''
-        h = self.hyperparam['Value']
+        h = self.hyperparam
         self.assign_mine_types()
         self.mines['Risk indicator'] = self.values_from_dist('primary_minerisk').round(0)
         self.mines['Head grade (%)'] = self.values_from_dist('primary_ore_grade')
@@ -1244,9 +1162,9 @@ class miningModel:
         mines['Production capacity fraction'] = mines['Production capacity (kt)'] / mines[
             'Production capacity (kt)'].sum()
         mines['Payable percent (%)'] = 100 - self.values_from_dist('primary_payable_percent')
-        mines.loc[mines['Production fraction'].cumsum() <= self.hyperparam['Value'][
+        mines.loc[mines['Production fraction'].cumsum() <= self.hyperparam[
             'primary_sxew_fraction'], 'Payable percent (%)'] = 100
-        if self.hyperparam['Value']['primary_sxew_fraction']==1: mines['Payable percent (%)']=100.
+        if self.hyperparam['primary_sxew_fraction']==1: mines['Payable percent (%)']=100.
         self.mines = mines.copy()
         self.generate_costs_from_regression('Recovery rate (%)')
         mines = self.mines.copy()
@@ -1271,9 +1189,9 @@ class miningModel:
 
         #         if rec_rates.max()<30 or (rec_rates<0).any() or (rec_rates>100).any():
         #             rec_rates = 100 - self.values_from_dist('primary_rr_default')
-        #             self.hyperparam.loc['primary_rr_negative','Value'] = True
+        #             self.hyperparam['primary_rr_negative','Value'] = True
         #         mines.loc[mines.sort_values('Head grade (%)').index,'Recovery rate (%)'] = \
-        #             partial_shuffle(np.sort(rec_rates),self.hyperparam['Value']['primary_recovery_rate_shuffle_param'])
+        #             partial_shuffle(np.sort(rec_rates),self.hyperparam['primary_recovery_rate_shuffle_param'])
 
         mines['Ore treated (kt)'] = mines['Production (kt)'] / (
                     mines['Recovery rate (%)'] * mines['Head grade (%)'] / 1e4)
@@ -1289,8 +1207,8 @@ class miningModel:
             axis=1) * 1e-2
 
         # calibrating reserves to input values if needed
-        primary_reserves_reported_basis = self.hyperparam['Value']['primary_reserves_reported_basis']
-        primary_reserves_reported = self.hyperparam['Value']['primary_reserves_reported']
+        primary_reserves_reported_basis = self.hyperparam['primary_reserves_reported_basis']
+        primary_reserves_reported = self.hyperparam['primary_reserves_reported']
         if primary_reserves_reported_basis == 'ore' and primary_reserves_reported > 0:
             ratio = primary_reserves_reported / mines['Reserves (kt)'].sum()
         elif primary_reserves_reported_basis == 'metal' and primary_reserves_reported > 0:
@@ -1306,7 +1224,7 @@ class miningModel:
             'Ore treated (kt)']
         mines['Opening'] = self.simulation_time[0] - mines[
             'Cumulative ore treated ratio with ore treated'].round(0)
-        mines['Initial ore treated (kt)'] = mines['Ore treated (kt)'] / self.hyperparam['Value']['ramp_up_years']
+        mines['Initial ore treated (kt)'] = mines['Ore treated (kt)'] / self.hyperparam['ramp_up_years']
 
         if h['ramp_up_exponent'] != 0:
             mines.loc[ind, 'Cumulative ore treated (kt)'] = 0
@@ -1333,7 +1251,7 @@ class miningModel:
     def generate_costs_from_regression(self, param):
         '''Called inside generate_total_cash_margin'''
         mines = self.mines.copy()
-        h = self.hyperparam.copy()['Value']
+        h = self.hyperparam
 
         if h['primary_minesite_cost_mean'] > 0 and param == 'Minesite cost (USD/t)':
             mines[param] = self.values_from_dist('primary_minesite_cost')
@@ -1440,7 +1358,7 @@ class miningModel:
         self.mines = mines.copy()
 
     def generate_total_cash_margin(self):
-        h = self.hyperparam['Value']
+        h = self.hyperparam
 
         # Risk indicator is the sum of political, operational, terrorism, and security risks, which range from insignificant (1) to extreme (5)
         risk_upper_cutoff = 20
@@ -1470,8 +1388,9 @@ class miningModel:
 
     def assign_mine_types(self):
         mines = self.mines.copy()
-        h = self.hyperparam.copy()['Value']
-        params = [i for i in h.index if 'minetype_prod_frac' in i]
+        h = self.hyperparam
+        params = [i for i in h if 'minetype_prod_frac' in i]
+        param_vals = [h[i] for i in h if 'minetype_prod_frac' in i]
         self.mine_type_mapping = {0: 'openpit', 1: 'placer', 2: 'stockpile', 3: 'tailings', 4: 'underground'}
         self.mine_type_mapping_rev = {'openpit': 0, 'placer': 1, 'stockpile': 2, 'tailings': 3, 'underground': 4}
         mines['Mine type'] = np.nan
@@ -1484,13 +1403,12 @@ class miningModel:
             mines.loc[ind, 'Mine type'] = self.mine_type_mapping_rev[map_param]
             mines.loc[ind, 'Mine type string'] = map_param
         mines.loc[mines['Mine type'].isna(), 'Mine type'] = self.mine_type_mapping_rev[
-            h[params].astype(float).idxmax().split('_')[-1]]
-        mines.loc[mines['Mine type string'].isna(), 'Mine type string'] = h[params].astype(float).idxmax().split('_')[
-            -1]
+            params[np.argmax(param_vals)].split('_')[-1]]
+        mines.loc[mines['Mine type string'].isna(), 'Mine type string'] = params[np.argmax(param_vals)].split('_')[-1]
         self.mines = mines.copy()
 
     def generate_oges(self):
-        s, loc, scale = self.hyperparam.loc['primary_oge_s':'primary_oge_scale', 'Value']
+        s, loc, scale = (self.hyperparam[i] for i in ['primary_oge_s','primary_oge_loc','primary_oge_scale'])
         self.mines['OGE'] = 0 - stats.lognorm.rvs(s=s, loc=loc, scale=scale, size=self.mines.shape[0],
                                                          random_state=self.rs)
         i = 0
@@ -1506,7 +1424,7 @@ class miningModel:
             self.mines['Primary OGE'] = self.mines['OGE']
 
     def generate_annual_costs(self):
-        h = self.hyperparam['Value']
+        h = self.hyperparam
         self.generate_costs_from_regression('Sustaining CAPEX ($M)')
         self.generate_costs_from_regression('Overhead ($M)')
         #         self.mines['Sustaining CAPEX ($M)'] /= 2
@@ -1530,7 +1448,7 @@ class miningModel:
 
     def generate_byproduct_mines(self):
         if self.byproduct:
-            h = self.hyperparam.copy()['Value']
+            h = self.hyperparam
             mines = pd.DataFrame()
             pri = miningModel(byproduct=True)
             pri.hyperparam = self.hyperparam.copy()
@@ -1538,7 +1456,7 @@ class miningModel:
             pri.update_hyperparams_from_byproducts('byproduct_pri')
             pri.byproduct = False
 
-            if pri.hyperparam['Value']['byproduct_pri_production_fraction'] > 0:
+            if pri.hyperparam['byproduct_pri_production_fraction'] > 0:
                 pri.initialize_mines()
                 pri.mines['Byproduct ID'] = 0
                 self.pri = pri
@@ -1547,8 +1465,8 @@ class miningModel:
             else:
                 byproduct_mine_models = []
                 byproduct_mines = []
-            for param in np.unique([i.split('_')[1] for i in h.index if 'host' in i]):
-                if self.hyperparam['Value']['byproduct_' + param + '_production_fraction'] != 0:
+            for param in np.unique([i.split('_')[1] for i in h if 'host' in i]):
+                if self.hyperparam['byproduct_' + param + '_production_fraction'] != 0:
                     byproduct_model = self.generate_byproduct_params(param)
                     byproduct_mine_models += [byproduct_model]
                     byproduct_mines += [byproduct_model.mines]
@@ -1557,21 +1475,21 @@ class miningModel:
             self.update_operation_hyperparams()
 
     def update_hyperparams_from_byproducts(self, param):
-        h = self.hyperparam['Value'].copy()
+        h = self.hyperparam
         if param == 'byproduct':
-            replace_h = [i for i in h.index if 'byproduct' in i and 'host' not in i and i != 'byproduct']
+            replace_h = [i for i in h if 'byproduct' in i and 'host' not in i and i != 'byproduct']
         else:
-            replace_h = [i for i in h.index if param in i]
+            replace_h = [i for i in h if param in i]
         replace_h_split = [i.split(param)[1] for i in replace_h]
-        to_replace_h = [i for i in h.index if 'primary' in i and i.split('primary')[1] in replace_h_split]
+        to_replace_h = [i for i in h if 'primary' in i and i.split('primary')[1] in replace_h_split]
         if param == 'byproduct':
             matched = dict([(i, j) for i in replace_h for j in to_replace_h if
                             '_'.join(i.split('_')[1:]) == '_'.join(j.split('_')[1:])])
         else:
             matched = dict([(i, j) for i in replace_h for j in to_replace_h if
                             '_'.join(i.split('_')[2:]) == '_'.join(j.split('_')[1:])])
-        self.hyperparam.loc[to_replace_h, 'Value'] = self.hyperparam.drop(to_replace_h).rename(matched).loc[
-            to_replace_h, 'Value']
+        self.hyperparam[to_replace_h] = self.hyperparam.drop(to_replace_h).rename(matched).loc[
+            to_replace_h]
         if self.verbosity > 1:
             display(matched)
 
@@ -1586,10 +1504,10 @@ class miningModel:
     def generate_byproduct_production(self, param):
         by_param = 'byproduct_' + param
         host1 = miningModel(byproduct=True, simulation_time=self.simulation_time, verbosity=self.verbosity)
-        h = self.hyperparam.copy()
-        host1.hyperparam = h.copy()
-        h = h.copy()['Value']
-        host1_params = [i for i in h.index if param in i]
+        h = self.hyperparam
+        host1.hyperparam = h
+        h = h
+        host1_params = [i for i in h if param in i]
         host1.update_hyperparams_from_byproducts(by_param)
 
         production_fraction = h[by_param + '_production_fraction']
@@ -1612,7 +1530,7 @@ class miningModel:
         mines.loc[mines.index[-1] + 1, 'Production fraction'] = production_fraction - mines['Production fraction'].sum()
         mines['Production (kt)'] = mines['Production fraction'] * h['byproduct_production']
 
-        regions = [i for i in h.index if 'production_frac_region' in i]
+        regions = [i for i in h if 'production_frac_region' in i]
         mines['Region'] = np.nan
         for i in regions:
             int_version = int(i.replace('production_frac_region', ''))
@@ -1645,7 +1563,7 @@ class miningModel:
     def generate_byproduct_costs(self, param):
         by_param = 'byproduct_' + param
         host1 = getattr(self, param)
-        h = host1.hyperparam['Value']
+        h = host1.hyperparam
 
         host1.generate_total_cash_margin()
         mines = host1.mines.copy()
@@ -1653,14 +1571,14 @@ class miningModel:
         mines['Byproduct ID'] = int(param.split('host')[1])
         host1.mines = mines.copy()
 
-        pri_main = [i for i in h.index if 'byproduct' in i and 'host' not in i and 'pri' not in i and i != 'byproduct']
+        pri_main = [i for i in h if 'byproduct' in i and 'host' not in i and 'pri' not in i and i != 'byproduct']
         setattr(self, param, host1)
         return host1
 
     def correct_byproduct_production(self, param):
         by_param = 'byproduct_' + param
         host1 = getattr(self, param)
-        h = host1.hyperparam['Value']
+        h = host1.hyperparam
         mines = host1.mines.copy()
 
         primary_relocate = ['Commodity price (USD/t)', 'Recovery rate (%)', 'Head grade (%)', 'Payable percent (%)',
@@ -1741,14 +1659,14 @@ class miningModel:
         host1.mines = mines.copy()
         host1.generate_oges()
 
-        pri_main = [i for i in h.index if 'byproduct' in i and 'host' not in i and 'pri' not in i and i != 'byproduct']
+        pri_main = [i for i in h if 'byproduct' in i and 'host' not in i and 'pri' not in i and i != 'byproduct']
         setattr(self, param, host1)
 
     def generate_byproduct_total_costs(self, param):
         by_param = 'byproduct_' + param
         host1 = getattr(self, param)
         host1.generate_costs_from_regression('Sustaining CAPEX ($M)')
-        h = host1.hyperparam['Value']
+        h = host1.hyperparam
         mines = host1.mines.copy()
 
         mines['Development CAPEX ($M)'] = 0
@@ -1790,7 +1708,7 @@ class miningModel:
 
     def values_from_dist(self, param):
         hyperparam = self.hyperparam
-        params = [i for i in hyperparam.index if param in i]
+        params = [i for i in hyperparam if param in i]
         if len(params) == 0:
             raise Exception('invalid param value given in values_from_dist call')
         else:
@@ -1799,12 +1717,12 @@ class miningModel:
                 raise Exception('993' + param + str(params))
             mean_name = [i for i in params if 'mean' in i][0]
             var_name = [i for i in params if 'var' in i][0]
-            pri_dist = getattr(stats, hyperparam['Value'][dist_name])
-            pri_mean = hyperparam['Value'][mean_name]
-            pri_var = hyperparam['Value'][var_name]
+            pri_dist = getattr(stats, hyperparam[dist_name])
+            pri_mean = hyperparam[mean_name]
+            pri_var = hyperparam[var_name]
 
             np.random.seed(self.rs)
-            if hyperparam['Value'][dist_name] == 'norm':
+            if hyperparam[dist_name] == 'norm':
                 dist_rvs = pri_dist.rvs(
                     loc=pri_mean,
                     scale=pri_var,
@@ -1828,7 +1746,7 @@ class miningModel:
         (copy of self.mines).
         function of hyperparam[reinitialize]'''
         self.load_variables_from_hyperparam()
-        if self.hyperparam['Value']['reinitialize']:
+        if self.hyperparam['reinitialize']:
             if self.byproduct:
                 self.generate_byproduct_mines()
                 # out: self.mines
@@ -1843,21 +1761,21 @@ class miningModel:
 
             self.mine_life_init = self.mines.copy()
 
-        elif self.hyperparam['Value']['load_mine_life_init_from_pkl']:
+        elif self.hyperparam['load_mine_life_init_from_pkl']:
             if self.byproduct:
                 try:
                     self.mine_life_init = pd.read_pickle('data/mine_life_init_byproduct.pkl')
                     self.mines = self.mine_life_init.copy()
                 except:
                     raise Exception(
-                        'Save an initialized mine file as data/mine_life_init_byproduct.pkl or set hyperparam.loc[\'reinitialize\',\'Value\'] to True')
+                        'Save an initialized mine file as data/mine_life_init_byproduct.pkl or set hyperparam[\'reinitialize\',\'Value\'] to True')
             else:
                 try:
                     self.mine_life_init = pd.read_pickle('data/mine_life_init_primary.pkl')
                     self.mines = self.mine_life_init.copy()
                 except:
                     raise Exception(
-                        'Save an initialized mine file as data/mine_life_init_primary.pkl or set hyperparam.loc[\'reinitialize\',\'Value\'] to True')
+                        'Save an initialized mine file as data/mine_life_init_primary.pkl or set hyperparam[\'reinitialize\',\'Value\'] to True')
 
         self.update_operation_hyperparams()
 
@@ -1872,7 +1790,7 @@ class miningModel:
         by assigning series to primary_price_series
         or byproduct_price_series.
         '''
-        h = self.hyperparam['Value']
+        h = self.hyperparam
         for price_or_tcrc in ['price', 'tcrc']:
             if self.byproduct and not hasattr(self, f'primary_{price_or_tcrc}_series') and not hasattr(self,
                                                                                                        f'byproduct_{price_or_tcrc}_series'):
@@ -1905,7 +1823,7 @@ class miningModel:
         self.initialize_mines()
         self.cumulative_ore_treated = pd.Series(np.nan, self.simulation_time)
         self.supply_series = pd.Series(np.nan, self.simulation_time)
-        h = self.hyperparam['Value'].copy()
+        h = self.hyperparam
         if h['reinitialize']:
             mine_life_init = self.mine_life_init.copy()
             # mine_life_init['Ramp up flag'] = 0
@@ -1956,7 +1874,7 @@ class miningModel:
 
     def op_simulate_mine_life(self):
         simulation_time = self.simulation_time
-        h = self.hyperparam.copy()['Value']
+        h = self.hyperparam
         i = self.i
 
         self.hstrings = ['primary_', 'byproduct_'] if self.byproduct else ['primary_']
@@ -2194,7 +2112,7 @@ class miningModel:
             self.cumulative_ore_treated.loc[i] = np.nansum(ml_yr.cumulative_ore_treated_kt)
 
     def simulate_mine_life_one_year(self):
-        h = self.hyperparam.copy()['Value']
+        h = self.hyperparam
         i = self.i
         simulation_time = self.simulation_time
         if i == self.simulation_time[0] and not h['simulate_history_bool']:
@@ -2239,7 +2157,7 @@ class miningModel:
 
     def calculate_cu(self, cu_last, tcm_last, govt=True):
         neg_tcm = tcm_last < 0
-        cu = cu_last * abs(tcm_last / self.hyperparam['Value']['mine_tcm0']) ** self.hyperparam['Value'][
+        cu = cu_last * abs(tcm_last / self.hyperparam['mine_tcm0']) ** self.hyperparam[
             'mine_cu_margin_elas']
         cu[neg_tcm] = 0.7
         #         ind = np.intersect1d(cu.index,self.govt_mines)
@@ -2261,7 +2179,7 @@ class miningModel:
 
     def calculate_minesite_cost(self, minesite_cost_last, grade, initial_grade, price, initial_price, ore_treated, sim_start_ore_treated, year_i):
 
-        h = self.hyperparam.copy()['Value']
+        h = self.hyperparam
         if h['minesite_cost_response_to_grade_price']:
             minesite_cost_expect = minesite_cost_last * (grade / initial_grade) ** h['mine_cost_og_elas'] \
                                    * (price / initial_price) ** h['mine_cost_price_elas'] \
@@ -2286,11 +2204,11 @@ class miningModel:
 
     def calculate_price_expect(self, ml, i):
         '''i is year index'''
-        close_price_method = self.hyperparam['Value']['close_price_method']
-        close_years_back = int(self.hyperparam['Value']['close_years_back'])
-        close_probability_split_max = self.hyperparam['Value']['close_probability_split_max']
-        close_probability_split_mean = self.hyperparam['Value']['close_probability_split_mean']
-        close_probability_split_min = self.hyperparam['Value']['close_probability_split_min']
+        close_price_method = self.hyperparam['close_price_method']
+        close_years_back = int(self.hyperparam['close_years_back'])
+        close_probability_split_max = self.hyperparam['close_probability_split_max']
+        close_probability_split_mean = self.hyperparam['close_probability_split_mean']
+        close_probability_split_min = self.hyperparam['close_probability_split_min']
 
         if len(ml.shape) > 1 and ml.shape[1] > 1:
             ml = ml.apply(lambda x: x.replace(np.nan, x.mean()), axis=1)
@@ -2326,7 +2244,7 @@ class miningModel:
         return price_expect
 
     def check_ramp_down(self, ml_yr_, price_df, price_expect):
-        h = self.hyperparam['Value'].copy()
+        h = self.hyperparam.copy()
         ml_yr = ml_yr_.copy()
         discount_rate = h['discount_rate']
         use_reserves_for_closure = h['use_reserves_for_closure']
@@ -2530,7 +2448,7 @@ class miningModel:
         by_cash_flow_expect = 0
         by_tcm_expect = 0
         ml_yr = ml_yr_.copy()
-        h = self.hyperparam.copy()['Value']
+        h = self.hyperparam
         grade_expect = self.calculate_grade(initial_grade, cumu_ot_expect, initial_ore_treated,
                                             ml_yr.oge[neg_cash_flow])
         sxew_index = ml_yr.index[ml_yr.payable_percent_pct == 100]
@@ -2591,17 +2509,17 @@ class miningModel:
         return cash_flow_expect, by_cash_flow_expect, tcm_expect, by_tcm_expect, ml_yr
 
     def initialize_incentive_mines(self):
-        h = self.hyperparam.copy()['Value']
+        h = self.hyperparam.copy()
         incentive_mines = self.mine_life_init.copy()
         i = self.i
 
-        inc = miningModel(simulation_time=np.arange(self.i, self.i + self.hyperparam['Value']['incentive_roi_years']),
+        inc = miningModel(simulation_time=np.arange(self.i, self.i + self.hyperparam['incentive_roi_years']),
                           byproduct=self.byproduct)
         inc.hyperparam = self.hyperparam.copy()
-        inc.simulation_time = np.arange(self.i, self.i + inc.hyperparam['Value']['incentive_roi_years'])
-        inc.hyperparam.loc['simulate_opening', 'Value'] = False
-        inc.hyperparam.loc['reinitialize', 'Value'] = False
-        inc.hyperparam.loc['opening_flag_for_cu0', 'Value'] = True
+        inc.simulation_time = np.arange(self.i, self.i + inc.hyperparam['incentive_roi_years'])
+        inc.hyperparam['simulate_opening'] = False
+        inc.hyperparam['reinitialize'] = False
+        inc.hyperparam['opening_flag_for_cu0'] = True
 
         # price_df = self.ml.copy()['Commodity price (USD/t)'].unstack()
         price_expect = self.calculate_price_expect(self.primary_price_series, i)
@@ -2612,23 +2530,23 @@ class miningModel:
         tcrc_expect = self.calculate_price_expect(self.primary_tcrc_series, i)
         # tcrc_expect = tcrc_expect.fillna(tcrc_expect.mean())
 
-        inc.hyperparam.loc['primary_commodity_price_option', 'Value'] = 'constant'
+        inc.hyperparam['primary_commodity_price_option'] = 'constant'
         if self.byproduct:
             # pri_price_df = self.ml['Primary Commodity price (USD/t)'].unstack()
             pri_price_expect = self.calculate_price_expect(primary_price_series, i)
             incentive_mines['Primary Commodity price (USD/t)'] = pri_price_expect
             incentive_mines['Commodity price (USD/t)'] = price_expect
-            inc.hyperparam.loc['byproduct_commodity_price'] = np.nanmean(price_expect)
-            inc.hyperparam.loc['primary_commodity_price'] = np.nanmean(pri_price_expect)
+            inc.hyperparam['byproduct_commodity_price'] = np.nanmean(price_expect)
+            inc.hyperparam['primary_commodity_price'] = np.nanmean(pri_price_expect)
             inc.pri_price_expect = pri_price_expect
-            inc.hyperparam.loc['byproduct_commodity_price_option', 'Value'] = 'constant'
+            inc.hyperparam['byproduct_commodity_price_option'] = 'constant'
             # pri_tcrc_df = self.ml.copy()['Primary TCRC (USD/t)'].unstack()
             pri_tcrc_expect = self.calculate_price_expect(primary_tcrc_series, i)
             pri_tcrc_expect = pri_tcrc_expect.fillna(pri_tcrc_expect.mean())
         else:
             incentive_mines['Commodity price (USD/t)'] *= price_expect / incentive_mines[
                 'Commodity price (USD/t)'].mean()
-            inc.hyperparam.loc['primary_commodity_price'] = float(price_expect)
+            inc.hyperparam['primary_commodity_price'] = float(price_expect)
 
         grade_decline = (self.cumulative_ore_treated[i] / self.cumulative_ore_treated[self.simulation_time[0]]) ** h[
             'initial_ore_grade_decline']
@@ -2675,8 +2593,8 @@ class miningModel:
         self.incentive_mines = incentive_mines.copy()
 
         if i not in self.demand_series.index:
-            initial_demand = inc.hyperparam['Value']['primary_production']
-            change = inc.hyperparam['Value']['demand_series_pct_change'] / 100 + 1
+            initial_demand = inc.hyperparam['primary_production']
+            change = inc.hyperparam['demand_series_pct_change'] / 100 + 1
             sim_time = inc.simulation_time
             if h['demand_series_method'] == 'yoy':
                 self.demand_series = pd.Series([initial_demand * change ** (j - sim_time[0]) for j in sim_time],
@@ -2725,7 +2643,7 @@ class miningModel:
         self.inc = inc
 
     def select_incentive_mines(self):
-        h = self.hyperparam.copy()['Value']
+        h = self.hyperparam.copy()
         inc = self.inc
         incentive_mines = inc.incentive_mines.copy()
         i = self.i
@@ -2785,7 +2703,7 @@ class miningModel:
         self.inc = inc
 
     def add_development_capex(self):
-        h = self.hyperparam.copy()['Value']
+        h = self.hyperparam
         inc_mines = self.incentive_mines.copy()
         dcapex_method = h['incentive_dcapex_method']
         capacities = inc_mines.copy()['Capacity (kt)']
@@ -2810,8 +2728,7 @@ class miningModel:
         self.incentive_mines = inc_mines.copy()
 
     def op_sim_mine_opening(self):
-        h = self.inc.hyperparam.copy()['Value']
-
+        h = self.inc.hyperparam
         if h['incentive_opening_method'] in ['xinkai_thesis', 'unconstrained']:
             self.incentive_open_xinkai_thesis()
 
@@ -2835,7 +2752,7 @@ class miningModel:
     def incentive_open_xinkai_thesis(self):
         nowish = datetime.now()
         inc = self.inc
-        h = inc.hyperparam.copy()['Value']
+        h = inc.hyperparam.copy()
         simulation_time = inc.simulation_time
         i = self.i
 
@@ -2853,14 +2770,23 @@ class miningModel:
                 inc.simulate_mine_life_one_year()
         else:
             inc.simulate_mine_life_all_years()
-        opening_sim = inc.ml.generate_df()
+        opening_sim = inc.ml.copy()
         outside_ml = self.ml.loc[i]
         current_prod = np.nansum(outside_ml.production_kt)
-        inc_mines = opening_sim.loc[i].copy()
-        opening_sim['Discount rate (divisor)'] = [
-            (1 + h['incentive_discount_rate']) ** (j[0] - simulation_time[0]) for j in opening_sim.index]
-        inc_mines['NPV ($M)'] = (opening_sim['cash_flow_usdm'] / opening_sim['Discount rate (divisor)']).groupby(
-            level=1).sum()
+        inc_mines = opening_sim.loc[i].generate_df()
+
+        incentive_end = inc.simulation_time[-1]
+        incentive_start = inc.simulation_time[0]
+        max_len = len(opening_sim.loc[incentive_end].cash_flow_usdm)
+        discount_rate_ph = inc.hyperparam['incentive_discount_rate']
+        def make_big_array(j):
+            ph = opening_sim.loc[j].cash_flow_usdm / (1 + discount_rate_ph) ** (j - incentive_start)
+            return np.append(ph, np.repeat(np.nan,max_len-len(ph)))
+        result = map(make_big_array, np.arange(incentive_start,incentive_end+1))
+        npv = np.nansum(np.array(list(result)),axis=0)
+        # opsim['Discount rate (divisor)'] = [
+        #     (1 + h['incentive_discount_rate']) ** (j[0] - simulation_time[0]) for j in opsim.index]
+        inc_mines['NPV ($M)'] = npv
 
         self.inc_mines = inc_mines
         self.opening_sim = opening_sim
@@ -2901,10 +2827,7 @@ class miningModel:
         self.start_frac = self.simulation_time[0] + h['start_calibrate_years']
         self.frac_series = self.subsample_series / self.initial_subsample_series
 
-        if h['calibrate_incentive_opening_method'] or (
-                h['incentive_opening_method'] == 'unconstrained' and i <= self.end_calibrate and h[
-            'incentive_opening_probability'] == 0) or self.i <= h['incentive_require_tune_years'] + \
-                self.simulation_time[0]:
+        if h['calibrate_incentive_opening_method'] or (h['incentive_opening_method'] == 'unconstrained' and i <= self.end_calibrate and h['incentive_opening_probability'] == 0) or self.i <= h['incentive_require_tune_years'] + self.simulation_time[0]:
             target = self.demand_series.loc[i]
             subset = inc_mines.sample(frac=frac, random_state=self.rs).reset_index(drop=True)
             subset.loc[subset['NPV ($M)'] < 0] = 0
@@ -3313,7 +3236,7 @@ class miningModel:
         opening_sim = opening_sim_list[np.argmin(abs(y))]
 
         opening_sim['Discount rate (divisor)'] = [
-            (1 + self.inc.hyperparam['Value']['discount_rate']) ** (j[0] - self.simulation_time[0]) for j in
+            (1 + self.inc.hyperparam['discount_rate']) ** (j[0] - self.simulation_time[0]) for j in
             opening_sim.index]
         inc_mines = opening_sim.copy().loc[self.i]
         inc_mines['NPV ($M)'] = (opening_sim['Cash flow ($M)'] / opening_sim['Discount rate (divisor)']).groupby(
@@ -3329,7 +3252,7 @@ class miningModel:
         delattr(self, 'error_series')
 
     def update_price_tcrc(self, byproduct=False):
-        h = self.hyperparam.copy()['Value']
+        h = self.hyperparam
         opening = self.mines_to_open.copy()
         i = self.i
 
@@ -3460,29 +3383,29 @@ class miningModel:
     def simulate_history(self):
         self.simulate_history_bool = False
         sh = deepcopy([self])[0]
-        h = sh.hyperparam.copy()
-        h.loc['simulate_history_bool', 'Value'] = False
+        h = sh.hyperparam
+        h.loc['simulate_history_bool'] = False
         demand_growth = h['demand_series_pct_change'] / 100 + 1
         final_demand = h['byproduct_production'] if self.byproduct else h['primary_production']
         years_back = 20 if demand_growth < 0.1 else 50
 
         sh.simulation_time = np.arange(self.simulation_time[0] - years_back, self.simulation_time[0] + 1)
-        h.loc['simulation_time', 'Value'] = sh.simulation_time
+        h.loc['simulation_time'] = sh.simulation_time
 
         h['demand_series_method'] = 'yoy'
         initial_demand = final_demand * demand_growth ** (-1 * years_back)
         print(2536, initial_demand, final_demand)
         if self.byproduct:
-            h.loc['byproduct_production', 'Value'] = initial_demand
+            h.loc['byproduct_production'] = initial_demand
         else:
-            h.loc['primary_production', 'Value'] = initial_demand;
+            h.loc['primary_production'] = initial_demand;
 
-        h.loc['initial_ore_grade_decline', 'Value'] = 0
-        h.loc['mine_cost_tech_improvements', 'Value'] = 0
-        h.loc['incentive_tuning_option', 'Value'] = self.incentive_tuning_option
+        h.loc['initial_ore_grade_decline'] = 0
+        h.loc['mine_cost_tech_improvements'] = 0
+        h.loc['incentive_tuning_option'] = self.incentive_tuning_option
         sh.incentive_tuning_option = self.incentive_tuning_option
 
-        sh.hyperparam = h.copy()
+        sh.hyperparam = h
         sh.recalculate_hyperparams()
         sh.primary_price_series = pd.Series(float(h['primary_commodity_price']), sh.simulation_time)
         if self.byproduct: sh.byproduct_price_series = pd.Series(float(h['byproduct_commodity_price']),
@@ -3516,14 +3439,14 @@ class miningModel:
         with warnings.catch_warnings():
             warnings.simplefilter('error')
             m = miningModel(byproduct=False, verbosity=0)
-            m.hyperparam.loc['minesite_cost_response_to_grade_price', 'Value'] = True
-            m.hyperparam.loc['primary_commodity_price', 'Value'] = 7000
-            m.hyperparam.loc['primary_ore_grade_mean', 'Value'] = 0.1
-            m.hyperparam.loc['calibrate_incentive_opening_method', 'Value'] = True
-            m.hyperparam.loc['incentive_opening_method', 'Value'] = 'karan_generalization'
-            m.hyperparam.loc['demand_series_pct_change', :] = 10
-            m.hyperparam.loc['incentive_use_resources_contained_series', 'Value'] = False
-            m.hyperparam.loc['incentive_tune_tcrc', 'Value'] = True
+            m.hyperparam['minesite_cost_response_to_grade_price'] = True
+            m.hyperparam['primary_commodity_price'] = 7000
+            m.hyperparam['primary_ore_grade_mean'] = 0.1
+            m.hyperparam['calibrate_incentive_opening_method'] = True
+            m.hyperparam['incentive_opening_method'] = 'karan_generalization'
+            m.hyperparam['demand_series_pct_change', :] = 10
+            m.hyperparam['incentive_use_resources_contained_series'] = False
+            m.hyperparam['incentive_tune_tcrc'] = True
 
             m.simulation_time = np.arange(2019, 2041)
             m.op_initialize_prices()
@@ -3531,7 +3454,7 @@ class miningModel:
                 m.i = i
                 m.simulate_mine_life_one_year()
 
-            incentive_tune_tcrc = m.hyperparam['Value']['incentive_tune_tcrc']
+            incentive_tune_tcrc = m.hyperparam['incentive_tune_tcrc']
             if incentive_tune_tcrc:
                 price_select = 'TCRC (USD/t)'
             else:

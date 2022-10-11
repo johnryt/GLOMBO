@@ -462,18 +462,18 @@ class Integration():
         self.mining = miningModel(simulation_time=mine_simulation_time, byproduct=self.byproduct,verbosity=self.verbosity)
         m = self.mining
         if self.verbosity>1: print('Mining parameters updated:')
-        for param in np.intersect1d(m.hyperparam.index, h.index):
-            m.hyperparam.loc[param,'Value'] = h[param]
+        for param in [j for j in h.index if j in m.hyperparam]:
+            m.hyperparam[param] = h[param]
             if self.verbosity>1:
                 print('  ',param,'now',h[param])
 
-        initial_ore_grade_decline = m.hyperparam['Value']['initial_ore_grade_decline']
-        incentive_mine_cost_improvement = m.hyperparam['Value']['incentive_mine_cost_improvement']
-        annual_reserves_ratio_with_initial_production_slope = m.hyperparam['Value']['annual_reserves_ratio_with_initial_production_slope']
-        m.hyperparam.loc['internal_price_formation','Value'] = False
-        m.hyperparam.loc['initial_ore_grade_decline','Value'] = 0
-        m.hyperparam.loc['incentive_mine_cost_improvement','Value'] = 0
-        m.hyperparam.loc['annual_reserves_ratio_with_initial_production_slope','Value'] = 0
+        initial_ore_grade_decline = m.hyperparam['initial_ore_grade_decline']
+        incentive_mine_cost_improvement = m.hyperparam['incentive_mine_cost_improvement']
+        annual_reserves_ratio_with_initial_production_slope = m.hyperparam['annual_reserves_ratio_with_initial_production_slope']
+        m.hyperparam['internal_price_formation'] = False
+        m.hyperparam['initial_ore_grade_decline'] = 0
+        m.hyperparam['incentive_mine_cost_improvement'] = 0
+        m.hyperparam['annual_reserves_ratio_with_initial_production_slope'] = 0
 
 #         primary_production
         if hasattr(self,'historical_data'):
@@ -489,14 +489,14 @@ class Integration():
             m.primary_price_series.name = 'Primary commodity price'
             m.primary_price_series = pd.concat([pd.Series(m.primary_price_series.iloc[0],[i for i in mine_simulation_time if i not in m.primary_price_series.index]),
                 m.primary_price_series]).sort_index()
-            m.hyperparam.loc['primary_commodity_price','Value'] = m.primary_price_series.iloc[0]
+            m.hyperparam['primary_commodity_price'] = m.primary_price_series.iloc[0]
 
         else:
             m.demand_series = self.demand.alt_demand[[j for j in self.demand.alt_demand.columns if j!='China Fraction']].sum(axis=1).rolling(5).mean()
             m.demand_series *= self.concentrate_demand['Global'][end_yr]/m.demand_series[end_yr]
             warn('if simulating a real commodity, the Integration class initialization should take a str input for its commodity variable, which should correspond with a sheet name in case study data.xlsx')
 
-        m.hyperparam.loc['primary_production','Value'] = m.demand_series[mine_simulation_time[0]]
+        m.hyperparam['primary_production'] = m.demand_series[mine_simulation_time[0]]
         primary_production_mean_series = m.demand_series*h['primary_production_mean']/m.demand_series[end_yr]
         self.primary_production_mean_series = primary_production_mean_series.copy()
 #         display(m.demand_series)
@@ -504,7 +504,7 @@ class Integration():
             m.i = year
             if self.verbosity>1:
                 print('sim mine history year:',year)
-            m.hyperparam.loc['primary_production_mean','Value'] = primary_production_mean_series[year]
+            m.hyperparam['primary_production_mean'] = primary_production_mean_series[year]
             m.run()
 #             display(m.demand_series)
 #             raise ValueError('no')
@@ -522,10 +522,10 @@ class Integration():
                 plt.show()
                 plt.close()
 
-        m.hyperparam.loc['initial_ore_grade_decline','Value'] = initial_ore_grade_decline
-        m.hyperparam.loc['incentive_mine_cost_improvement','Value'] = incentive_mine_cost_improvement
-        m.hyperparam.loc['annual_reserves_ratio_with_initial_production_slope','Value'] = annual_reserves_ratio_with_initial_production_slope
-        m.hyperparam.loc['internal_price_formation','Value'] = False
+        m.hyperparam['initial_ore_grade_decline'] = initial_ore_grade_decline
+        m.hyperparam['incentive_mine_cost_improvement'] = incentive_mine_cost_improvement
+        m.hyperparam['annual_reserves_ratio_with_initial_production_slope'] = annual_reserves_ratio_with_initial_production_slope
+        m.hyperparam['internal_price_formation'] = False
         self.concentrate_supply = m.concentrate_supply_series.copy()
         self.sxew_supply = m.sxew_supply_series.copy()
         self.mine_production = self.concentrate_supply+self.sxew_supply

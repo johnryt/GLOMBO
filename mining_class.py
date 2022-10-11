@@ -88,6 +88,8 @@ class OneMine():
                     setattr(self, i, np.delete(getattr(self, i), np.where([i in ind for i in self.index])))
 
     def concat(self, new_OM_instance):
+        if self.index_max==0:
+            self.index_max = np.max(self.index)
         len_new = len(new_OM_instance.index)
         nan_array = np.repeat(np.nan, len_new)
         new_OM_instance.index = np.arange(self.index_max + 1, self.index_max + 1 + len(new_OM_instance.index))
@@ -1889,10 +1891,11 @@ class miningModel:
 
         # No longer include closed mines in the calculations → they won't have any data available after closure
         if (ml_yr.closed_flag != True).any():
-            closed_index = ml_last.index[ml_last.closed_flag]
+            closed_index = ml_last.index[(ml_last.closed_flag)&(~np.isnan(ml_last.production_kt))]
             # print(1967,closed_index)
-            ml_yr.drop(closed_index)
-            ml_last.drop(closed_index)
+            if len(closed_index)>0:
+                ml_yr.drop(closed_index)
+                ml_last.drop(closed_index)
             ml_yr.real_index = ml_yr.index
             ml_last.real_index = ml_last.index
             ml_yr.index = np.arange(0, len(ml_yr.index))
@@ -2138,8 +2141,6 @@ class miningModel:
             if type(opening) == OneMine:
                 self.ml_yr.concat(opening)
                 self.ml.add_mines(self.ml_yr)
-
-        #         if h['internal_price_formation']:
         ml_yr_ph = self.ml.loc[i]
         if self.byproduct:
             self.primary_price_series.loc[i] = np.nanmean(ml_yr_ph.primary_commodity_price_usdpt)
@@ -2830,7 +2831,7 @@ class miningModel:
         if h['calibrate_incentive_opening_method'] or (h['incentive_opening_method'] == 'unconstrained' and i <= self.end_calibrate and h['incentive_opening_probability'] == 0) or self.i <= h['incentive_require_tune_years'] + self.simulation_time[0]:
             target = self.demand_series.loc[i]
             subset = inc_mines.sample(frac=frac, random_state=self.rs).reset_index(drop=True)
-            subset.loc[subset['NPV ($M)'] < 0] = 0
+            subset.loc[subset['NPV ($M)'] < 0,'production_kt'] = 0
             current_sum = subset['production_kt'].sum()
             if current_sum < (target - current_prod) and current_sum != 0:
                 frac = (target - current_prod) / current_sum + 1

@@ -384,6 +384,7 @@ class Individual():
                     results.unstack(0).plot(ax=a,linewidth=1,alpha=0.5,zorder=0,legend=False)
                 a.set(title=i+f' ({best_ind})',ylabel=i+' ('+unit+')',xlabel='Year')
                 a.legend(['Simulated','Historical'])
+            fig.tight_layout()
 
         if plot_hyperparam_heatmap:
             plt.figure(figsize=(1.2*n_best,10),dpi=self.dpi)

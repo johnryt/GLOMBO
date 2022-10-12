@@ -17,6 +17,35 @@ class Many():
     '''
     Runs many commodities simultaneously, and contains methods for plotting
     the outcomes of those runs.
+
+    Methods within Many include:
+    - run_all_demand
+    - run_mining
+    - run_all_integration
+    - get_variables (for loading all info for each commodity within a single
+        object, e.g. mining or demand)
+    - get_multiple (for loading all info for each commodity, creating separate
+        Many instance for each object such that you have Many.demand,
+        Many.mining, and/or Many.integ)
+    - plot_all_demand
+    - plot_all_mining
+    - plot_all_integration
+
+    The Many object can also be passed to many of the other functions included
+    in this file, which include:
+    - feature_importance
+    - nice_feature_importance_plot
+    - commodity_level_feature_importance
+    - plot_all_feature_importance_plots
+    - make_parameter_names_nice
+    - prep_for_snsplots
+    - plot_demand_parameter_correlation
+    - plot_mining_parameter_scatter
+    - commodity_level_feature_importance_heatmap
+    - nice_plot_pretuning
+    - get_unit
+    Not all of the above take Many as an input; some are standalone or are
+    called by other functions in this file.
     '''
     def __init__(self, data_folder=None, pkl_folder=None):
         '''
@@ -660,7 +689,49 @@ def commodity_level_feature_importance_heatmap(self,dpi=50,recalculate=True):
     a.set_title('Integrated model\nfeature importance',weight='bold')
     return fig,a
 
+def nice_plot_pretuning(demand_or_mining='mining',dpi=50):
+    if demand_or_mining=='demand': demand_or_mining='DEM'
+    ready_commodities = ['Steel','Al','Au','Sn','Cu','Ni','Ag','Zn','Pb']
+    fig,ax = easy_subplots(ready_commodities,dpi=dpi)
+    cmap = {'nickel':'Ni','gold':'Au','aluminum':'Al','tin':'Sn','zinc':'Zn','lead':'Pb','steel':'Steel','copper':'Cu','silver':'Ag'}
+    cmap_r=dict(zip(cmap.values(),cmap.keys()))
+    for c,a in zip(ready_commodities,ax):
+        filename=f'data/{cmap_r[c]}_run_hist_{demand_or_mining}.pkl'
+        big_df = pd.read_pickle(filename)
+        rmse_df = big_df.loc['rmse_df'].iloc[-1][0]
+        rmse_df.index = pd.MultiIndex.from_tuples(rmse_df.index)
+        idx = rmse_df.unstack()['RMSE'].idxmin()
+        rmse_df.unstack().loc[idx]
+        ieieie = Individual(c,3,filename=filename, rmse_not_mae=True,weight_price=1,dpi=50,price_rolling=5)
+        if 'DEM' in filename:
+            hist = ieieie.historical_data['Total demand']
+            sim = big_df.loc['results',idx]['Total demand']
+            hist = pd.concat([sim.loc[:2000],hist.loc[2001:]])
+            sim = sim.loc[2001:]
+            diction = get_unit(sim,hist,'Total demand (kt)')
+            hist, sim, unit = [diction[i] for i in ['historical','simulated','unit']]
+            hist.plot(ax=a,label='Historical')
+            sim.plot(ax=a,ylabel=f'Total demand ({unit})',label='Simulated').grid(axis='x')
+        else:
+            hist = ieieie.historical_data['Primary supply']
+            sim = big_df.loc['results',idx]['Primary supply']
+            hist = pd.concat([sim.loc[:2000],hist.loc[2001:]])
+            sim = sim.loc[2001:]
+            diction = get_unit(sim,hist,'Primary supply (kt)')
+            hist, sim, unit = [diction[i] for i in ['historical','simulated','unit']]
+            hist.plot(ax=a,label='Historical')
+            sim.plot(ax=a,ylabel=f'Primary supply ({unit})',label='Simulated').grid(axis='x')
+        a.set(title=cmap_r[c].capitalize(),xlabel='Year')
+        a.legend(loc='upper left')
+    fig.tight_layout()
+    return fig,ax
+
 def get_unit(simulated, historical, param):
+    """
+    returns dictionary of simulated, historical, and unit.
+    Unit is simply the unit, supply your own parentheses, etc.
+    - e.g. USD/t, fraction, Mt, t, kt
+    """
     simulated, historical = simulated.copy(), historical.copy()
     if np.any([i in param.lower() for i in ['price','tcrc','spread']]):
         unit = 'USD/t'

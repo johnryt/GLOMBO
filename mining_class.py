@@ -1955,7 +1955,7 @@ class miningModel:
             opening_mines = ml_yr.index[ml_yr.ramp_up_flag != 0]
             not_new_opening = ml_yr.index[ml_yr.ramp_up_flag!=2] if i>self.simulation_time[1] else ml_yr.index
             # print(2014,len(not_new_opening),len(ml_yr.index))
-            govt_mines = ml_yr.index[ml_yr.operate_with_negative_cash_flow]
+            govt_mines = ml_yr.index[ml_yr.operate_with_negative_cash_flow.astype(bool)]
             #             end_ramp_up = ml_yr.loc[(opening_mines)&(ml_yr['Opening']+h['ramp_up_years']<=i)&(ml_yr['Opening']>simulation_time[0]-1)].index
             end_ramp_up = ml_yr.index[ml_yr.ramp_up_flag == h['ramp_up_years'] + 1]
             if len(opening_mines) > 0:
@@ -2104,7 +2104,7 @@ class miningModel:
                 ml_yr.total_cash_margin_usdpt = ml_yr.commodity_price_usdpt - ml_yr.minesite_cost_usdpt - ml_yr.tcrc_usdpt
                 ml_yr.cash_flow_usdm = 1e-3 * ml_yr.paid_metal_production_kt * ml_yr.total_cash_margin_usdpt - ml_yr.overhead_usdm - ml_yr.sustaining_capex_usdm - ml_yr.development_capex_usdm
 
-            self.govt_mines = ml_yr.index[ml_yr.operate_with_negative_cash_flow]
+            self.govt_mines = ml_yr.index[ml_yr.operate_with_negative_cash_flow.astype(bool)]
 
             self.ml_yr = ml_yr.copy()
             if self.byproduct:
@@ -2334,7 +2334,7 @@ class miningModel:
             return ml_yr
 
         exclude_this_yr_reserves = ml_yr.index[ml_yr.reserves_kt < ot_expect]
-        exclude_already_ramping = ml_yr.index[ml_yr.ramp_down_flag]
+        exclude_already_ramping = ml_yr.index[ml_yr.ramp_down_flag.astype(bool)]
         exclude_ramp_up = ml_yr.index[ml_yr.ramp_up_flag != 0]
         neg_cash_flow = ml_yr.index[ml_yr.cash_flow_expect_usdm < 0]
         if use_reserves_for_closure:

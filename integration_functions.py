@@ -236,8 +236,6 @@ class Sensitivity():
                  include_sd_objectives=False,
                  use_rmse_not_r2=True,
                  dpi=50,
-                 using_thresholds=True,
-                 N_INIT=3,
                  normalize_objectives=False,
                  use_alternative_gold_volumes=True,
                  historical_price_rolling_window=1,
@@ -253,8 +251,7 @@ class Sensitivity():
         ---------------
         pkl_filename: str, path/filename ending in pkl for where you want to save the results of the
             sensitivity you are about to run
-        case_study_data_file_path: str, path/filename to the \'case study data.xlsx\' file being used
-            for the input hyperparameters
+        data_folder: str, path to where case study data.xlsx and price adjustment results.xlsx are saved
         changing_base_parameters_series: pd.series.Series | str. If string, must correspond with a column and
             sheet name in the case study data excel file, which then causes the base parameters series
             to be loaded using parameters for that commodity. Alternatively, a pandas series can be input that
@@ -297,25 +294,20 @@ class Sensitivity():
             If doing a Bayesian tuning sensitivity, needs to be set True
         random_state: int, can be anything, but have been using the default for all scenarios for
             reproducibility
-        incentive_opening_probability_fraction_zero: used in the run_monte_carlo() method to determine the
+        incentive_opening_probability_fraction_zero: float, used in the run_monte_carlo() method to determine the
             fraction of incentive_opening_probability values generated that are then set to zero, since setting
             to zero allows the model to determine the incentive_opening_probability value endogenously, picking
             the mean value from the most recent n simulations where incentive tuning used incentive_opening_probability
             to set the number of mines opening such that concentrate supply=demand
+        include_sd_objectives: bool, whether to make the optimization try to also minimize the RMSE between
+            supply and demand, default (and pretty much always should be) is False
+        use_rmse_not_r2: bool, default True, whether to use RMSE instead of R2 as the variable we try to
+            minimize in the optimization
         dpi: int, stands for dots per inch, and is used to change the resolution of the plots created using
             the check_hist_demand_convergence() method on a historical_sim_check_demand() method run
-        using_thresholds: bool, determines whether to use the old AxClient approach instead of
-            updated Bayesian optimization approach which uses the Service API, which allows us to set thresholds
-            for our objectives. Hoping that the new one works better than the old one due to presence of thresholds.
-            Both are visible at: https://ax.dev/tutorials/multiobjective_optimization, where thresholds are set
-            using the algorithms farther down the page, under the heading Set Objective Thresholds. I cannot tell
-            whether the AxClient approach uses the same algorithm for multi-objective optimization. In the
-            Service API approach, we specify we are using the qNEHVI option, Noisy Expected Hypervolume Improvement.
-            It is the one they recommend so that is my assumption/hope that the AxClient approach uses the same
-            algorithm. From the two Pareto Frontiers they show, it appears this is the case.
-        N_INIT: int, number of randomly generated (SOBOL) initialization runs for the updated Bayesian optimization
-            approach before it switches to the qNEHVI algorithm.
-        normalize_objectives: bool, determines whether the objectives should be normalized by their first-year value
+        normalize_objectives: bool, default False, determines whether the objectives should be normalized by
+            their first-year value. Having it True appears to cause weird convergence behavior and I think this
+            option should be avoided
         use_alternative_gold_volumes: bool, if True uses the alternative gold volume drivers since industrial
             represents bar and coin, and transport represents jewelry. False uses the default, which fails to
             capture the plateau seen in gold demand 2010-2019.
@@ -325,6 +317,8 @@ class Sensitivity():
             previously been tuned (by historical_sim_check_demand, meaning they are in the index of
             self.updated_commodity_inputs(_sub)) to be +/- 10% of their previously-tuned value, if the optimization
             is trying to tune them. If False, constraints are as they were previously.
+        dont_constrain_demand: bool, if True, makes it so that the constrain_previously_tuned above does not apply
+            to the parameters associated with demand
         price_to_use: str within the set [log,original,diff,case study data]. The first three refer to
             the respective columns in the data/price adjustment results.xlsx excel file, for the selected commodity.
             Using case study data causes the system to use the values from the case study data.xlsx excel sheet
@@ -334,6 +328,11 @@ class Sensitivity():
             giving constant values for data before simulation start time.
         timer: callback, if provided, use this function to measure time and print mean iteration time as well as ETA,
             if interested, ask Luca Montanelli for his function.
+        save_mining_info: bool, default False. If True, saves mine-level data in the result dataframe, which takes
+            up a lot of memory. Setting to False means it just saves a zero, and if you need to then access the
+            mine-level data you have to re-run the simulation with this value as True
+        trim_result_df: bool, default True. If True, the result dataframe will be trimmed to only include years of
+            data for which the simulation was run, rather than going all the way back to 1912, to save memory
         '''
         self.save_mining_info = save_mining_info
         self.trim_result_df = trim_result_df
@@ -366,8 +365,6 @@ class Sensitivity():
         self.use_rmse_not_r2 = use_rmse_not_r2
         self.dpi = dpi
 
-        self.using_thresholds = using_thresholds
-        self.N_INIT = N_INIT
         self.normalize_objectives = normalize_objectives
 
         self.bayesian_tune = False # added here, gets overwritten in any of the bayesian tuning runs; just a flag so we know when regular scenarios are running so they get saved correctly

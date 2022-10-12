@@ -3,6 +3,9 @@ import pandas as pd
 idx = pd.IndexSlice
 from scipy import stats
 from math import erf
+from IPython.display import display
+from datetime import datetime
+from joblib import Parallel, delayed
 
 def sum_distribution(year_i, y, mu, sigma, distr):
     '''
@@ -22,8 +25,8 @@ def sum_distribution(year_i, y, mu, sigma, distr):
         if y == year_i-1: return 1
         else: return 0
     if distr == 'normal':
-        # return stats.norm.cdf(year_i+1, loc=y+mu, scale=sigma) - stats.norm.cdf(year_i, loc=y+mu, scale=sigma)
         return 0.5*(erf((year_i+1-mu-y)/(np.sqrt(2)*sigma)) - erf((year_i-mu-y)/(np.sqrt(2)*sigma)))
+        # return stats.norm.cdf(year_i+1, loc=y+mu, scale=sigma) - stats.norm.cdf(year_i, loc=y+mu, scale=sigma)
 
 def reaching_end_of_life(year_i, demand_sectors, lifetime_parameters):
     '''
@@ -43,10 +46,31 @@ def reaching_end_of_life(year_i, demand_sectors, lifetime_parameters):
     sigmas = lifetime_parameters.loc['sigma'].values #standard deviations of lifetimes
     distrs = lifetime_parameters.loc['distribution'].values #types of distribution
     all_years = demand_sectors.index[demand_sectors.index<year_i] #all years available before year_i
-    end_of_life = pd.DataFrame([], index=all_years, columns=demand_sectors.columns)
 
-    for i, regsec in enumerate(demand_sectors.columns):
-        end_of_life[regsec] = [demand_sectors[regsec][y]*sum_distribution(year_i, y, mu=mus[i], sigma=sigmas[i], distr=distrs[i]) for y in all_years]
+    def fn(regsec,y,year_i,mu,sigma,distr):
+        return demand_sectors[regsec][y]*sum_distribution(year_i, y, mu=mu, sigma=sigma, distr=distr)
+    def fn2(regsec, i, y):
+        return demand_sectors[regsec][y]*sum_distribution(year_i, y, mu=mus[i], sigma=sigmas[i], distr=distrs[i])
+
+    dsc = list(enumerate(demand_sectors.columns))
+    big_year_i = [year_i    for y in all_years for i,a in dsc]
+    big_y      = [y         for y in all_years for i,a in dsc]
+    big_mu     = [mus[i]    for y in all_years for i,a in dsc]
+    big_sigma  = [sigmas[i] for y in all_years for i,a in dsc]
+    big_distr  = [distrs[i] for y in all_years for i,a in dsc]
+    big_regsec = [a         for y in all_years for i,a in dsc]
+    outie = np.array(list(map(fn, big_regsec, big_y, big_year_i, big_mu, big_sigma, big_distr)))
+    outie = outie.reshape(len(all_years),len(dsc))
+    end_of_life = pd.DataFrame(outie, index=all_years, columns=demand_sectors.columns)
+    # end_of_life = pd.DataFrame([], index=all_years, columns=demand_sectors.columns)
+    # for i, regsec in enumerate(demand_sectors.columns):
+    #     end_of_life[regsec] = [demand_sectors[regsec][y]*sum_distribution(year_i, y, mu=mus[i], sigma=sigmas[i], distr=distrs[i]) for y in all_years]
+
+    # outie2 = np.array(Parallel(n_jobs=2)(delayed(fn2)(regsec,i,y) for y in all_years for i,regsec in dsc))
+    # outie2 = outie2.reshape(len(all_years),len(dsc))
+    # eol2 = pd.DataFrame(outie, index=all_years, columns=demand_sectors.columns)
+    # now4 = datetime.now()
+
     return end_of_life
 
 def intensity_integral(mu, sigma, base=np.exp(1)):

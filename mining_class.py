@@ -25,8 +25,8 @@ class AllMines():
     def copy(self):
         return deepcopy([self])[0]
 
-    def generate_df(self, columns=None):
-        return pd.concat([self.loc[q].generate_df(columns=columns) for q in self.loc], keys=self.loc)
+    def generate_df(self, columns=None, redo_strings=False):
+        return pd.concat([self.loc[q].generate_df(columns=columns,redo_strings=redo_strings) for q in self.loc], keys=self.loc)
 
 
 class OneMine():
@@ -107,11 +107,20 @@ class OneMine():
                 # print(97, i, v, len(ph))
         self.index_max = np.max(self.index)
 
-    def generate_df(self, columns=None):
+    def generate_df(self, columns=None, redo_strings=False):
         if columns is None: columns = self.columns
-        return pd.DataFrame(
+        out = pd.DataFrame(
             [getattr(self, q) if type(getattr(self, q)) == np.ndarray else np.repeat(getattr(self, q), len(self.index))
              for q in columns], columns=self.index, index=columns).T
+        if redo_strings:
+            new_strs = [
+                str(i).capitalize().replace('_usdpt', ' (USD/t)').replace('_usdm',' ($M)').replace(
+                    '_pct',' (%)').replace('_kt',' (kt)').replace('Oge','OGE').replace(
+                    'Tcrc','TCRC').replace('tcrc','TCRC').replace('Npv','NPV').replace(
+                    'npv','NPV').replace('treat_','treated_').replace('capex','CAPEX').replace(
+                    'Capex','CAPEX').replace('Cu_','CU_').replace('_', ' ') for i in out.columns]
+            out.rename(columns=dict(zip(out.columns,new_strs)),inplace=True)
+        return out
 
 
 class miningModel:
@@ -1891,7 +1900,18 @@ class miningModel:
 
         # No longer include closed mines in the calculations → they won't have any data available after closure
         if (ml_yr.closed_flag != True).any():
-            closed_index = ml_last.index[(ml_last.closed_flag)&(~np.isnan(ml_last.production_kt))]
+            try:
+                idx = (ml_last.closed_flag)&(~np.isnan(ml_last.production_kt.astype(float)))
+                closed_index = ml_last.index[idx.astype(bool)]
+            except Exception as e:
+                print(ml_last.index)
+                print(ml_last.closed_flag)
+                print(ml_last.production_kt)
+                print(~np.isnan(ml_last.production_kt.astype(float)))
+                print((ml_last.closed_flag)&(~np.isnan(ml_last.production_kt.astype(float))))
+                print(((ml_last.closed_flag)&(~np.isnan(ml_last.production_kt.astype(float)))).dtype)
+
+                raise e
             # print(1967,closed_index)
             if len(closed_index)>0:
                 ml_yr.drop(closed_index)
@@ -1927,11 +1947,11 @@ class miningModel:
                     ml_yr.initial_price_usdpt = np.repeat(primary_price_series[i], len(ml_yr.index))
 
             self.sxew_mines = ml_yr.index[ml_yr.payable_percent_pct == 100]
-            self.conc_mines = ml_yr.index[(ml_yr.payable_percent_pct != 100)&(~np.isnan(ml_yr.payable_percent_pct))]
+            self.conc_mines = ml_yr.index[((ml_yr.payable_percent_pct != 100)&(~np.isnan(ml_yr.payable_percent_pct.astype(float)))).astype(bool)]
             ml_yr.tcrc_usdpt[self.sxew_mines] = 0
             if self.byproduct:
                 ml_yr.primary_tcrc_usdpt[self.sxew_mines] = 0
-            closing_mines = ml_last.index[ml_last.ramp_down_flag]
+            closing_mines = ml_last.index[ml_last.ramp_down_flag.astype(bool)]
             opening_mines = ml_yr.index[ml_yr.ramp_up_flag != 0]
             not_new_opening = ml_yr.index[ml_yr.ramp_up_flag!=2] if i>self.simulation_time[1] else ml_yr.index
             # print(2014,len(not_new_opening),len(ml_yr.index))
@@ -1939,7 +1959,7 @@ class miningModel:
             #             end_ramp_up = ml_yr.loc[(opening_mines)&(ml_yr['Opening']+h['ramp_up_years']<=i)&(ml_yr['Opening']>simulation_time[0]-1)].index
             end_ramp_up = ml_yr.index[ml_yr.ramp_up_flag == h['ramp_up_years'] + 1]
             if len(opening_mines) > 0:
-                ml_yr.opening[np.intersect1d(opening_mines, ml_yr.index[np.isnan(ml_yr.opening)])] = i
+                ml_yr.opening[np.intersect1d(opening_mines, ml_yr.index[np.isnan(ml_yr.opening.astype(float))])] = i
                 if self.byproduct:
                     ml_yr.initial_price_usdpt[ml_yr.opening == i] = byproduct_price_series[i]
                     ml_yr.primary_initial_price_usdpt[ml_yr.opening == i] = primary_price_series[i]
@@ -2310,7 +2330,7 @@ class miningModel:
             ml_yr.byproduct_total_cash_margin_expect_usdpt = by_tcm_expect
             ml_yr.byproduct_cash_flow_expect_usdm = by_cash_flow_expect
 
-        if ml_yr.shape()[0] == 0 or np.nansum(np.isnan(ml_yr.reserves_kt) == len(ml_yr.reserves_kt)):
+        if ml_yr.shape()[0] == 0 or np.nansum(np.isnan(ml_yr.reserves_kt.astype(float)) == len(ml_yr.reserves_kt)):
             return ml_yr
 
         exclude_this_yr_reserves = ml_yr.index[ml_yr.reserves_kt < ot_expect]
@@ -3363,7 +3383,7 @@ class miningModel:
                     self.primary_tcrc_series[i]
                     if True:#'TCRC' in price_select:
                         year_i_mines = self.ml.loc[i]
-                        conc_mines = (year_i_mines.payable_percent_pct!=100)&(~np.isnan(year_i_mines.payable_percent_pct))
+                        conc_mines = (year_i_mines.payable_percent_pct!=100)&(~np.isnan(year_i_mines.payable_percent_pct.astype(float)))
                         if np.sum(conc_mines)>0:
                             setattr(self.ml.loc[i], alt_select, getattr(year_i_mines, alt_select) * new_price / np.nanmean(
                                 getattr(year_i_mines, alt_select)[conc_mines]))

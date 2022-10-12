@@ -11,6 +11,7 @@ from matplotlib.lines import Line2D
 from sklearn.preprocessing import StandardScaler
 import shap
 from Individual import Individual
+from datetime import datetime
 
 class Many():
     '''
@@ -28,7 +29,8 @@ class Many():
         self.data_folder = 'generalization/data' if data_folder==None else data_folder
         self.pkl_folder = 'data' if pkl_folder==None else pkl_folder
 
-    def run_all_demand(self, n_runs=50, commodities=None, trim_result_df=True):
+    def run_all_demand(self, n_runs=50, commodities=None, save_mining_info=False, trim_result_df=True):
+        t1 = datetime.now()
         commodities = self.ready_commodities if commodities==None else commodities
         for material in commodities:
             print('-'*40)
@@ -39,10 +41,12 @@ class Many():
                             simulation_time=np.arange(2001,2020),OVERWRITE=True,use_alternative_gold_volumes=True,
                                 historical_price_rolling_window=5,verbosity=0, trim_result_df=trim_result_df)
             self.shist1.historical_sim_check_demand(n_runs,demand_or_mining='demand')
+            print(f'time elapsed: {str(datetime.now()-t1)}')
 
     def run_all_mining(self, n_runs=50, commodities=None, save_mining_info=False, trim_result_df=True):
         commodities = self.ready_commodities if commodities==None else commodities
         for material in commodities:
+            t1 = datetime.now()
             print('-'*40)
             print(material)
             mat = self.element_commodity_map[material].lower()
@@ -53,6 +57,7 @@ class Many():
                                incentive_opening_probability_fraction_zero=0, save_mining_info=save_mining_info,
                                trim_result_df=trim_result_df)
             self.shist.historical_sim_check_demand(n_runs,demand_or_mining='mining')
+            print(f'time elapsed: {str(datetime.now()-t1)}')
 
     def run_all_integration(self, n_runs=200, commodities=None, normalize_objectives=False,constrain_previously_tuned=True, verbosity=0, save_mining_info=False, trim_result_df=True):
         '''
@@ -60,6 +65,7 @@ class Many():
         '''
         commodities = self.ready_commodities if commodities==None else commodities
         for material in commodities:
+            t1 = datetime.now()
             print('-'*40)
             print(material)
             # timer=IterTimer()
@@ -68,7 +74,7 @@ class Many():
             mat = self.element_commodity_map[material].lower()
             filename=f'{self.pkl_folder}/{mat}_run_hist_all{thing}.pkl'
             print('--'*15+filename+'-'*15)
-            s = Sensitivity(pkl_filename=filename, data_folder=self.data_folder,changing_base_parameters_series=material,notes=f'Monte Carlo {material} run',
+            self.s = Sensitivity(pkl_filename=filename, data_folder=self.data_folder,changing_base_parameters_series=material,notes=f'Monte Carlo {material} run',
                             additional_base_parameters=pd.Series(1,['refinery_capacity_growth_lag']),
                             simulation_time=np.arange(2001,2020), include_sd_objectives=False,
                             OVERWRITE=True,verbosity=verbosity,historical_price_rolling_window=5,
@@ -95,8 +101,9 @@ class Many():
                 'intensity_response_to_gdp',
                 'sector_specific_price_response',
             ]
-            s.run_historical_monte_carlo(n_scenarios=n_runs,bayesian_tune=True,n_params=n,
+            self.s.run_historical_monte_carlo(n_scenarios=n_runs,bayesian_tune=True,n_params=n,
                 sensitivity_parameters=sensitivity_parameters)
+            print(f'time elapsed: {str(datetime.now()-t1)}')
             # add 'response','growth' to sensitivity_parameters input to allow demand parameters to change again
 
     def get_variables(self, demand_mining_all='demand'):
@@ -281,7 +288,7 @@ class Many():
 
 def feature_importance(self,plot=None, dpi=50,recalculate=False, standard_scaler=True, plot_commodity_importances=False, commodity=None):
     '''
-    
+
     '''
     split_frac = 0.5
 

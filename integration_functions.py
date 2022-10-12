@@ -26,17 +26,19 @@ def create_result_df(self,integ):
     reg = 'Global'
     reg_results = pd.Series(np.nan,['Global','China','RoW'],dtype=object)
 
+    if type(integ.mining.ml)!=pd.core.frame.DataFrame:
+        integ.mining.ml = integ.mining.ml.generate_df(redo_strings=True)
     new = integ.mining.ml.loc[integ.mining.ml['Opening']>integ.simulation_time[0]]
     old = integ.mining.ml.loc[integ.mining.ml['Opening']<=integ.simulation_time[0]]
     old_new_mines = pd.concat([
         old.loc[:,'Production (kt)'].groupby(level=0).sum(),
         new.loc[:,'Production (kt)'].groupby(level=0).sum(),
-        old.loc[:,['Production (kt)','Head grade (%)']].product(axis=1).groupby(level=0).sum()/old.loc[:,'Production (kt)'].groupby(level=0).sum(),
-        new.loc[:,['Production (kt)','Head grade (%)']].product(axis=1).groupby(level=0).sum()/new.loc[:,'Production (kt)'].groupby(level=0).sum(),
-        old.loc[:,['Production (kt)','Minesite cost (USD/t)']].product(axis=1).groupby(level=0).sum()/old.loc[:,'Production (kt)'].groupby(level=0).sum(),
-        new.loc[:,['Production (kt)','Minesite cost (USD/t)']].product(axis=1).groupby(level=0).sum()/new.loc[:,'Production (kt)'].groupby(level=0).sum(),
-        old.loc[:,['Production (kt)','Total cash margin (USD/t)']].product(axis=1).groupby(level=0).sum()/old.loc[:,'Production (kt)'].groupby(level=0).sum(),
-        new.loc[:,['Production (kt)','Total cash margin (USD/t)']].product(axis=1).groupby(level=0).sum()/new.loc[:,'Production (kt)'].groupby(level=0).sum(),
+        old.loc[:,['Production (kt)','Head grade (%)']].product(axis=1).groupby(level=0).sum()/old.loc[:,'Production (kt)'].groupby(level=0).sum().replace(0,np.nan),
+        new.loc[:,['Production (kt)','Head grade (%)']].product(axis=1).groupby(level=0).sum()/new.loc[:,'Production (kt)'].groupby(level=0).sum().replace(0,np.nan),
+        old.loc[:,['Production (kt)','Minesite cost (USD/t)']].product(axis=1).groupby(level=0).sum()/old.loc[:,'Production (kt)'].groupby(level=0).sum().replace(0,np.nan),
+        new.loc[:,['Production (kt)','Minesite cost (USD/t)']].product(axis=1).groupby(level=0).sum()/new.loc[:,'Production (kt)'].groupby(level=0).sum().replace(0,np.nan),
+        old.loc[:,['Production (kt)','Total cash margin (USD/t)']].product(axis=1).groupby(level=0).sum()/old.loc[:,'Production (kt)'].groupby(level=0).sum().replace(0,np.nan),
+        new.loc[:,['Production (kt)','Total cash margin (USD/t)']].product(axis=1).groupby(level=0).sum()/new.loc[:,'Production (kt)'].groupby(level=0).sum().replace(0,np.nan),
         integ.mining.resources_contained_series, integ.mining.reserves_ratio_with_demand_series
         ],
         keys=['Old mine prod.','New mine prod.',
@@ -50,9 +52,9 @@ def create_result_df(self,integ):
     for reg in reg_results.index:
         results = pd.concat([integ.total_demand.loc[:,reg],integ.scrap_demand.loc[:,reg],integ.scrap_supply[reg],
                integ.concentrate_demand[reg],integ.concentrate_supply,
-               integ.mining.ml.loc[:,['Production (kt)','Head grade (%)']].product(axis=1).groupby(level=0).sum()/integ.mining.ml.loc[:,'Production (kt)'].groupby(level=0).sum(),
-               integ.mining.ml.loc[:,['Production (kt)','Minesite cost (USD/t)']].product(axis=1).groupby(level=0).sum()/integ.mining.ml.loc[:,'Production (kt)'].groupby(level=0).sum(),
-               integ.mining.ml.loc[:,['Production (kt)','Total cash margin (USD/t)']].product(axis=1).groupby(level=0).sum()/integ.mining.ml.loc[:,'Production (kt)'].groupby(level=0).sum(),
+               integ.mining.ml.loc[:,['Production (kt)','Head grade (%)']].product(axis=1).groupby(level=0).sum()/integ.mining.ml.loc[:,'Production (kt)'].groupby(level=0).sum().replace(0,np.nan),
+               integ.mining.ml.loc[:,['Production (kt)','Minesite cost (USD/t)']].product(axis=1).groupby(level=0).sum()/integ.mining.ml.loc[:,'Production (kt)'].groupby(level=0).sum().replace(0,np.nan),
+               integ.mining.ml.loc[:,['Production (kt)','Total cash margin (USD/t)']].product(axis=1).groupby(level=0).sum()/integ.mining.ml.loc[:,'Production (kt)'].groupby(level=0).sum().replace(0,np.nan),
                old_new_mines['Old mine prod.'],old_new_mines['New mine prod.'],
                old_new_mines['Old mine grade'],old_new_mines['New mine grade'],
                old_new_mines['Old mine cost'],old_new_mines['New mine cost'],
@@ -83,7 +85,7 @@ def create_result_df(self,integ):
                     'Additional direct melt','Additional secondary refined','Additional scrap',
                     'SX-EW supply','Primary supply','Primary demand','Mine production'])
         if reg=='Global':
-            collection = integ.demand.old_scrap_collected.groupby(level=0).sum()/integ.demand.eol.groupby(level=0).sum()
+            collection = integ.demand.old_scrap_collected.groupby(level=0).sum()/integ.demand.eol.groupby(level=0).sum().replace(0,np.nan)
             old_scrap = integ.demand.old_scrap_collected.groupby(level=0).sum().sum(axis=1)
             new_scrap = integ.demand.new_scrap_collected.groupby(level=0).sum().sum(axis=1)
         else:

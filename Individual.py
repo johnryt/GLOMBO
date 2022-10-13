@@ -10,7 +10,7 @@ from mining_class import miningModel
 from Many import get_unit
 import os
 
-from useful_functions import easy_subplots
+from useful_functions import easy_subplots, do_a_regress
 import seaborn as sns
 import statsmodels.api as sm
 

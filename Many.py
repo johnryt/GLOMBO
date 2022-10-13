@@ -10,7 +10,7 @@ from sklearn.ensemble import RandomForestRegressor, ExtraTreesRegressor, Gradien
 from matplotlib.lines import Line2D
 from sklearn.preprocessing import StandardScaler
 import shap
-from Individual import Individual
+from Individual import *
 from datetime import datetime
 
 class Many():
@@ -165,6 +165,7 @@ class Many():
                 rmse_or_score = 'score'
             else: raise ValueError('input for the demand_mining_all variable when calling the Many().get_variables() function must be a string of one of the following: demand, many, all')
 
+            setattr(self,'indiv_'+material,indiv)
 
             for df_name in ['rmse_df','hyperparam','simulated_demand','results','historical_data','mine_supply']:
                 df_name_sorted = f'{df_name}_sorted'
@@ -175,7 +176,7 @@ class Many():
                     df_ph = pd.concat([getattr(indiv,df_name).dropna(how='all').dropna(axis=1,how='all')],keys=[material])
                     if df_ph.columns.nlevels>1 and 'Notes' in df_ph.columns.get_level_values(1): df_ph = df_ph.loc[:,idx[:,'Value']].droplevel(1,axis=1)
                     if df_name!='rmse_df' and df_name!='historical_data':
-                        sorted_cols = self.rmse_df.loc[material,rmse_or_score].sort_values().index
+                        sorted_cols = self.rmse_df.loc[material,rmse_or_score].dropna().sort_values().index
                         if df_name=='results' and demand_mining_all=='all':
                             df_ph_sorted = df_ph.copy().loc[idx[:,sorted_cols,:],:].unstack()
                             df_ph_sorted.index = df_ph_sorted.index.set_names(['Commodity','scenario number old'])
@@ -225,17 +226,17 @@ class Many():
         if demand and (not hasattr(self,'demand') or reinitialize):
             self.demand = Many()
             self.demand.get_variables('demand')
-            feature_importance(many.demand,plot=False)
+            feature_importance(self.demand,plot=False)
 
         if mining and (not hasattr(self,'mining') or reinitialize):
             self.mining = Many()
             self.mining.get_variables('mining')
-            feature_importance(many.mining,plot=False)
+            feature_importance(self.mining,plot=False)
 
-        if integration and (not hasattr(self,'integ') or reinitialize):
+        if integ and (not hasattr(self,'integ') or reinitialize):
             self.integ = Many()
             self.integ.get_variables('all')
-            feature_importance(many.all,plot=False)
+            feature_importance(self.integ,plot=False)
 
     def plot_all_demand(self, dpi=50):
         '''
@@ -267,6 +268,8 @@ class Many():
 
     def plot_all_integration(self,dpi=50,
                     plot_over_time=True,
+                    nth_best=1,
+                    weight_price=1,
                     include_sd=False,
                     plot_sd_over_time=False,
                     plot_best_indiv_over_time=False,
@@ -300,10 +303,10 @@ class Many():
         for element in self.ready_commodities:
             material = self.element_commodity_map[element].lower()
             indiv = Individual(element,3,filename=f'data/{material}_run_hist_all_3p.pkl',
-                   rmse_not_mae=True,weight_price=1,dpi=50,price_rolling=5)
+                   rmse_not_mae=True,weight_price=weight_price,dpi=dpi,price_rolling=5)
             # indiv.plot_best_all()
             # indiv.find_pareto(plot=True,log=True,plot_non_pareto=False)
-            figlist = indiv.plot_results(plot_over_time=plot_over_time,
+            fig_list = indiv.plot_results(plot_over_time=plot_over_time, nth_best=nth_best,
                                include_sd=include_sd,
                                plot_sd_over_time=plot_sd_over_time,
                                plot_best_indiv_over_time=plot_best_indiv_over_time,
@@ -317,6 +320,8 @@ class Many():
                                plot_supply_demand_stack=plot_supply_demand_stack,
                                )
             fig_list[0].suptitle(material.capitalize(),weight='bold',y=1.02,x=0.515)
+            plt.show()
+            plt.close()
 
 def feature_importance(self,plot=None, dpi=50,recalculate=False, standard_scaler=True, plot_commodity_importances=False, commodity=None):
     '''
@@ -346,7 +351,10 @@ def feature_importance(self,plot=None, dpi=50,recalculate=False, standard_scaler
                     if r in X_df.index.get_level_values(1):
                         X_df = X_df.drop(r,level=1)
                 X_df = X_df.unstack().stack(level=0)
-                y_df = np.log(rmse_df.loc[idx[:,'RMSE'],:].unstack().stack(level=0))
+                if 'score' in rmse_df.index.get_level_values(1):
+                    y_df = rmse_df.loc[idx[:,'score'],:].unstack().stack(level=0)
+                else:
+                    y_df = np.log(rmse_df.loc[idx[:,'RMSE'],:].unstack().stack(level=0))
 
                 if standard_scaler:
                     scaler = StandardScaler()
@@ -728,33 +736,3 @@ def nice_plot_pretuning(demand_or_mining='mining',dpi=50):
         a.legend(loc='upper left')
     fig.tight_layout()
     return fig,ax
-
-def get_unit(simulated, historical, param):
-    """
-    returns dictionary of simulated, historical, and unit.
-    Unit is simply the unit, supply your own parentheses, etc.
-    - e.g. USD/t, fraction, Mt, t, kt
-    """
-    simulated, historical = simulated.copy(), historical.copy()
-    if np.any([i in param.lower() for i in ['price','tcrc','spread']]):
-        unit = 'USD/t'
-    elif 'CU' in param or 'SR' in param:
-        unit = 'fraction'
-    else:
-        min_simulated = abs(simulated).min() if len(simulated.shape)<=1 else abs(simulated).min().min()
-        max_simulated = abs(simulated).max() if len(simulated.shape)<=1 else abs(simulated).max().max()
-        mean_simulated = abs(simulated).mean() if len(simulated.shape)<=1 else abs(simulated).mean().mean()
-        min_historical = abs(historical).min() if len(historical.shape)<=1 else abs(historical).min().min()
-        max_historical = abs(historical).max() if len(historical.shape)<=1 else abs(historical).max().max()
-        mean_historical = abs(historical).mean() if len(historical.shape)<=1 else abs(historical).mean().mean()
-        if np.mean([mean_historical,mean_simulated])>1000:
-            historical /= 1000
-            simulated /= 1000
-            unit = 'Mt'
-        elif np.mean([mean_historical,mean_simulated])<1:
-            historical *= 1000
-            simulated *= 1000
-            unit = 't'
-        else:
-            unit = 'kt'
-    return {'simulated':simulated, 'historical':historical, 'unit':unit}

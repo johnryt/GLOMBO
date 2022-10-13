@@ -7,7 +7,6 @@ from integration import Integration
 from random import seed, sample, shuffle
 from demand_class import demandModel
 from mining_class import miningModel
-from Many import get_unit
 import os
 
 from useful_functions import easy_subplots, do_a_regress
@@ -16,6 +15,36 @@ import statsmodels.api as sm
 
 from itertools import combinations
 from matplotlib.lines import Line2D
+
+def get_unit(simulated, historical, param):
+    """
+    returns dictionary of simulated, historical, and unit.
+    Unit is simply the unit, supply your own parentheses, etc.
+    - e.g. USD/t, fraction, Mt, t, kt
+    """
+    simulated, historical = simulated.copy(), historical.copy()
+    if np.any([i in param.lower() for i in ['price','tcrc','spread']]):
+        unit = 'USD/t'
+    elif 'CU' in param or 'SR' in param:
+        unit = 'fraction'
+    else:
+        min_simulated = abs(simulated).min() if len(simulated.shape)<=1 else abs(simulated).min().min()
+        max_simulated = abs(simulated).max() if len(simulated.shape)<=1 else abs(simulated).max().max()
+        mean_simulated = abs(simulated).mean() if len(simulated.shape)<=1 else abs(simulated).mean().mean()
+        min_historical = abs(historical).min() if len(historical.shape)<=1 else abs(historical).min().min()
+        max_historical = abs(historical).max() if len(historical.shape)<=1 else abs(historical).max().max()
+        mean_historical = abs(historical).mean() if len(historical.shape)<=1 else abs(historical).mean().mean()
+        if np.mean([mean_historical,mean_simulated])>1000:
+            historical /= 1000
+            simulated /= 1000
+            unit = 'Mt'
+        elif np.mean([mean_historical,mean_simulated])<1:
+            historical *= 1000
+            simulated *= 1000
+            unit = 't'
+        else:
+            unit = 'kt'
+    return {'simulated':simulated, 'historical':historical, 'unit':unit}
 
 def is_pareto_efficient_simple(costs):
     """
@@ -375,7 +404,7 @@ class Individual():
                 best = results.loc[best_ind]
                 if 'SD' not in i:
                     hist_line = a.plot(historical_data,label='Historical',color='k',linewidth=6)
-                    regr = sm.GLS(historical_data.loc[2001:2019],best.loc[2001:2019]).fit(cov_type='HC3')
+                    regr = sm.GLS(historical_data.loc[2001:2019],sm.add_constant(best.loc[2001:2019])).fit(cov_type='HC3')
                     reg_res = r'$R^2$'+': {:.3f}'.format(regr.rsquared)
                 else: reg_res=''
                 sim_line = a.plot(best,label='Simulated',color='tab:blue',linewidth=6)

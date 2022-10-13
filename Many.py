@@ -268,6 +268,7 @@ class Many():
     def plot_all_integration(self,dpi=50,
                     plot_over_time=True,
                     include_sd=False,
+                    plot_sd_over_time=False,
                     plot_best_indiv_over_time=False,
                     plot_hyperparam_heatmap=False,
                     n_best=20,
@@ -302,8 +303,9 @@ class Many():
                    rmse_not_mae=True,weight_price=1,dpi=50,price_rolling=5)
             # indiv.plot_best_all()
             # indiv.find_pareto(plot=True,log=True,plot_non_pareto=False)
-            indiv.plot_results(plot_over_time=plot_over_time,
+            figlist = indiv.plot_results(plot_over_time=plot_over_time,
                                include_sd=include_sd,
+                               plot_sd_over_time=plot_sd_over_time,
                                plot_best_indiv_over_time=plot_best_indiv_over_time,
                                plot_hyperparam_heatmap=plot_hyperparam_heatmap,
                                n_best=n_best,
@@ -314,6 +316,7 @@ class Many():
                                plot_best_params=plot_best_params,
                                plot_supply_demand_stack=plot_supply_demand_stack,
                                )
+            fig_list[0].suptitle(material.capitalize(),weight='bold',y=1.02,x=0.515)
 
 def feature_importance(self,plot=None, dpi=50,recalculate=False, standard_scaler=True, plot_commodity_importances=False, commodity=None):
     '''

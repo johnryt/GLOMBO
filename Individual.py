@@ -7,6 +7,7 @@ from integration import Integration
 from random import seed, sample, shuffle
 from demand_class import demandModel
 from mining_class import miningModel
+from Many import get_unit
 import os
 
 from useful_functions import easy_subplots
@@ -126,7 +127,7 @@ class Individual():
                 if 'Primary supply' in big_df.loc['results'][big_df.columns[0]].columns:
                     self.mine_supply = pd.concat([big_df.loc['results'][i]['Primary supply'] for i in big_df.columns],keys=big_df.columns,axis=1).loc[2001:2019]
                 if 'rmse_df' in big_df.index:
-                    self.rmse_df = big_df.loc['rmse_df'].loc[big_df.columns[-1]][0]
+                    self.rmse_df = big_df.loc['rmse_df'].iloc[-1][0]
                     self.rmse_df.index = pd.MultiIndex.from_tuples(self.rmse_df.index)
                     self.rmse_df = self.rmse_df.unstack(0)
             else:
@@ -227,13 +228,16 @@ class Individual():
         self.big_df = big_df.copy()
 
         if 'rmse_df' in big_df.index:
-            self.rmse_df = big_df.loc['rmse_df'].loc[big_df.columns[-1]][0]
+            self.rmse_df = big_df.loc['rmse_df'].iloc[-1][0]
             self.rmse_df.index = pd.MultiIndex.from_tuples(self.rmse_df.index)
             self.rmse_df = self.rmse_df.unstack(0)
 
-        if 'mine_data' in big_df.index and type(big_df.loc['mine_data',0][0])!=int:
+        if 'mine_data' in big_df.index and type(big_df.loc['mine_data'].iloc[1])==pd.core.frame.DataFrame:
             self.mine_data = pd.concat([big_df[i]['mine_data'] for i in big_df.columns],keys=big_df.columns)
-            self.mine_data.index.set_names(['scenario','year','mine_id'],inplace=True)
+        else:
+            self.mine_data = pd.DataFrame(0,index=results.index,columns=pd.MultiIndex.from_product([['Mine data'],np.arange(0,10)])).stack()
+        self.mine_data.index.set_names(['scenario','year','mine_id'],inplace=True)
+
         self.results, self.hyperparam, self.historical_data = results.astype(float), hyperparameters, historical_data.astype(float)
 
     def plot_best_all(self):
@@ -245,7 +249,7 @@ class Individual():
 
         hyperparam = self.hyperparam.copy()
         results = self.results.copy()
-        historical_data = self.historical_data.copy()
+        historical_data = self.historical_data.copy().loc[2001:2019]
 
         for obj in self.objective_params:
             simulated = results[self.objective_results_map[obj]].unstack(0).loc[2001:2019]
@@ -306,7 +310,22 @@ class Individual():
         self.hyperparam.loc['NORM SUM'] = self.hyperparam.loc[normed].sum()
         self.hyperparam.loc['NORM SUM OBJ ONLY'] = self.hyperparam.loc[normed_obj].sum()
 
-    def plot_results(self, plot_over_time=True, n_best=0, include_sd=False,
+        # repeating above for rmse_df
+        for i in [i for i in self.rmse_df.index if 'RMSE' in i]:
+            self.rmse_df.loc['NORM '+i] = np.log(self.rmse_df.loc[i].astype(float))/np.log(self.rmse_df.loc[i].astype(float)).replace(0,1e-6).min()
+            self.rmse_df.loc['LOG '+i] = np.log(self.rmse_df.loc[i].astype(float))
+        if 'NORM Primary commodity price RMSE' in self.rmse_df.index:
+            self.rmse_df.loc['NORM Primary commodity price RMSE'] = self.rmse_df.loc['NORM Primary commodity price RMSE']**self.weight_price
+            self.rmse_df.loc['LOG Primary commodity price RMSE'] = self.rmse_df.loc['LOG Primary commodity price RMSE']**self.weight_price
+        normed = [i for i in self.rmse_df.index if 'NORM' in i]
+        logged = [i for i in self.rmse_df.index if 'LOG' in i]
+        normed_obj = [i for i in self.rmse_df.index if 'NORM' in i and np.any([j in i for j in self.objective_params])]
+        self.rmse_df.loc['NORM SUM'] = self.rmse_df.loc[normed].sum()
+        self.rmse_df.loc['LOG SUM'] = np.log(np.exp(self.rmse_df.loc[logged]).sum())
+        self.rmse_df.loc['NORM SUM OBJ ONLY'] = self.rmse_df.loc[normed_obj].sum()
+
+    def plot_results(self, plot_over_time=True, n_best=0, include_sd=False, nth_best=1,
+                     plot_sd_over_time=True,
                      plot_best_indiv_over_time=True,
                     plot_hyperparam_heatmap=True,
                     plot_hyperparam_distributions=True, n_per_plot=3,
@@ -325,11 +344,12 @@ class Individual():
         plot_hyperparam_vs_error: bool, plots the hyperparameter values vs the error value, separate plot for each hyperparameter. Use this to try and see if there are ranges for the best hyperparameter values.
         flip_yx: bool, False means plot hyperparam value vs error, while True means plot error vs hyperparam value
         '''
+        fig_list = []
         self.normalize_rmses()
         norm_sum = 'NORM SUM' if include_sd else 'NORM SUM OBJ ONLY'
         if plot_over_time:
-            fig,ax = easy_subplots(self.all_params,dpi=self.dpi)
-            for i,a in zip(self.all_params, ax):
+            fig,ax = easy_subplots(self.all_params[:3],dpi=self.dpi)
+            for i,a in zip(self.all_params[:3], ax):
                 results = self.results.copy()[self.objective_results_map[i]].loc[idx[:,2001:]]
                 if 'SD' not in i:
                     historical_data = self.historical_data.copy()[i]
@@ -337,21 +357,82 @@ class Individual():
                     historical_data = pd.Series(results.min(),[0])
 
                 n_best = n_best if n_best>1 else 2
-                simulated = self.hyperparam.loc[norm_sum].astype(float).sort_values().head(n_best).index
+                # simulated = self.hyperparam.loc[norm_sum].astype(float).sort_values().head(n_best).index
+                if nth_best<0:
+                    simulated = self.rmse_df.loc['score'].astype(float).sort_values().head(n_best).index
+                else:
+                    simulated = self.rmse_df.loc['LOG SUM'].astype(float).sort_values().head(n_best).index
+                results = results.loc[idx[simulated,:]]
+
+                diction = get_unit(results, historical_data, i)
+                results, historical_data, unit = [diction[i] for i in ['simulated','historical','unit']]
+                # best = self.hyperparam.loc[norm_sum].astype(float).sort_values().index[nth_best-1]
+                if nth_best<0:
+                    best_ind = self.rmse_df.loc['score'].astype(float).sort_values().index[-nth_best-1]
+                else:
+                    best_ind = self.rmse_df.loc['LOG SUM'].astype(float).sort_values().index[nth_best-1]
+
+                best = results.loc[best_ind]
+                if 'SD' not in i:
+                    hist_line = a.plot(historical_data,label='Historical',color='k',linewidth=6)
+                    regr = sm.GLS(historical_data.loc[2001:2019],best.loc[2001:2019]).fit(cov_type='HC3')
+                    reg_res = r'$R^2$'+': {:.3f}'.format(regr.rsquared)
+                else: reg_res=''
+                sim_line = a.plot(best,label='Simulated',color='tab:blue',linewidth=6)
+                reg_point = plt.plot(best,color='w',zorder=0,alpha=0)
+                if n_best>1:
+                    a.plot(results.unstack(0),linewidth=1,alpha=0.5,zorder=0)
+                mins = min(historical_data.min(),best.min())*0.95
+                maxs = max(historical_data.max(),best.max())*1.1
+
+                a.set(title='Best '+i,ylabel=i+' ('+unit+')',xlabel='Year',ylim=(mins,maxs))
+                a.legend([hist_line[0],sim_line[0],reg_point[0]],['Historical','Simulated',reg_res])
+                self.sim = results
+                self.hist = historical_data
+            fig.tight_layout()
+            fig_list += [fig]
+            print(f'best scenario number is: {best_ind}')
+
+        if plot_sd_over_time:
+            fig,ax = easy_subplots(self.all_params[3:],dpi=self.dpi)
+            for i,a in zip(self.all_params[3:], ax):
+                results = self.results.copy()[self.objective_results_map[i]].loc[idx[:,2001:]]
+                if 'SD' not in i:
+                    historical_data = self.historical_data.copy()[i]
+                else:
+                    historical_data = pd.Series(results.min(),[0])
+
+                n_best = n_best if n_best>1 else 2
+                # simulated = self.hyperparam.loc[norm_sum].astype(float).sort_values().head(n_best).index
+                if nth_best<0:
+                    simulated = self.rmse_df.loc['score'].astype(float).sort_values().head(n_best).index
+                else:
+                    simulated = self.rmse_df.loc['LOG SUM'].astype(float).sort_values().head(n_best).index
                 results = results.loc[idx[simulated,:]]
 
                 results, historical_data, unit = self.get_unit(results, historical_data, i)
-                best = self.hyperparam.loc[norm_sum].astype(float).idxmin()
-                best = results.loc[best]
-                best.plot(ax=a,label='Simulated',color='blue')
+                # best = self.hyperparam.loc[norm_sum].astype(float).sort_values().index[nth_best-1]
+                if nth_best<0:
+                    best_ind = self.rmse_df.loc['score'].astype(float).sort_values().index[-nth_best-1]
+                else:
+                    best_ind = self.rmse_df.loc['LOG SUM'].astype(float).sort_values().index[nth_best-1]
+
+                best = results.loc[best_ind]
+                sim_line = a.plot(best,label='Simulated',color='tab:blue')
                 if 'SD' not in i:
-                    historical_data.plot(ax=a,label='Historical',color='k')
+                    hist_line = a.plot(historical_data,label='Historical',color='k')
+                    regr = sm.GLS(historical_data.loc[2001:2019],best.loc[2001:2019]).fit(cov_type='HC3')
+                    reg_res = r'$R^2$'+': {:.3f}'.format(regr.rsquared)
+                else: reg_res=''
+                reg_point = plt.scatter([historical_data.index[0]],[historical_data.iloc[0]],color='w',zorder=0,alpha=0)
                 if n_best>1:
-                    results.unstack(0).plot(ax=a,linewidth=1,alpha=0.5,zorder=0,legend=False)
+                    a.plot(results.unstack(0),linewidth=1,alpha=0.5,zorder=0)
                 a.set(title='Best '+i,ylabel=i+' ('+unit+')',xlabel='Year')
-                a.legend(['Simulated','Historical'])
+                a.legend([hist_line[0],sim_line[0],reg_point],['Historical','Simulated',reg_res])
 
             fig.tight_layout()
+            fig_list += [fig]
+
         cols = self.hyperparam.loc[norm_sum].sort_values().head(n_best).index
         ind = [i for i in self.hyperparam.index if type(self.hyperparam.loc[i].iloc[0]) in [float,int]]
         ind = [i for i in ind if 'RMSE' not in i and 'NORM' not in i]
@@ -384,10 +465,10 @@ class Individual():
                     results.unstack(0).plot(ax=a,linewidth=1,alpha=0.5,zorder=0,legend=False)
                 a.set(title=i+f' ({best_ind})',ylabel=i+' ('+unit+')',xlabel='Year')
                 a.legend(['Simulated','Historical'])
-            fig.tight_layout()
+            fig_list += [fig]
 
         if plot_hyperparam_heatmap:
-            plt.figure(figsize=(1.2*n_best,10),dpi=self.dpi)
+            fig = plt.figure(figsize=(1.2*n_best,10),dpi=self.dpi)
             heat = best_hyperparam.copy()
             while (heat.max(axis=1)>1).any():
                 lrg=heat.max(axis=1)>1
@@ -395,6 +476,7 @@ class Individual():
                 heat.loc[lrg,:] /= 10
                 heat.rename(dict(zip(lrg,[i+'*' for i in lrg])),inplace=True)
             sns.heatmap(heat,yticklabels=True,annot=True)
+            fig_list += [fig]
 
         if plot_hyperparam_distributions:
             breaks = np.arange(0,int(np.ceil(len(ind)/n_per_plot)))
@@ -402,6 +484,7 @@ class Individual():
             for a,b in zip(ax,breaks):
                 best_hyperparam.iloc[b*n_per_plot:(b+1)*n_per_plot].T.plot(kind='kde',bw_method=0.1,ax=a)
                 a.legend(fontsize=16)
+            fig_list += [fig]
 
         if plot_hyperparam_vs_error:
             fig,ax=easy_subplots(self.hyperparams_changing,dpi=self.dpi)
@@ -422,9 +505,12 @@ class Individual():
                     a.set(title=i,ylabel='Hyperparameter value',xlabel='Normalized error')
 
             fig.tight_layout()
+            fig_list += [fig]
 
         if plot_best_params:
-            self.plot_best_scenario_sd(include_sd=include_sd, plot_supply_demand_stack=plot_supply_demand_stack, best=best_ind)
+            fig = self.plot_best_scenario_sd(include_sd=include_sd, plot_supply_demand_stack=plot_supply_demand_stack, best=best_ind)
+            fig_list += [fig]
+        return fig_list
 
     def plot_demand_results(self, mining=False, n_best=25):
         '''
@@ -505,9 +591,6 @@ class Individual():
     def plot_best_scenario_sd(self, include_sd=False, plot_supply_demand_stack=True, best=-1):
         self.normalize_rmses()
         norm_sum = 'NORM SUM' if include_sd else 'NORM SUM OBJ ONLY'
-        if best==-1:
-            best = self.hyperparam.loc[norm_sum].astype(float).idxmin()
-        print(f'Best scenario is scenario number: {best}')
         results = self.results.loc[best].copy().dropna(how='all')
         variables = ['Total','Conc','Ref.','Scrap','Spread','TCRC','Refined','CU','SR','Direct','Mean total','mine grade','Conc. SD','Ref. SD','Scrap SD']
         fig,ax=easy_subplots(variables)
@@ -519,8 +602,9 @@ class Individual():
             res.plot(ax=a,title=param_str+unit)
         fig.tight_layout()
 
+
         if plot_supply_demand_stack:
-            plt.figure()
+            fig1 = plt.figure()
             res = results[['Pri. ref. prod.','Sec. ref. prod.','Direct melt','Total demand']].loc[2001:]
             res = res.replace(0,np.nan)
             res, unit = self.get_unit_df(res)
@@ -529,3 +613,4 @@ class Individual():
             plt.stackplot(res.index, res[['Pri. ref. prod.','Sec. ref. prod.','Direct melt']].T, labels=['Pri. ref.','Sec. ref.','Direct melt']);
             plt.legend(framealpha=0.5,frameon=True);
             plt.title('Total supply-demand imbalance'+unit)
+        return fig, fig1

@@ -311,10 +311,9 @@ class Individual():
         if not hasattr(self,'results'):
             self.get_results()
         combos = list(combinations(self.objective_params,2))
-        cost_df = self.hyperparam.loc[[i for i in self.hyperparam.index if 'RMSE' in i]].T
+        cost_df = self.rmse_df.loc[[i for i in self.rmse_df.index if 'RMSE' in i]].T
         cost_array = cost_df.values
         cost_df.loc[:,'is_pareto'] = is_pareto_efficient_simple(cost_array)
-        self.hyperparam.loc['is_pareto',:] = cost_df.is_pareto
         yes = cost_df.loc[cost_df.is_pareto].astype(float)
         no = cost_df.loc[cost_df.is_pareto==False].astype(float)
 
@@ -325,6 +324,7 @@ class Individual():
                     no.plot.scatter(x='RMSE '+c[0],y='RMSE '+c[1],loglog=log,ax=a,color='tab:blue')
                 yes.plot.scatter(x='RMSE '+c[0],y='RMSE '+c[1],loglog=log,ax=a,color='tab:orange')
             fig.tight_layout()
+        self.pareto_ind = yes
 
     def normalize_rmses(self):
         '''

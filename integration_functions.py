@@ -851,7 +851,7 @@ class Sensitivity():
                 score = np.log(sum(r[0]/n for r in rmse_list))
             else:
                 score = sum(r[0]/n for r in rmse_list)
-        else:
+        else: #normalize_objectives
             if self.log:
                 #r2 is [-inf, 1] so we change it to [1, inf] to use in log, it then becomes [0, inf]
                 #+1 intead of +2 would have made it into [-inf, inf]; not good
@@ -906,10 +906,9 @@ class Sensitivity():
                 simulated = getattr(mod,param_variable_map[param]).loc[self.simulation_time]
                 if hasattr(simulated,'columns') and 'Global' in simulated.columns:
                     simulated = simulated['Global']
-                if self.normalize_objectives:
-                    historical /= historical.loc[self.simulation_time[0]]
-                    simulated /= historical.loc[self.simulation_time[0]]
                 rmse = self.calculate_rmse_r2(simulated,historical,True)
+                if self.normalize_objectives:
+                    rmse/=self.historical_data[param].loc[self.simulation_time[0]]
                 r2 = self.calculate_rmse_r2(simulated,historical,False)
             else:
                 if 'Conc' in param:

@@ -351,7 +351,7 @@ def do_a_regress(x,y,ax=0,intercept=True,scatter_color='tab:blue',line_color='k'
     else:
         return pd.Series(m.params).rename({x.name:'slope','x1':'slope'}),m
 
-def easy_subplots(nplots, ncol=4, height_scale=1,width_scale=1,use_subplots=False,width_ratios=None,height_ratios=None,**kwargs):
+def easy_subplots(nplots, ncol=None, height_scale=1,width_scale=1,use_subplots=False,width_ratios=None,height_ratios=None,**kwargs):
     '''sets up plt.subplots with the correct number of rows and columns and figsize,
     given number of plots (nplots) and the number of columns (ncol).
     Option to make figures taller or shorter by changing the height_scale.
@@ -360,10 +360,11 @@ def easy_subplots(nplots, ncol=4, height_scale=1,width_scale=1,use_subplots=Fals
       plt.figure, which then allows dpi to be specified.'''
     if type(nplots) != int:
         nplots = len(nplots)
-    if nplots <= ncol:
+    if nplots <= 4:
         ncol = nplots
-    if nplots%3==0 and ncol==4:
+    if nplots%3==0 and ncol is None:
         ncol=3
+    if ncol is None: ncol=4
     nrows = int(np.ceil(nplots/ncol))
 
     if width_ratios!=None or height_ratios!=None: use_subplots=True

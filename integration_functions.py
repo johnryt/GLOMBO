@@ -438,61 +438,63 @@ class Sensitivity():
             commodity_inputs = commodity_inputs.dropna()
 
             history_file = pd.read_excel(self.case_study_data_file_path,index_col=0,sheet_name=changing_base_parameters_series)
-            historical_data = history_file.loc[simulation_time].dropna(axis=1).astype(float)
+            historical_data = history_file.loc[[i for i in history_file.index if i!='Source(s)']].dropna(axis=1).astype(float)
             historical_data.index = historical_data.index.astype(int)
-            if self.price_to_use!='case study data':
-                price_update_file = pd.read_excel(self.price_adjustment_results_file_path,index_col=0)
-                cap_mat = self.element_commodity_map[self.material]
-                price_map = {'log':'log('+cap_mat+')',  'diff':'∆'+cap_mat,  'original':cap_mat+' original'}
-                historical_price = price_update_file[price_map[self.price_to_use]].astype(float)
-                historical_price.name = 'Primary commodity price'
+            if np.all([i in historical_data.index for i in simulation_time]):
+                historical_data = history_file.loc[simulation_time]
+                if self.price_to_use!='case study data':
+                    price_update_file = pd.read_excel(self.price_adjustment_results_file_path,index_col=0)
+                    cap_mat = self.element_commodity_map[self.material]
+                    price_map = {'log':'log('+cap_mat+')',  'diff':'∆'+cap_mat,  'original':cap_mat+' original'}
+                    historical_price = price_update_file[price_map[self.price_to_use]].astype(float)
+                    historical_price.name = 'Primary commodity price'
+                    if 'Primary commodity price' in historical_data.columns:
+                        historical_data = pd.concat([historical_data.drop('Primary commodity price',axis=1),historical_price],axis=1).sort_index().dropna(how='all')
+                    else:
+                        historical_data = pd.concat([historical_data,historical_price],axis=1).sort_index().dropna(how='all')
                 if 'Primary commodity price' in historical_data.columns:
-                    historical_data = pd.concat([historical_data.drop('Primary commodity price',axis=1),historical_price],axis=1).sort_index().dropna(how='all')
+                    historical_data.loc[historical_data.index,'Primary commodity price'] = historical_data['Primary commodity price'].rolling(self.historical_price_rolling_window,min_periods=1,center=True).mean()
+                original_demand = commodity_inputs['initial_demand']
+                original_production = commodity_inputs['Total production, Global']
+                original_primary_production = commodity_inputs['primary_production']
+                if 'Total demand' in historical_data.columns:
+                    commodity_inputs.loc['initial_demand'] = historical_data['Total demand'][simulation_time[0]]
+                elif 'Primary production' in historical_data.columns:
+                    commodity_inputs.loc['initial_demand'] = historical_data['Primary production'][simulation_time[0]]*original_demand/original_primary_production
+                    historical_data.loc[:,'Total demand'] = historical_data['Primary production']*original_demand/historical_data['Primary production'][simulation_time[-1]]
+                elif 'Primary supply' in historical_data.columns:
+                    commodity_inputs.loc['initial_demand'] = historical_data['Primary supply'][simulation_time[0]]*original_demand/original_primary_production
+                    historical_data.loc[:,'Total demand'] = historical_data['Primary supply']*original_demand/historical_data['Primary supply'][simulation_time[-1]]
                 else:
-                    historical_data = pd.concat([historical_data,historical_price],axis=1).sort_index().dropna(how='all')
-            if 'Primary commodity price' in historical_data.columns:
-                historical_data.loc[historical_data.index,'Primary commodity price'] = historical_data['Primary commodity price'].rolling(self.historical_price_rolling_window,min_periods=1,center=True).mean()
-            original_demand = commodity_inputs['initial_demand']
-            original_production = commodity_inputs['Total production, Global']
-            original_primary_production = commodity_inputs['primary_production']
-            if 'Total demand' in historical_data.columns:
-                commodity_inputs.loc['initial_demand'] = historical_data['Total demand'][simulation_time[0]]
-            elif 'Primary production' in historical_data.columns:
-                commodity_inputs.loc['initial_demand'] = historical_data['Primary production'][simulation_time[0]]*original_demand/original_primary_production
-                historical_data.loc[:,'Total demand'] = historical_data['Primary production']*original_demand/historical_data['Primary production'][simulation_time[-1]]
-            elif 'Primary supply' in historical_data.columns:
-                commodity_inputs.loc['initial_demand'] = historical_data['Primary supply'][simulation_time[0]]*original_demand/original_primary_production
-                historical_data.loc[:,'Total demand'] = historical_data['Primary supply']*original_demand/historical_data['Primary supply'][simulation_time[-1]]
-            else:
-                raise ValueError('Need either [Total demand] or [Primary production] in historical data columns (ignore the brackets, but case sensitive)')
+                    raise ValueError('Need either [Total demand] or [Primary production] in historical data columns (ignore the brackets, but case sensitive)')
 
-            if 'Scrap demand' in historical_data.columns:
-                commodity_inputs.loc['Recycling input rate, Global'] = historical_data['Scrap demand'][simulation_time[0]]/historical_data['Total demand'][simulation_time[0]]
-                commodity_inputs.loc['Recycling input rate, China'] = historical_data['Scrap demand'][simulation_time[0]]/historical_data['Total demand'][simulation_time[0]]
+                if 'Scrap demand' in historical_data.columns:
+                    commodity_inputs.loc['Recycling input rate, Global'] = historical_data['Scrap demand'][simulation_time[0]]/historical_data['Total demand'][simulation_time[0]]
+                    commodity_inputs.loc['Recycling input rate, China'] = historical_data['Scrap demand'][simulation_time[0]]/historical_data['Total demand'][simulation_time[0]]
 
-            if 'Primary production' in historical_data.columns:
-                commodity_inputs.loc['primary_production'] = historical_data['Primary production'][simulation_time[0]]
-            elif 'Primary supply' in historical_data.columns:
-                commodity_inputs.loc['primary_production'] = historical_data['Primary supply'][simulation_time[0]]
-            else:
-                commodity_inputs.loc['primary_production'] *= commodity_inputs['initial_demand']/original_demand
+                if 'Primary production' in historical_data.columns:
+                    commodity_inputs.loc['primary_production'] = historical_data['Primary production'][simulation_time[0]]
+                elif 'Primary supply' in historical_data.columns:
+                    commodity_inputs.loc['primary_production'] = historical_data['Primary supply'][simulation_time[0]]
+                else:
+                    commodity_inputs.loc['primary_production'] *= commodity_inputs['initial_demand']/original_demand
 
-            if 'Primary commodity price' in historical_data.columns:
-                commodity_inputs.loc['primary_commodity_price'] = historical_data['Primary commodity price'][simulation_time[0]]
+                if 'Primary commodity price' in historical_data.columns:
+                    commodity_inputs.loc['primary_commodity_price'] = historical_data['Primary commodity price'][simulation_time[0]]
 
-            if 'Total production' in historical_data.columns:
-                commodity_inputs.loc['Total production, Global'] = historical_data['Total production'][simulation_time[0]]
-            elif 'Scrap demand' in historical_data.columns and 'Primary production' in historical_data.columns:
-                commodity_inputs.loc['Total production, Global'] = historical_data['Primary production'][simulation_time[0]]+historical_data['Scrap demand'][simulation_time[0]]
-            elif 'Scrap demand' in historical_data.columns and 'Primary supply' in historical_data.columns:
-                commodity_inputs.loc['Total production, Global'] = historical_data['Primary supply'][simulation_time[0]]+historical_data['Scrap demand'][simulation_time[0]]
-            elif 'Primary production' in historical_data.columns:
-                commodity_inputs.loc['Total production, Global'] = historical_data['Primary production'][simulation_time[0]]*original_production/original_primary_production
-            elif 'Primary supply' in historical_data.columns:
-                commodity_inputs.loc['Total production, Global'] = historical_data['Primary supply'][simulation_time[0]]*original_production/original_primary_production
-            else:
-                commodity_inputs.loc['Total production, Global'] = commodity_inputs['initial_demand']*original_production/commodity_inputs['Total production, Global']
-            if self.material=='Al': commodity_inputs.loc['Total production, Global'] = 36000
+                if 'Total production' in historical_data.columns:
+                    commodity_inputs.loc['Total production, Global'] = historical_data['Total production'][simulation_time[0]]
+                elif 'Scrap demand' in historical_data.columns and 'Primary production' in historical_data.columns:
+                    commodity_inputs.loc['Total production, Global'] = historical_data['Primary production'][simulation_time[0]]+historical_data['Scrap demand'][simulation_time[0]]
+                elif 'Scrap demand' in historical_data.columns and 'Primary supply' in historical_data.columns:
+                    commodity_inputs.loc['Total production, Global'] = historical_data['Primary supply'][simulation_time[0]]+historical_data['Scrap demand'][simulation_time[0]]
+                elif 'Primary production' in historical_data.columns:
+                    commodity_inputs.loc['Total production, Global'] = historical_data['Primary production'][simulation_time[0]]*original_production/original_primary_production
+                elif 'Primary supply' in historical_data.columns:
+                    commodity_inputs.loc['Total production, Global'] = historical_data['Primary supply'][simulation_time[0]]*original_production/original_primary_production
+                else:
+                    commodity_inputs.loc['Total production, Global'] = commodity_inputs['initial_demand']*original_production/commodity_inputs['Total production, Global']
+                if self.material=='Al': commodity_inputs.loc['Total production, Global'] = 36000
             self.historical_data = historical_data.copy()
             self.changing_base_parameters_series = commodity_inputs.copy()
         elif not hasattr(self,'material'):
@@ -649,7 +651,7 @@ class Sensitivity():
                 mods = []
                 new_param_series_all = []
             else:
-                self.n_jobs = -1
+                self.n_jobs = 1
 
             for i in range(self.n_jobs):
                 for enum,scenario_name in enumerate(self.scenarios):

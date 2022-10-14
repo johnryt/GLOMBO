@@ -58,28 +58,28 @@ class Many():
         self.data_folder = 'generalization/data' if data_folder==None else data_folder
         self.pkl_folder = 'data' if pkl_folder==None else pkl_folder
 
-    def run_all_demand(self, n_runs=50, commodities=None, save_mining_info=False, trim_result_df=True):
+    def run_all_demand(self, n_runs=50, commodities=None, save_mining_info=False, trim_result_df=True, filename_base='_run_hist', filename_modifier=''):
         t1 = datetime.now()
         commodities = self.ready_commodities if commodities==None else commodities
         for material in commodities:
             print('-'*40)
             print(material)
             mat = self.element_commodity_map[material].lower()
-            filename=f'{self.pkl_folder}/{mat}_run_hist.pkl'
+            filename=f'{self.pkl_folder}/{mat}{filename_base}.pkl'
             self.shist1 = Sensitivity(pkl_filename=filename, data_folder=self.data_folder,changing_base_parameters_series=material,notes='Monte Carlo aluminum run',
                             simulation_time=np.arange(2001,2020),OVERWRITE=True,use_alternative_gold_volumes=True,
                                 historical_price_rolling_window=5,verbosity=0, trim_result_df=trim_result_df)
             self.shist1.historical_sim_check_demand(n_runs,demand_or_mining='demand')
             print(f'time elapsed: {str(datetime.now()-t1)}')
 
-    def run_all_mining(self, n_runs=50, commodities=None, save_mining_info=False, trim_result_df=True):
+    def run_all_mining(self, n_runs=50, commodities=None, save_mining_info=False, trim_result_df=True, filename_base='_run_hist', filename_modifier=''):
         commodities = self.ready_commodities if commodities==None else commodities
         for material in commodities:
             t1 = datetime.now()
             print('-'*40)
             print(material)
             mat = self.element_commodity_map[material].lower()
-            filename=f'{self.pkl_folder}/{mat}_run_hist.pkl'
+            filename=f'{self.pkl_folder}/{mat}{filename_base}{filename_modifier}.pkl'
             self.shist = Sensitivity(pkl_filename=filename, data_folder=self.data_folder,changing_base_parameters_series=material,notes='Monte Carlo aluminum run',
                             simulation_time=np.arange(2001,2020),OVERWRITE=True,use_alternative_gold_volumes=True,
                                 historical_price_rolling_window=5,verbosity=0,
@@ -88,7 +88,7 @@ class Many():
             self.shist.historical_sim_check_demand(n_runs,demand_or_mining='mining')
             print(f'time elapsed: {str(datetime.now()-t1)}')
 
-    def run_all_integration(self, n_runs=200, commodities=None, normalize_objectives=False,constrain_previously_tuned=True, verbosity=0, save_mining_info=False, trim_result_df=True):
+    def run_all_integration(self, n_runs=200, commodities=None, normalize_objectives=False,constrain_previously_tuned=True, verbosity=0, save_mining_info=False, trim_result_df=True, filename_base='_run_hist', filename_modifier=''):
         '''
 
         '''
@@ -99,9 +99,8 @@ class Many():
             print(material)
             # timer=IterTimer()
             n=3
-            thing = '_'+str(n)+'p' if n>1 else ''
             mat = self.element_commodity_map[material].lower()
-            filename=f'{self.pkl_folder}/{mat}_run_hist_all{thing}.pkl'
+            filename=f'{self.pkl_folder}/{mat}{filename_base}_all{filename_modifier}.pkl'
             print('--'*15+filename+'-'*15)
             self.s = Sensitivity(pkl_filename=filename, data_folder=self.data_folder,changing_base_parameters_series=material,notes=f'Monte Carlo {material} run',
                             additional_base_parameters=pd.Series(1,['refinery_capacity_growth_lag']),
@@ -135,7 +134,7 @@ class Many():
             print(f'time elapsed: {str(datetime.now()-t1)}')
             # add 'response','growth' to sensitivity_parameters input to allow demand parameters to change again
 
-    def get_variables(self, demand_mining_all='demand'):
+    def get_variables(self, demand_mining_all='demand',filename_base='_run_hist',filename_modifier=''):
         '''
         loads the data from the output pkl files and concatenates the dataframes
         for each commodity. Main variable names are results, hyperparam, and
@@ -155,13 +154,13 @@ class Many():
         for material in self.ready_commodities:
             material = self.element_commodity_map[material].lower()
             if demand_mining_all=='demand':
-                indiv = Individual(filename=f'data/{material}_run_hist_DEM.pkl',rmse_not_mae=False,dpi=50)
+                indiv = Individual(filename=f'{self.pkl_folder}/{material}{filename_base}{filename_modifier}_DEM.pkl',rmse_not_mae=False,dpi=50)
                 rmse_or_score = 'RMSE'
             elif demand_mining_all=='mining':
-                indiv = Individual(filename=f'data/{material}_run_hist_mining.pkl',rmse_not_mae=False,dpi=50)
+                indiv = Individual(filename=f'{self.pkl_folder}/{material}{filename_base}{filename_modifier}_mining.pkl',rmse_not_mae=False,dpi=50)
                 rmse_or_score = 'RMSE'
             elif demand_mining_all=='all':
-                indiv = Individual(filename=f'data/{material}_run_hist_all_3p.pkl',rmse_not_mae=False,dpi=50)
+                indiv = Individual(filename=f'{self.pkl_folder}/{material}{filename_base}_all{filename_modifier}.pkl',rmse_not_mae=False,dpi=50)
                 rmse_or_score = 'score'
             else: raise ValueError('input for the demand_mining_all variable when calling the Many().get_variables() function must be a string of one of the following: demand, many, all')
 
@@ -210,7 +209,7 @@ class Many():
         self.changing_hyperparam = self.hyperparam.loc[types].copy()
         self.changing_hyperparam = self.changing_hyperparam.loc[~(self.changing_hyperparam.apply(lambda x: x-x.mean(),axis=1)<1e-6).all(axis=1)]
 
-    def get_multiple(self, demand=True, mining=True, integ=False, reinitialize=False):
+    def get_multiple(self, demand=True, mining=True, integ=False, reinitialize=False, filename_base='_run_hist', filename_modifier=''):
         '''
         Runs the get_variables command on each type of model run, which are
         then accessible through self.mining, self.demand, and self.integ, each
@@ -225,20 +224,20 @@ class Many():
         '''
         if demand and (not hasattr(self,'demand') or reinitialize):
             self.demand = Many()
-            self.demand.get_variables('demand')
+            self.demand.get_variables('demand', filename_base=filename_base, filename_modifier=filename_modifier)
             feature_importance(self.demand,plot=False)
 
         if mining and (not hasattr(self,'mining') or reinitialize):
             self.mining = Many()
-            self.mining.get_variables('mining')
+            self.mining.get_variables('mining', filename_base=filename_base, filename_modifier=filename_modifier)
             feature_importance(self.mining,plot=False)
 
         if integ and (not hasattr(self,'integ') or reinitialize):
             self.integ = Many()
-            self.integ.get_variables('all')
+            self.integ.get_variables('all', filename_base=filename_base, filename_modifier=filename_modifier)
             feature_importance(self.integ,plot=False)
 
-    def plot_all_demand(self, dpi=50):
+    def plot_all_demand(self, dpi=50, filename_base='_run_hist', filename_modifier=''):
         '''
         Loads each commodity in the Individual class and runs its
         plot_demand_results method.
@@ -247,13 +246,13 @@ class Many():
         '''
         for material in self.ready_commodities:
             material = self.element_commodity_map[material].lower()
-            filename=f'{self.pkl_folder}/{material}_run_hist_DEM.pkl'
+            filename=f'{self.pkl_folder}/{material}{filename_base}{filename_modifier}_DEM.pkl'
             indiv = Individual(filename=filename,rmse_not_mae=False,dpi=dpi)
             indiv.plot_demand_results()
         plt.show()
         plt.close()
 
-    def plot_all_mining(self,dpi=50):
+    def plot_all_mining(self,dpi=50, filename_base='_run_hist', filename_modifier=''):
         '''
         Loads each commodity in the Individual class and runs its
         plot_demand_results method.
@@ -262,7 +261,7 @@ class Many():
         '''
         for material in self.ready_commodities:
             material = self.element_commodity_map[material].lower()
-            filename=f'{self.pkl_folder}/{material}_run_hist_mining.pkl'
+            filename=f'{self.pkl_folder}/{material}{filename_base}{filename_modifier}_mining.pkl'
             indiv = Individual(filename=filename,rmse_not_mae=False,dpi=dpi)
             indiv.plot_demand_results()
 
@@ -280,7 +279,9 @@ class Many():
                     plot_hyperparam_vs_error=False,
                     flip_yx=False,
                     plot_best_params=False,
-                    plot_supply_demand_stack=False):
+                    plot_supply_demand_stack=False,
+                    filename_base='_run_hist',
+                    filename_modifier=''):
         '''
         Produces many different plots you can use to try and understand the
         model outputs. Loads each commodity in the Individual class, and runs
@@ -302,7 +303,7 @@ class Many():
 
         for element in self.ready_commodities:
             material = self.element_commodity_map[element].lower()
-            indiv = Individual(element,3,filename=f'data/{material}_run_hist_all_3p.pkl',
+            indiv = Individual(element,3,filename=f'{self.pkl_folder}/{material}{filename_base}_all{filename_modifier}.pkl',
                    rmse_not_mae=True,weight_price=weight_price,dpi=dpi,price_rolling=5)
             # indiv.plot_best_all()
             # indiv.find_pareto(plot=True,log=True,plot_non_pareto=False)
@@ -700,14 +701,14 @@ def commodity_level_feature_importance_heatmap(self,dpi=50,recalculate=True):
     a.set_title('Integrated model\nfeature importance',weight='bold')
     return fig,a
 
-def nice_plot_pretuning(demand_or_mining='mining',dpi=50):
+def nice_plot_pretuning(demand_or_mining='mining',dpi=50,filename_base='_run_hist',filename_modifier=''):
     if demand_or_mining=='demand': demand_or_mining='DEM'
     ready_commodities = ['Steel','Al','Au','Sn','Cu','Ni','Ag','Zn','Pb']
     fig,ax = easy_subplots(ready_commodities,dpi=dpi)
     cmap = {'nickel':'Ni','gold':'Au','aluminum':'Al','tin':'Sn','zinc':'Zn','lead':'Pb','steel':'Steel','copper':'Cu','silver':'Ag'}
     cmap_r=dict(zip(cmap.values(),cmap.keys()))
     for c,a in zip(ready_commodities,ax):
-        filename=f'data/{cmap_r[c]}_run_hist_{demand_or_mining}.pkl'
+        filename=f'{self.pkl_folder}/{cmap_r[c]}{filename_base}{filename_modifier}_{demand_or_mining}.pkl'
         big_df = pd.read_pickle(filename)
         rmse_df = big_df.loc['rmse_df'].iloc[-1][0]
         rmse_df.index = pd.MultiIndex.from_tuples(rmse_df.index)

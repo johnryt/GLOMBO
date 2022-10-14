@@ -614,9 +614,10 @@ class Integration():
                 self.initialize_price()
             else:
                 self.price_evolution()
+                self.run_demand()
+                self.update_integration_variables_post_demand()
                 self.run_mining()
 
-                self.run_demand()
                 self.update_integration_variables_post_demand()
                 self.run_refine()
                 self.update_integration_variables_post_refine()

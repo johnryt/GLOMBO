@@ -256,7 +256,7 @@ class Individual():
 
         self.big_df = big_df.copy()
 
-        if 'rmse_df' in big_df.index:
+        if 'rmse_df' in big_df.index and type(big_df.loc['rmse_df'].iloc[-1])!=int:
             self.rmse_df = big_df.loc['rmse_df'].iloc[-1][0]
             self.rmse_df.index = pd.MultiIndex.from_tuples(self.rmse_df.index)
             self.rmse_df = self.rmse_df.unstack(0)
@@ -373,8 +373,17 @@ class Individual():
         plot_hyperparam_vs_error: bool, plots the hyperparameter values vs the error value, separate plot for each hyperparameter. Use this to try and see if there are ranges for the best hyperparameter values.
         flip_yx: bool, False means plot hyperparam value vs error, while True means plot error vs hyperparam value
         '''
+        if not hasattr(self,'rmse_df'):
+            plot_best_indiv_over_time=False
+            plot_hyperparam_heatmap=False
+            plot_hyperparam_distributions=False
+            plot_hyperparam_vs_error=False
+            plot_best_params=False
+            plot_supply_demand_stack=False
+
         fig_list = []
-        self.normalize_rmses()
+        if hasattr(self,'rmse_df'):
+            self.normalize_rmses()
         norm_sum = 'NORM SUM' if include_sd else 'NORM SUM OBJ ONLY'
         if plot_over_time:
             fig,ax = easy_subplots(self.all_params[:3],dpi=self.dpi)
@@ -387,40 +396,57 @@ class Individual():
 
                 n_best = n_best if n_best>1 else 2
                 # simulated = self.hyperparam.loc[norm_sum].astype(float).sort_values().head(n_best).index
-                if nth_best<0:
-                    simulated = self.rmse_df.loc['score'].astype(float).sort_values().head(n_best).index
-                else:
-                    simulated = self.rmse_df.loc['LOG SUM'].astype(float).sort_values().head(n_best).index
-                results = results.loc[idx[simulated,:]]
+                if hasattr(self,'rmse_df'):
+                    if nth_best<0:
+                        simulated = self.rmse_df.loc['score'].astype(float).sort_values().head(n_best).index
+                    else:
+                        simulated = self.rmse_df.loc['LOG SUM'].astype(float).sort_values().head(n_best).index
+                    results = results.loc[idx[simulated,:]]
 
                 diction = get_unit(results, historical_data, i)
                 results, historical_data, unit = [diction[i] for i in ['simulated','historical','unit']]
                 # best = self.hyperparam.loc[norm_sum].astype(float).sort_values().index[nth_best-1]
-                if nth_best<0:
-                    best_ind = self.rmse_df.loc['score'].astype(float).sort_values().index[-nth_best-1]
-                else:
-                    best_ind = self.rmse_df.loc['LOG SUM'].astype(float).sort_values().index[nth_best-1]
+                if hasattr(self,'rmse_df'):
+                    if nth_best<0:
+                        best_ind = self.rmse_df.loc['score'].astype(float).sort_values().index[-nth_best-1]
+                    else:
+                        best_ind = self.rmse_df.loc['LOG SUM'].astype(float).sort_values().index[nth_best-1]
 
-                best = results.loc[best_ind]
+                if hasattr(self,'rmse_df'):
+                    best = results.loc[best_ind]
                 if 'SD' not in i:
                     hist_line = a.plot(historical_data,label='Historical',color='k',linewidth=6)
-                    regr = sm.GLS(historical_data.loc[2001:2019],sm.add_constant(best.loc[2001:2019])).fit(cov_type='HC3')
-                    reg_res = r'$R^2$'+': {:.3f}'.format(regr.rsquared)
+                    if hasattr(self,'rmse_df'):
+                        regr = sm.GLS(historical_data.loc[2001:2019],sm.add_constant(best.loc[2001:2019])).fit(cov_type='HC3')
+                        reg_res = r'$R^2$'+': {:.3f}'.format(regr.rsquared)
                 else: reg_res=''
-                sim_line = a.plot(best,label='Simulated',color='tab:blue',linewidth=6)
-                reg_point = plt.plot(best,color='w',zorder=0,alpha=0)
-                if n_best>1:
-                    a.plot(results.unstack(0),linewidth=1,alpha=0.5,zorder=0)
-                mins = min(historical_data.min(),best.min())*0.95
-                maxs = max(historical_data.max(),best.max())*1.1
+                if hasattr(self,'rmse_df'):
+                    sim_line = a.plot(best,label='Simulated',color='tab:blue',linewidth=6)
+                    reg_point = plt.plot(best,color='w',zorder=0,alpha=0)
+                if hasattr(self,'rmse_df'):
+                    if n_best>1:
+                        a.plot(results.unstack(0),linewidth=1,alpha=0.5,zorder=0)
+                else:
+                    a.plot(results.unstack(0),linewidth=4,alpha=0.8)
 
-                a.set(title='Best '+i,ylabel=i+' ('+unit+')',xlabel='Year',ylim=(mins,maxs))
-                a.legend([hist_line[0],sim_line[0],reg_point[0]],['Historical','Simulated',reg_res])
+                if hasattr(self,'rmse_df'):
+                    mins = min(historical_data.min(),best.min())*0.95
+                    maxs = max(historical_data.max(),best.max())*1.1
+                # else:
+                #     mins = min(historical_data.min(),results.min().min())*0.95
+                #     maxs = max(historical_data.max(),results.max().max())*1.1
+
+                if hasattr(self,'rmse_df'):
+                    a.set(title='Best '+i,ylabel=i+' ('+unit+')',xlabel='Year',ylim=(mins,maxs))
+                    a.legend([hist_line[0],sim_line[0],reg_point[0]],['Historical','Simulated',reg_res])
+                else:
+                    a.set(title=i,ylabel=f'{i} ({unit})',xlabel='Year')
                 self.sim = results
                 self.hist = historical_data
             fig.tight_layout()
             fig_list += [fig]
-            print(f'best scenario number is: {best_ind}')
+            if hasattr(self,'rmse_df'):
+                print(f'best scenario number is: {best_ind}')
 
         if plot_sd_over_time:
             fig,ax = easy_subplots(self.all_params[3:],dpi=self.dpi)
@@ -433,43 +459,57 @@ class Individual():
 
                 n_best = n_best if n_best>1 else 2
                 # simulated = self.hyperparam.loc[norm_sum].astype(float).sort_values().head(n_best).index
-                if nth_best<0:
-                    simulated = self.rmse_df.loc['score'].astype(float).sort_values().head(n_best).index
-                else:
-                    simulated = self.rmse_df.loc['LOG SUM'].astype(float).sort_values().head(n_best).index
-                results = results.loc[idx[simulated,:]]
+                if hasattr(self,'rmse_df'):
+                    if nth_best<0:
+                        simulated = self.rmse_df.loc['score'].astype(float).sort_values().head(n_best).index
+                    else:
+                        simulated = self.rmse_df.loc['LOG SUM'].astype(float).sort_values().head(n_best).index
+                    results = results.loc[idx[simulated,:]]
 
                 results, historical_data, unit = self.get_unit(results, historical_data, i)
                 # best = self.hyperparam.loc[norm_sum].astype(float).sort_values().index[nth_best-1]
-                if nth_best<0:
-                    best_ind = self.rmse_df.loc['score'].astype(float).sort_values().index[-nth_best-1]
-                else:
-                    best_ind = self.rmse_df.loc['LOG SUM'].astype(float).sort_values().index[nth_best-1]
+                if hasattr(self,'rmse_df'):
+                    if nth_best<0:
+                        best_ind = self.rmse_df.loc['score'].astype(float).sort_values().index[-nth_best-1]
+                    else:
+                        best_ind = self.rmse_df.loc['LOG SUM'].astype(float).sort_values().index[nth_best-1]
 
-                best = results.loc[best_ind]
-                sim_line = a.plot(best,label='Simulated',color='tab:blue')
+                    best = results.loc[best_ind]
+                    sim_line = a.plot(best,label='Simulated',color='tab:blue')
                 if 'SD' not in i:
                     hist_line = a.plot(historical_data,label='Historical',color='k')
-                    regr = sm.GLS(historical_data.loc[2001:2019],best.loc[2001:2019]).fit(cov_type='HC3')
-                    reg_res = r'$R^2$'+': {:.3f}'.format(regr.rsquared)
+                    if hasattr(self,'rmse_df'):
+                        regr = sm.GLS(historical_data.loc[2001:2019],best.loc[2001:2019]).fit(cov_type='HC3')
+                        reg_res = r'$R^2$'+': {:.3f}'.format(regr.rsquared)
                 else: reg_res=''
-                reg_point = plt.scatter([historical_data.index[0]],[historical_data.iloc[0]],color='w',zorder=0,alpha=0)
-                if n_best>1:
-                    a.plot(results.unstack(0),linewidth=1,alpha=0.5,zorder=0)
-                a.set(title='Best '+i,ylabel=i+' ('+unit+')',xlabel='Year')
-                a.legend([hist_line[0],sim_line[0],reg_point],['Historical','Simulated',reg_res])
+                if hasattr(self,'rmse_df'):
+                    reg_point = plt.scatter([historical_data.index[0]],[historical_data.iloc[0]],color='w',zorder=0,alpha=0)
+                if hasattr(self,'rmse_df'):
+                    if n_best>1:
+                        a.plot(results.unstack(0),linewidth=1,alpha=0.5,zorder=0)
+                else:
+                    a.plot(results.unstack(0),linewidth=4,alpha=0.8)
+
+                if hasattr(self,'rmse_df'):
+                    a.set(title='Best '+i,ylabel=i+' ('+unit+')',xlabel='Year')
+                else:
+                    a.set(title=i,ylabel=i+' ('+unit+')',xlabel='Year')
+
+                if hasattr(self,'rmse_df'):
+                    a.legend([hist_line[0],sim_line[0],reg_point],['Historical','Simulated',reg_res])
 
             fig.tight_layout()
             fig_list += [fig]
 
-        cols = self.hyperparam.loc[norm_sum].sort_values().head(n_best).index
-        ind = [i for i in self.hyperparam.index if type(self.hyperparam.loc[i].iloc[0]) in [float,int]]
-        ind = [i for i in ind if 'RMSE' not in i and 'NORM' not in i]
-        ind = self.hyperparam.loc[ind].loc[(self.hyperparam.loc[ind].std(axis=1)>1e-3)].index
-        self.hyperparams_changing = ind
-        best_hyperparam = self.hyperparam.copy().loc[ind,cols].astype(float)
-        if 'close_years_back' in best_hyperparam.index:
-            best_hyperparam.loc['close_years_back'] /= 10
+        if hasattr(self,'rmse_df'):
+            cols = self.hyperparam.loc[norm_sum].sort_values().head(n_best).index
+            ind = [i for i in self.hyperparam.index if type(self.hyperparam.loc[i].iloc[0]) in [float,int]]
+            ind = [i for i in ind if 'RMSE' not in i and 'NORM' not in i]
+            ind = self.hyperparam.loc[ind].loc[(self.hyperparam.loc[ind].std(axis=1)>1e-3)].index
+            self.hyperparams_changing = ind
+            best_hyperparam = self.hyperparam.copy().loc[ind,cols].astype(float)
+            if 'close_years_back' in best_hyperparam.index:
+                best_hyperparam.loc['close_years_back'] /= 10
 
         if plot_best_indiv_over_time:
             fig,ax = easy_subplots(self.objective_params,dpi=self.dpi)

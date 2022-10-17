@@ -1494,13 +1494,16 @@ class miningModel:
         replace_h_split = [i.split(param)[1] for i in replace_h]
         to_replace_h = [i for i in h if 'primary' in i and i.split('primary')[1] in replace_h_split]
         if param == 'byproduct':
-            matched = dict([(i, j) for i in replace_h for j in to_replace_h if
-                            '_'.join(i.split('_')[1:]) == '_'.join(j.split('_')[1:])])
+            matched = [(i, j) for i in replace_h for j in to_replace_h if
+                            '_'.join(i.split('_')[1:]) == '_'.join(j.split('_')[1:])]
         else:
-            matched = dict([(i, j) for i in replace_h for j in to_replace_h if
-                            '_'.join(i.split('_')[2:]) == '_'.join(j.split('_')[1:])])
-        self.hyperparam[to_replace_h] = self.hyperparam.drop(to_replace_h).rename(matched).loc[
-            to_replace_h]
+            matched = [(i, j) for i in replace_h for j in to_replace_h if
+                            '_'.join(i.split('_')[2:]) == '_'.join(j.split('_')[1:])]
+        for i,j in matched:
+            if j in matched:
+                self.hyperparam[j] = self.hyperparam[i]
+        # self.hyperparam[to_replace_h] = self.hyperparam.drop(to_replace_h).rename(matched).loc[
+        #     to_replace_h]
         if self.verbosity > 1:
             display(matched)
 
@@ -1542,6 +1545,7 @@ class miningModel:
         mines['Production (kt)'] = mines['Production fraction'] * h['byproduct_production']
 
         regions = [i for i in h if 'production_frac_region' in i]
+        region_fractions = [h[i] for i in h if 'production_frac_region' in i]
         mines['Region'] = np.nan
         for i in regions:
             int_version = int(i.replace('production_frac_region', ''))
@@ -1550,6 +1554,11 @@ class miningModel:
             mines.loc[ind, 'Region'] = int_version
         mines.loc[mines.Region.isna(), 'Region'] = int(
             h[regions].astype(float).idxmax().replace('production_frac_region', ''))
+
+#         regions = [i for i in hyperparam if 'production_frac_region' in i]
+#         region_fractions = [hyperparam[i] for i in hyperparam if 'production_frac_region' in i]
+# int(
+#             regions[np.argmax(region_fractions)].replace('production_frac_region', ''))
 
         host1.mines = mines.copy()
         host1.assign_mine_types()
@@ -2629,11 +2638,11 @@ class miningModel:
                 self.demand_series.loc[i] = initial_demand - change * (i - sim_time[0])
                 if i - 1 not in self.demand_series.index:
                     self.demand_series.loc[i - 1] = initial_demand - change * (i - 1 - sim_time[0])
-        self.resources_contained_series.loc[i] = self.demand_series[i] * \
+        self.resources_contained_series.loc[i] = self.demand_series[i-1] * \
                                                  h['annual_reserves_ratio_with_initial_production_const']
-        if i - 1 in self.demand_series.index and (
+        if i - 2 in self.demand_series.index and (
                 i - 1 not in self.resources_contained_series.index or self.resources_contained_series.isna()[i - 1]):
-            self.resources_contained_series.loc[i - 1] = self.demand_series[i - 1] * h[
+            self.resources_contained_series.loc[i - 1] = self.demand_series[i - 2] * h[
                 'annual_reserves_ratio_with_initial_production_const']
         if i > self.simulation_time[0] and h['reserves_ratio_price_lag'] > i - self.simulation_time[0] - 1:
             self.resources_contained_series.loc[i] = self.resources_contained_series[i - 1] * \
@@ -2643,7 +2652,7 @@ class miningModel:
             lag = min([h['reserves_ratio_price_lag'], i - self.simulation_time[0] - 1])
             lag = lag if lag > 0 else 0
             self.resources_contained_series.loc[i] = self.resources_contained_series[i - 1] * \
-                                                     self.demand_series[i] / self.demand_series[i - 1] * \
+                                                     self.demand_series[i-1] / self.demand_series[i - 2] * \
                                                      (1 + h['annual_reserves_ratio_with_initial_production_slope']) * \
                                                      (self.primary_price_series[i - lag] / self.primary_price_series[
                                                          i - lag - 1]) ** h['primary_price_resources_contained_elas']

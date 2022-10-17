@@ -209,7 +209,7 @@ class Many():
         self.changing_hyperparam = self.hyperparam.loc[types].copy()
         self.changing_hyperparam = self.changing_hyperparam.loc[~(self.changing_hyperparam.apply(lambda x: x-x.mean(),axis=1)<1e-6).all(axis=1)]
 
-    def get_multiple(self, demand=True, mining=True, integ=False, reinitialize=False, filename_base='_run_hist', filename_modifier=''):
+    def get_multiple(self, demand=True, mining=True, integ=False, reinitialize=False, filename_base='_run_hist', filename_modifier='', filename_modify_non_integ=False):
         '''
         Runs the get_variables command on each type of model run, which are
         then accessible through self.mining, self.demand, and self.integ, each
@@ -224,12 +224,12 @@ class Many():
         '''
         if demand and (not hasattr(self,'demand') or reinitialize):
             self.demand = Many()
-            self.demand.get_variables('demand', filename_base=filename_base, filename_modifier=filename_modifier)
+            self.demand.get_variables('demand', filename_base=filename_base, filename_modifier=filename_modifier if filename_modify_non_integ else '')
             feature_importance(self.demand,plot=False)
 
         if mining and (not hasattr(self,'mining') or reinitialize):
             self.mining = Many()
-            self.mining.get_variables('mining', filename_base=filename_base, filename_modifier=filename_modifier)
+            self.mining.get_variables('mining', filename_base=filename_base, filename_modifier=filename_modifier if filename_modify_non_integ else '')
             feature_importance(self.mining,plot=False)
 
         if integ and (not hasattr(self,'integ') or reinitialize):

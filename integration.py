@@ -8,7 +8,9 @@ class Integration():
     '''
     scenario_name takes the form 00_11_22_33_44
         where:
-        00: ss, sd, bo (scrap supply, scrap demand, both)
+        00: ss, sd, bo (scrap supply, scrap demand, both).
+         Can also be sd-alt, which uses an alternative
+         implementation of the scrap demand increase (see below)
         11: pr or no (price response included or no)
         22: Xyr, where X is any integer and represents
          the number of years the increase occurs
@@ -28,6 +30,14 @@ class Integration():
          control the ss and sd price response individually
          (in that order)
 
+        for sd-alt, the default (no alt) formulation is that an
+        increase in scrap demand to 5% of demand over 2
+        years would be
+        [0, 2.5%, 2.5%, 0%, 0%, ..., 0%]
+        while for alt it would be
+        [0, 2.5%, 5%,   5%, 5%, ..., 5%]
+        Can ctrl+F `direct_melt_duration` or `secondary_refined_duration`
+        to see the actual methods
     '''
     def __init__(self, data_folder=None, simulation_time=np.arange(2019,2041), verbosity=0, byproduct=False, input_hyperparam=0, scenario_name='', commodity=None, price_to_use=None):
         self.version = '2022-09-19 18:03:44' # str(datetime.now())[:19]
@@ -205,9 +215,10 @@ class Integration():
 
         ref = self.refine
         ref.scenario_type = self.scenario_type
-        ref.secondary_refine_duration = self.secondary_refined_duration
-        ref.secondary_refine_pct_change_tot = self.secondary_refined_pct_change_tot
-        ref.secondary_refine_pct_change_inc = self.secondary_refined_pct_change_inc
+        ref.secondary_refined_price_response = self.secondary_refined_price_response
+        ref.secondary_refined_duration = self.secondary_refined_duration
+        ref.secondary_refined_pct_change_tot = self.secondary_refined_pct_change_tot
+        ref.secondary_refined_pct_change_inc = self.secondary_refined_pct_change_inc
         h = self.h
 
         dem.hyperparam.loc['initial_demand','Value'] = h['initial_demand']
@@ -290,9 +301,14 @@ class Integration():
         self.additional_direct_melt = self.direct_melt_demand.copy()
         self.additional_direct_melt.loc[:] = 0
         if self.scenario_type in ['scrap demand','both']:
-            multiplier_array = np.append(
-                np.linspace(1,self.direct_melt_pct_change_tot,self.direct_melt_duration+1),
-                [self.direct_melt_pct_change_tot*self.direct_melt_pct_change_inc**j for j in np.arange(0,len(self.simulation_time)-self.direct_melt_duration-1)])
+            if not self.direct_melt_alt:# trying an alternative method, seems like adding more each year is not quite in line with how the market would work. Instead, it should be that once someone increases demand, their new demand is implicit within the rest of the market so we do not need to keep adding it each year
+                multiplier_array = np.append([1],np.append(
+                    np.repeat(1+(self.direct_melt_pct_change_tot-1)/self.direct_melt_duration,self.direct_melt_duration),
+                    [self.direct_melt_pct_change_inc for j in np.arange(1,len(self.simulation_time)-self.direct_melt_duration)]))
+            else:
+                multiplier_array = np.append(
+                    np.linspace(1,self.direct_melt_pct_change_tot,self.direct_melt_duration+1),
+                    [self.direct_melt_pct_change_tot*self.direct_melt_pct_change_inc**j for j in np.arange(1,len(self.simulation_time)-self.direct_melt_duration)])
             if self.direct_melt_price_response==False:
                 for yr,mul in zip(self.simulation_time,multiplier_array):
                     self.direct_melt_fraction.loc[yr,:]*=mul
@@ -320,9 +336,14 @@ class Integration():
         self.additional_secondary_refined = self.direct_melt_demand.copy()
         self.additional_secondary_refined.loc[:] = 0
         if self.scenario_type in ['scrap demand','both']:
-            multiplier_array = np.append(
-                np.linspace(1,self.secondary_refined_pct_change_tot,self.secondary_refined_duration+1),
-                [self.secondary_refined_pct_change_tot*self.secondary_refined_pct_change_inc**j for j in np.arange(0,len(self.simulation_time)-self.secondary_refined_duration-1)])
+            if not self.secondary_refined_alt:
+                multiplier_array = np.append([1],np.append(
+                    np.repeat(1+(self.secondary_refined_pct_change_tot-1)/self.secondary_refined_duration,self.secondary_refined_duration),
+                    [self.secondary_refined_pct_change_inc for j in np.arange(1,len(self.simulation_time)-self.secondary_refined_duration)]))
+            else:
+                multiplier_array = np.append(
+                    np.linspace(1,self.secondary_refined_pct_change_tot,self.secondary_refined_duration+1),
+                    [self.secondary_refined_pct_change_tot*self.secondary_refined_pct_change_inc**j for j in np.arange(1,len(self.simulation_time)-self.secondary_refined_duration)])
             if self.secondary_refined_price_response==False:
                 for yr,mul in zip(self.simulation_time,multiplier_array):
                     self.secondary_ratio.loc[yr,:]*=mul
@@ -638,9 +659,11 @@ class Integration():
 
     def decode_scrap_scenario_name(self):
         '''
-        takes the form 00_11_22_33_44
+        scenario_name takes the form 00_11_22_33_44
         where:
-        00: ss, sd, bo (scrap supply, scrap demand, both)
+        00: ss, sd, bo (scrap supply, scrap demand, both).
+         Can also be sd-alt, which uses an alternative
+         implementation of the scrap demand increase (see below)
         11: pr or no (price response included or no)
         22: Xyr, where X is any integer and represents
          the number of years the increase occurs
@@ -650,8 +673,24 @@ class Integration():
         44: X%inc, where X is any float/int and is the
          increase/decrease in the %tot value per year
 
+        e.g. ss_pr_1yr_1%tot_0%inc
+
         for 22-44, an additional X should be placed at
          the end when 00==both, describing the sd values
+         e.g. ss_pr_1yr1_1%tot1_0%inc0
+
+        Can also have 11 as nono, prno, nopr, or prpr to
+         control the ss and sd price response individually
+         (in that order)
+
+        for sd-alt, the default (no alt) formulation is that an
+        increase in scrap demand to 5% of demand over 2
+        years would be
+        [0, 2.5%, 2.5%, 0%, 0%, ..., 0%]
+        while for alt it would be
+        [0, 2.5%, 5%,   5%, 5%, ..., 5%]
+        Can ctrl+F `direct_melt_duration` or `secondary_refined_duration`
+        to see the actual methods
         '''
         scenario_name = self.scenario_name
         error_string = 'improper format for scenario_name. Takes the form of 00_11_22_33_44 where:'+\
@@ -674,6 +713,8 @@ class Integration():
         secondary_refined_duration = 0
         secondary_refined_pct_change_tot = 0
         secondary_refined_pct_change_inc = 0
+        self.secondary_refined_alt = False
+        self.direct_melt_alt = False
 
         if scenario_name=='':
             scenario_type = scenario_name
@@ -699,7 +740,7 @@ class Integration():
                 elif name[1]=='no':
                     collection_rate_price_response=False
 
-            if scenario_type in ['scrap demand','both']:
+            if scenario_type in ['scrap demand','both','scrap demand-alt']:
                 if scenario_type=='both':
                     integ = 1
                     if name[2].split('yr')[1]=='' or name[3].split('%tot')[1]=='' or name[4].split('%inc')[1]=='':
@@ -714,6 +755,8 @@ class Integration():
                     direct_melt_price_response=True
                 elif name[1]=='no':
                     direct_melt_price_response=False
+                self.direct_melt_alt = '-alt' in scenario_type
+                self.secondary_refined_alt = self.direct_melt_alt
 
             if len(name[1])>2:
                 if name[1]=='nono':
@@ -728,6 +771,8 @@ class Integration():
                 elif name[1]=='prpr':
                     collection_rate_price_response=True
                     direct_melt_price_response=True
+                else:
+                    print(f'WARNING, scenario name does not fit price response format, using default value from hyperparam input which is:\n\tcollection_rate_price_response={collection_rate_price_response}\n\tdirect_melt_price_response={direct_melt_price_response}')
 
         self.scenario_type = scenario_type
         self.collection_rate_price_response = collection_rate_price_response
@@ -759,12 +804,14 @@ class Integration():
         self.hyperparam.loc['collection_rate_pct_change_inc','Notes'] = 'once the collection_rate_pct_change_tot is reached, the collection rate will then increase by this value per year. Given as 1+%change/100'
         self.hyperparam.loc['direct_melt_duration','Value'] = self.direct_melt_duration
         self.hyperparam.loc['direct_melt_duration','Notes'] = 'length of the increase in direct melt fraction described by direct_melt_pct_change_tot'
+        self.hyperparam.loc['direct_melt_alt','Value'] = self.direct_melt_alt
         self.hyperparam.loc['direct_melt_pct_change_tot','Value'] = self.direct_melt_pct_change_tot
         self.hyperparam.loc['direct_melt_pct_change_tot','Notes'] = 'without price response, describes the percent increase in collection rate attained at the end of the linear ramp with duration direct_melt_duration. Given as 1+%change/100'
         self.hyperparam.loc['direct_melt_pct_change_inc','Value'] = self.direct_melt_pct_change_inc
         self.hyperparam.loc['direct_melt_pct_change_inc','Notes'] = 'once the direct_melt_pct_change_tot is reached, the direct melt fraction will then increase by this value per year. Given as 1+%change/100'
         self.hyperparam.loc['secondary_refined_duration','Value'] = self.secondary_refined_duration
         self.hyperparam.loc['secondary_refined_duration','Notes'] = 'length of the increase in direct melt fraction described by direct_melt_pct_change_tot'
+        self.hyperparam.loc['secondary_refined_alt','Value'] = self.secondary_refined_alt
         self.hyperparam.loc['secondary_refined_pct_change_tot','Value'] = self.secondary_refined_pct_change_tot
         self.hyperparam.loc['secondary_refined_pct_change_tot','Notes'] = 'without price response, describes the percent increase in collection rate attained at the end of the linear ramp with duration direct_melt_duration. Given as 1+%change/100'
         self.hyperparam.loc['secondary_refined_pct_change_inc','Value'] = self.secondary_refined_pct_change_inc

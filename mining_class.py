@@ -2179,6 +2179,7 @@ class miningModel:
         else:
             self.primary_price_series.loc[i] = np.nanmean(ml_yr_ph.commodity_price_usdpt)
             # print(2225,ml_yr_ph.tcrc_usdpt)
+            ml_yr_ph.tcrc_usdpt = ml_yr_ph.tcrc_usdpt.astype(float)
             self.primary_tcrc_series.loc[i] = np.nanmean(ml_yr_ph.tcrc_usdpt)
 
         self.supply_series.loc[i] = np.nansum(ml_yr_ph.production_kt)
@@ -2301,6 +2302,9 @@ class miningModel:
         tcrc_expect = self.calculate_price_expect(self.primary_tcrc_series.copy(), i)
         ml_yr.tcrc_expect_usdpt = np.repeat(0, len(ml_yr.index)) # SX-EW mines have tcrc of zero so only set conc mines below
         if len(self.conc_mines)>0:
+            if tcrc_expect>1e12: tcrc_expect=1e12
+            ml_yr.tcrc_usdpt[ml_yr.tcrc_usdpt>1e12] = 1e12
+            ml_yr.tcrc_usdpt = ml_yr.tcrc_usdpt.astype(float)
             ml_yr.tcrc_expect_usdpt[self.conc_mines] = ml_yr.tcrc_usdpt[self.conc_mines]*tcrc_expect/np.nanmean(ml_yr.tcrc_usdpt[self.conc_mines])
         tcrc_expect = ml_yr.tcrc_expect_usdpt
 

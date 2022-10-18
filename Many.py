@@ -738,7 +738,7 @@ def nice_plot_pretuning(demand_or_mining='mining',dpi=50,filename_base='_run_his
     fig.tight_layout()
     return fig,ax
 
-def run_future_scenarios(supply_or_demand='demand', n_baselines=100, price_response=True, commodities=None, many_norm=None, years_of_increase=np.arange(1,2),scenario_name_base='_run_scenario_set', verbosity=2):
+def run_future_scenarios(data_folder='data', run_parallel=3, supply_or_demand='demand', n_baselines=100, price_response=True, commodities=None, years_of_increase=np.arange(1,2),scenario_name_base='_run_scenario_set', verbosity=2):
     """
     Runs scrap demand scenarios, for 0.01 to 20% of the market switching from
     refined consumption to scrap consumption, for years given (default is just
@@ -754,6 +754,10 @@ def run_future_scenarios(supply_or_demand='demand', n_baselines=100, price_respo
 
     -----------------------------
     Inputs:
+    - data_folder: str, path to where the tuned_rmse_df_out.pkl file is stored
+    - run_parallel: int, 0 to not use parallel function (op_run_future_scenarios)
+      and any other number will be used as input for parallelization in
+      op_run_future_scenarios_parallel
     - supply_or_demand: str, can be `supply`, `demand`, None, for running a scrap
       supply-side or demand-side set of scenarios, or just baseline
     - n_baselines: int, number of different baseline scenarios to run
@@ -765,10 +769,6 @@ def run_future_scenarios(supply_or_demand='demand', n_baselines=100, price_respo
       'Cu','Ni','Ag','Zn','Pb']. If giving an input for this parameter, should
       be in list form and in the form given in case study data.xlsx (elemental
       except Steel)
-    - many_norm: Many class object, for the case where you have already
-      initialized the class and loaded the data using get_multiple(integ=True).
-      If left as None, this process will be performed for you (slightly time
-      intensive)
     - years_of_increase: np.ndarray of years in which the scrap demand increase
       occurs, with default np.arange(1,2) so just one year.
     - scenario_name_base: str, where the resulting filename will be
@@ -799,11 +799,9 @@ def run_future_scenarios(supply_or_demand='demand', n_baselines=100, price_respo
         scenarios = scenariosb+scenarios2+scenarios3
     if verbosity>0: print(scenarios)
 
-    if many_norm is None:
-        many_norm=Many()
-        many_norm.get_multiple(mining=False, demand=False, integ=True, filename_modifier='_norm')
+    rmse_df = pd.read_pickle(f'{data_folder}/tuned_rmse_df_out.pkl')
     if commodities is None:
-        commodities = many_norm.ready_commodities
+        commodities = ['Steel','Al','Au','Sn','Cu','Ni','Ag','Zn','Pb']
 
     exponent = 10
     element_commodity_map = {'Steel':'Steel','Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungsten','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
@@ -811,8 +809,8 @@ def run_future_scenarios(supply_or_demand='demand', n_baselines=100, price_respo
     for commodity in commodities:
         # weighted sampling from Bayesian optimization
         commodity=element_commodity_map[commodity].lower()
-        weights = np.exp(many_norm.integ.rmse_df.loc[idx[commodity,'score'],:])**-exponent
-        params = many_norm.integ.rmse_df.loc[commodity]
+        weights = np.exp(rmse_df.loc[idx[commodity,'score'],:])**-exponent
+        params = rmse_df.loc[commodity]
         params = params.drop([i for i in params.index if 'RMSE' in i or 'R2' in i or i=='score'])
         params.loc['region_specific_price_response'] = params.loc['sector_specific_price_response']
         param_samp = params.T.sample(n=10000,replace=True,weights=weights,random_state=221017)
@@ -827,15 +825,20 @@ def run_future_scenarios(supply_or_demand='demand', n_baselines=100, price_respo
         hyp_sample = hyp_sample.T
 
         # running all
-        op_run_future_scenarios(
+        if run_parallel==0:
+            run_fn = op_run_future_scenarios
+        else:
+            run_fn = op_run_future_scenarios_parallel
+        run_fn(
             commodity=commodity,
             hyperparam_df=hyp_sample,
             scenario_list=scenarios,
             scenario_name_base=scenario_name_base,
             verbosity=verbosity,
+            run_parallel=run_parallel,
             )
 
-def op_run_future_scenarios(commodity, hyperparam_df, scenario_list, scenario_name_base='_run_scenario_set', verbosity=0):
+def op_run_future_scenarios(commodity, hyperparam_df, scenario_list, scenario_name_base='_run_scenario_set', verbosity=0, run_parallel=None):
     from integration_functions import Sensitivity
     from datetime import datetime
 
@@ -874,3 +877,48 @@ def op_run_future_scenarios(commodity, hyperparam_df, scenario_list, scenario_na
             t_per_batch.loc[m*len(scenario_list)+n] = datetime.now()-t1
             filename_list += [filename]
     if verbosity>-1: print(f'total time elapsed: {str(datetime.now()-t0)}')
+
+
+def op_run_future_scenarios_parallel(commodity, hyperparam_df, scenario_list, scenario_name_base='_run_scenario_set', verbosity=0, run_parallel=3):
+    from integration_functions import Sensitivity
+    from datetime import datetime
+    from joblib import Parallel, delayed
+    from IterTimer import IterTimer
+
+    if type(scenario_list[0])==str:
+        scenario_list = [scenario_list]
+    hyp_sample = hyperparam_df.copy()
+
+    timer = IterTimer(n_iters=len(scenario_list)*hyp_sample.shape[1], log_times=False)
+
+    element_commodity_map = {'Steel':'Steel','Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungsten','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
+    col_map = dict(zip(element_commodity_map.values(),element_commodity_map.keys()))
+
+    material=commodity
+    t0 = datetime.now()
+    t_per_batch = pd.Series(np.nan,np.arange(0,len(hyp_sample.columns)))
+    filename_list = []
+    n_scen = len(hyp_sample.columns)*len(scenario_list)
+
+
+    Parallel(n_jobs=run_parallel)(delayed(run_scenario_set)(m, best_ind, hyp_sample, scenario_list, material, scenario_name_base, col_map, verbosity, timer) for m,best_ind in enumerate(hyp_sample.columns))
+
+    if verbosity>-1: print(f'total time elapsed: {str(datetime.now()-t0)}')
+
+def run_scenario_set(m,best_ind,hyp_sample,scenario_list,material,scenario_name_base,col_map,verbosity, timer=None):
+    if verbosity>-1:
+        print(f'Hyperparam set {m}/{len(hyp_sample.columns)}')
+    best_params = hyp_sample[best_ind]
+    for n,scenarios in enumerate(scenario_list):
+        timer.start_iter()
+        t1 = datetime.now()
+        filename='data/'+material+scenario_name_base+str(m)+'.pkl'
+        if verbosity>-2: print('--'*15+filename+'-'*15)
+        s = Sensitivity(filename,changing_base_parameters_series=col_map[material.capitalize()],notes='Scenario run!',
+                        additional_base_parameters=best_params,
+                        simulation_time=np.arange(2019,2041),
+                        scenarios=scenarios,
+                        OVERWRITE=True,verbosity=0)
+        s.run_monte_carlo(n_scenarios=2,bayesian_tune=False, sensitivity_parameters=['Nothing, giving a string incompatible with any of the variable names'])
+        if verbosity>-1: print(f'time for batch: {str(datetime.now()-t1)}')
+        timer.end_iter()

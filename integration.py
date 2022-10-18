@@ -88,15 +88,16 @@ class Integration():
             self.historical_data = history_file.iloc[1:]['Primary supply' if 'Primary supply' in history_file.columns else 'Primary production'].astype(float)
             self.historical_data = self.historical_data.dropna()
             self.historical_data.index = self.historical_data.index.astype(int)
-            self.price_adjustment_results_file_path = f'{self.data_folder}/price adjustment results.xlsx'
-            if self.price_to_use!='case study data':
-                self.historical_price_data = pd.read_excel(self.price_adjustment_results_file_path,index_col=0)
-                cap_mat = self.element_commodity_map[self.commodity]
-                price_map = {'log':'log('+cap_mat+')',  'diff':'∆'+cap_mat,  'original':cap_mat+' original'}
-                self.historical_price_data = self.historical_price_data[price_map[self.price_to_use]].astype(float).dropna().sort_index()
-                self.historical_price_data.name='Primary commodity price'
+        self.price_adjustment_results_file_path = f'{self.data_folder}/price adjustment results.xlsx'
+        if self.price_to_use!='case study data' or 'Primary commodity price' not in self.historical_data.dropna().columns:
+            self.historical_price_data = pd.read_excel(self.price_adjustment_results_file_path,index_col=0)
+            cap_mat = self.element_commodity_map[self.commodity]
+            price_map = {'log':'log('+cap_mat+')',  'diff':'∆'+cap_mat,  'original':cap_mat+' original'}
+            self.historical_price_data = self.historical_price_data[price_map[self.price_to_use]].astype(float).dropna().sort_index()
+            self.historical_price_data.name='Primary commodity price'
+            if 'Primary commodity price' in self.historical_data.columns:
                 self.historical_data.drop('Primary commodity price',axis=1,inplace=True)
-                self.historical_data = pd.concat([self.historical_data,self.historical_price_data],axis=1)
+            self.historical_data = pd.concat([self.historical_data,self.historical_price_data],axis=1)
 
     def initialize_hyperparam(self):
         hyperparameters = pd.DataFrame(np.nan,index=[],columns=['Value','Notes'])

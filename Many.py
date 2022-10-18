@@ -862,13 +862,13 @@ def op_run_future_scenarios(commodity, hyperparam_df, scenario_list, scenario_na
         best_params = hyp_sample[best_ind]
         for n,scenarios in enumerate(scenario_list):
             t1 = datetime.now()
-            filename='data/'+material+scenario_name_base+'.pkl'
+            filename='data/'+material+scenario_name_base+str(m)+'.pkl'
             if verbosity>-2: print('--'*15+filename+'-'*15)
             s = Sensitivity(filename,changing_base_parameters_series=col_map[material.capitalize()],notes='Scenario run!',
                             additional_base_parameters=best_params,
                             simulation_time=np.arange(2019,2041),
                             scenarios=scenarios,
-                            OVERWRITE=m==0,verbosity=0)
+                            OVERWRITE=True,verbosity=0)
             s.run_monte_carlo(n_scenarios=2,bayesian_tune=False, sensitivity_parameters=['Nothing, giving a string incompatible with any of the variable names'])
             if verbosity>-1: print(f'time for batch: {str(datetime.now()-t1)}')
             t_per_batch.loc[m*len(scenario_list)+n] = datetime.now()-t1

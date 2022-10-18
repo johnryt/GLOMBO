@@ -737,3 +737,140 @@ def nice_plot_pretuning(demand_or_mining='mining',dpi=50,filename_base='_run_his
         a.legend(loc='upper left')
     fig.tight_layout()
     return fig,ax
+
+def run_future_scenarios(supply_or_demand='demand', n_baselines=100, price_response=True, commodities=None, many_norm=None, years_of_increase=np.arange(1,2),scenario_name_base='_run_scenario_set', verbosity=2):
+    """
+    Runs scrap demand scenarios, for 0.01 to 20% of the market switching from
+    refined consumption to scrap consumption, for years given (default is just
+    one year).
+
+    Runs 100 different sets of hyperparameters. These are randomly sampled from
+    a weighted sampling-with-replacement of the Bayesian optimization results
+    for each commodity, with weighting going as score^(-10), which is
+    automatically normalized within the pandas sampling function. This weighted
+    sampling with replacement creates distributions for each parameter, and each
+    parameter is then sampled independently to form the 100 different sets of
+    hyperparameters
+
+    -----------------------------
+    Inputs:
+    - supply_or_demand: str, can be `supply`, `demand`, None, for running a scrap
+      supply-side or demand-side set of scenarios, or just baseline
+    - n_baselines: int, number of different baseline scenarios to run
+    - price_response: bool, whether the scrap supply or demand scenario will
+      include price response (typically True when scrap demand and False when
+      doing scrap supply, but this is not enforced, must be set manually)
+    - commodities: list, default is the list in the Many class called
+      ready_commodities, which at least right now is ['Steel','Al','Au','Sn',
+      'Cu','Ni','Ag','Zn','Pb']. If giving an input for this parameter, should
+      be in list form and in the form given in case study data.xlsx (elemental
+      except Steel)
+    - many_norm: Many class object, for the case where you have already
+      initialized the class and loaded the data using get_multiple(integ=True).
+      If left as None, this process will be performed for you (slightly time
+      intensive)
+    - years_of_increase: np.ndarray of years in which the scrap demand increase
+      occurs, with default np.arange(1,2) so just one year.
+    - scenario_name_base: str, where the resulting filename will be
+      data/commodity+scenario_name_base+`.pkl`
+    """
+    import numpy as np
+    import os
+    import pandas as pd
+    idx = pd.IndexSlice
+    import warnings
+    from Many import Many
+    from integration_functions import Sensitivity
+    from datetime import datetime
+
+    if supply_or_demand is None:
+        scenarios = ['']
+    else:
+        if supply_or_demand=='supply': s = 'ss'
+        elif supply_or_demand=='demand': s = 'sd'
+        else: raise ValueError('supply_or_demand input to run_scrap_scenarios function must be str of either `supply` or `demand`')
+        if price_response: p='pr'
+        else: p='no'
+        scenariosb = ['',f'{s}_{p}_1yr_0.01%tot_0%inc',f'{s}_{p}_1yr_0.1%tot_0%inc']
+        scenarios2 = [f'{s}_{p}_'+str(yr)+'yr_'+str(round(pct,1))+'%tot_0%inc' for yr in years_of_increase
+             for pct in np.arange(0.2,1.1,0.2)]
+        scenarios3 = [f'{s}_{p}_'+str(yr)+'yr_'+str(round(pct,1))+'%tot_0%inc' for yr in years_of_increase
+             for pct in np.arange(2,21,2)]
+        scenarios = scenariosb+scenarios2+scenarios3
+    if verbosity>0: print(scenarios)
+
+    if many_norm is None:
+        many_norm=Many()
+        many_norm.get_multiple(mining=False, demand=False, integ=True, filename_modifier='_norm')
+    if commodities is None:
+        commodities = many_norm.ready_commodities
+
+    exponent = 10
+    element_commodity_map = {'Steel':'Steel','Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungsten','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
+    col_map = dict(zip(element_commodity_map.values(),element_commodity_map.keys()))
+    for commodity in commodities:
+        # weighted sampling from Bayesian optimization
+        commodity=element_commodity_map[commodity].lower()
+        weights = np.exp(many_norm.integ.rmse_df.loc[idx[commodity,'score'],:])**-exponent
+        params = many_norm.integ.rmse_df.loc[commodity]
+        params = params.drop([i for i in params.index if 'RMSE' in i or 'R2' in i or i=='score'])
+        params.loc['region_specific_price_response'] = params.loc['sector_specific_price_response']
+        param_samp = params.T.sample(n=10000,replace=True,weights=weights,random_state=221017)
+
+        # getting 100 hyperparameters for run from resulting distributions
+        hyp_sample = pd.DataFrame(np.nan, np.arange(0,n_baselines), param_samp.columns)
+        rs = 1017
+        for i in hyp_sample.index:
+            for j in hyp_sample.columns:
+                hyp_sample.loc[i,j] = param_samp[j].sample(random_state=rs).values[0]
+                rs += 1
+        hyp_sample = hyp_sample.T
+
+        # running all
+        op_run_future_scenarios(
+            commodity=commodity,
+            hyperparam_df=hyp_sample,
+            scenario_list=scenarios,
+            scenario_name_base=scenario_name_base,
+            verbosity=verbosity,
+            )
+
+def op_run_future_scenarios(commodity, hyperparam_df, scenario_list, scenario_name_base='_run_scenario_set', verbosity=0):
+    from integration_functions import Sensitivity
+    from datetime import datetime
+
+    if type(scenario_list[0])==str:
+        scenario_list = [scenario_list]
+    hyp_sample = hyperparam_df.copy()
+
+    element_commodity_map = {'Steel':'Steel','Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungsten','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
+    col_map = dict(zip(element_commodity_map.values(),element_commodity_map.keys()))
+
+    material=commodity
+    t0 = datetime.now()
+    t_per_batch = pd.Series(np.nan,np.arange(0,len(hyp_sample.columns)))
+    filename_list = []
+    n_scen = len(hyp_sample.columns)*len(scenario_list)
+    for m,best_ind in enumerate(hyp_sample.columns):
+        if m>1 and len(t_per_batch.dropna())<=3:
+            time_remaining = (t_per_batch.dropna().sum()/len(t_per_batch.dropna()))*(n_scen-m*len(scenario_list))
+        elif m>1:
+            time_remaining = (t_per_batch.dropna().iloc[-3:].sum()/3)*(n_scen-m*len(scenario_list))
+        else: time_remaining = (datetime(2022,10,17,23,21,50,0)-datetime(2022,10,17,23,13,20,0))*(n_scen-m*len(scenario_list))
+        if verbosity>-1:
+            print(f'Hyperparam set {m}/{len(hyp_sample.columns)},\nEst. finish time: {str(datetime.now()+time_remaining)}')
+        best_params = hyp_sample[best_ind]
+        for n,scenarios in enumerate(scenario_list):
+            t1 = datetime.now()
+            filename='data/'+material+scenario_name_base+'.pkl'
+            if verbosity>-2: print('--'*15+filename+'-'*15)
+            s = Sensitivity(filename,changing_base_parameters_series=col_map[material.capitalize()],notes='Scenario run!',
+                            additional_base_parameters=best_params,
+                            simulation_time=np.arange(2019,2041),
+                            scenarios=scenarios,
+                            OVERWRITE=m==0,verbosity=0)
+            s.run_monte_carlo(n_scenarios=2,bayesian_tune=False, sensitivity_parameters=['Nothing, giving a string incompatible with any of the variable names'])
+            if verbosity>-1: print(f'time for batch: {str(datetime.now()-t1)}')
+            t_per_batch.loc[m*len(scenario_list)+n] = datetime.now()-t1
+            filename_list += [filename]
+    if verbosity>-1: print(f'total time elapsed: {str(datetime.now()-t0)}')

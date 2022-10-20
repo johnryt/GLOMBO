@@ -301,15 +301,16 @@ class Integration():
         self.direct_melt_demand = self.direct_melt_demand.apply(lambda x: x/self.scrap_to_cathode_eff,axis=1)
         self.additional_direct_melt = self.direct_melt_demand.copy()
         self.additional_direct_melt.loc[:] = 0
-        if self.scenario_type in ['scrap demand','both']:
+        if self.scenario_type in ['scrap demand','scrap demand-alt','both']:
+            shock_start=2019 # shock start is the year the scenario would have started originally (first change in 2020 for 2019 shock_start)
             if not self.direct_melt_alt:# trying an alternative method, seems like adding more each year is not quite in line with how the market would work. Instead, it should be that once someone increases demand, their new demand is implicit within the rest of the market so we do not need to keep adding it each year
-                multiplier_array = np.append([1],np.append(
+                multiplier_array = np.append(np.repeat(1,shock_start-self.simulation_time[0]+1),np.append(
                     np.repeat(1+(self.direct_melt_pct_change_tot-1)/self.direct_melt_duration,self.direct_melt_duration),
-                    [self.direct_melt_pct_change_inc for j in np.arange(1,len(self.simulation_time)-self.direct_melt_duration)]))
+                    [self.direct_melt_pct_change_inc for j in np.arange(1,np.sum(self.simulation_time>=shock_start)-self.direct_melt_duration)]))
             else:
-                multiplier_array = np.append(
+                multiplier_array = np.append(np.repeat(1,shock_start-self.simulation_time[0]),np.append(
                     np.linspace(1,self.direct_melt_pct_change_tot,self.direct_melt_duration+1),
-                    [self.direct_melt_pct_change_tot*self.direct_melt_pct_change_inc**j for j in np.arange(1,len(self.simulation_time)-self.direct_melt_duration)])
+                    [self.direct_melt_pct_change_tot*self.direct_melt_pct_change_inc**j for j in np.arange(1,np.sum(self.simulation_time>=shock_start)-self.direct_melt_duration)]))
             if self.direct_melt_price_response==False:
                 for yr,mul in zip(self.simulation_time,multiplier_array):
                     self.direct_melt_fraction.loc[yr,:]*=mul
@@ -336,15 +337,16 @@ class Integration():
         self.secondary_refined_demand = self.secondary_refined_demand.apply(lambda x: x/self.scrap_to_cathode_eff,axis=1)
         self.additional_secondary_refined = self.direct_melt_demand.copy()
         self.additional_secondary_refined.loc[:] = 0
-        if self.scenario_type in ['scrap demand','both']:
+        if self.scenario_type in ['scrap demand','scrap demand-alt','both']:
+            shock_start=2019 # shock start is the year the scenario would have started originally (first change in 2020 for 2019 shock_start)
             if not self.secondary_refined_alt:
-                multiplier_array = np.append([1],np.append(
+                multiplier_array = np.append(np.repeat(1,shock_start-self.simulation_time[0]+1),np.append(
                     np.repeat(1+(self.secondary_refined_pct_change_tot-1)/self.secondary_refined_duration,self.secondary_refined_duration),
-                    [self.secondary_refined_pct_change_inc for j in np.arange(1,len(self.simulation_time)-self.secondary_refined_duration)]))
+                    [self.secondary_refined_pct_change_inc for j in np.arange(1,np.sum(self.simulation_time>=shock_start)-self.secondary_refined_duration)]))
             else:
-                multiplier_array = np.append(
+                multiplier_array = np.append(np.repeat(1,shock_start-self.simulation_time[0]),np.append(
                     np.linspace(1,self.secondary_refined_pct_change_tot,self.secondary_refined_duration+1),
-                    [self.secondary_refined_pct_change_tot*self.secondary_refined_pct_change_inc**j for j in np.arange(1,len(self.simulation_time)-self.secondary_refined_duration)])
+                    [self.secondary_refined_pct_change_tot*self.secondary_refined_pct_change_inc**j for j in np.arange(1,np.sum(self.simulation_time>=shock_start)-self.secondary_refined_duration)]))
             if self.secondary_refined_price_response==False:
                 for yr,mul in zip(self.simulation_time,multiplier_array):
                     self.secondary_ratio.loc[yr,:]*=mul

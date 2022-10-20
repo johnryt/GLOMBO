@@ -438,10 +438,10 @@ class Sensitivity():
             commodity_inputs = commodity_inputs.dropna()
 
             history_file = pd.read_excel(self.case_study_data_file_path,index_col=0,sheet_name=changing_base_parameters_series)
-            historical_data = history_file.loc[[i for i in history_file.index if i!='Source(s)']].dropna(axis=1).astype(float)
+            historical_data = history_file.loc[[i for i in history_file.index if i!='Source(s)']].dropna(axis=1,how='all').astype(float)
             historical_data.index = historical_data.index.astype(int)
-            if np.all([i in historical_data.index for i in simulation_time]):
-                historical_data = history_file.loc[simulation_time]
+            if simulation_time[0] in historical_data.index and simulation_time[0]!=2019:
+                historical_data = history_file.loc[[i for i in simulation_time if i in history_file.index]]
                 if self.price_to_use!='case study data':
                     price_update_file = pd.read_excel(self.price_adjustment_results_file_path,index_col=0)
                     cap_mat = self.element_commodity_map[self.material]

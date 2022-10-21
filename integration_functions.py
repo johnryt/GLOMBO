@@ -628,6 +628,10 @@ class Sensitivity():
             self.mod.historical_data = self.historical_data.copy()
 
         scenario_params_dont_change = ['collection_rate_price_response','direct_melt_price_response','secondary_refined_price_response','refinery_capacity_growth_lag','region_specific_price_response']
+        if self.changing_base_parameters_series.loc['Secondary refinery fraction of recycled content, Global']==0:
+            scenario_params_dont_change += ['sec CU price elas','sec CU TCRC elas','sec ratio TCRC elas','sec ratio scrap spread elas']
+        if self.changing_base_parameters_series.loc['Secondary refinery fraction of recycled content, Global']==1:
+            scenario_params_dont_change += ['direct_melt_elas_scrap_spread']
 #         params_to_change = [i for i in self.mod.hyperparam.dropna(how='all').index if ('elas' in i or 'response' in i or 'growth' in i or 'improvements' in i) and i not in scenario_params_dont_change]
         params_to_change = [i for i in self.mod.hyperparam.dropna(how='all').index if np.any([j in i for j in sensitivity_parameters]) and i not in scenario_params_dont_change]
         self.sensitivity_param = params_to_change

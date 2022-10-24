@@ -17,6 +17,9 @@ from skopt import Optimizer
 from joblib import Parallel, delayed
 from sklearn.metrics import mean_squared_error, r2_score
 
+import warnings
+# warnings.filterwarnings('error')
+# np.seterr(all='raise')
 
 def create_result_df(self,integ):
     '''
@@ -448,8 +451,11 @@ class Sensitivity():
                     price_map = {'log':'log('+cap_mat+')',  'diff':'∆'+cap_mat,  'original':cap_mat+' original'}
                     historical_price = price_update_file[price_map[self.price_to_use]].astype(float)
                     historical_price.name = 'Primary commodity price'
+                    historical_price.index = historical_price.index.astype(int)
                     if 'Primary commodity price' in historical_data.columns:
-                        historical_data = pd.concat([historical_data.drop('Primary commodity price',axis=1),historical_price],axis=1).sort_index().dropna(how='all')
+                        historical_data = pd.concat([historical_data.drop('Primary commodity price',axis=1),historical_price],axis=1)
+                        historical_data.index = historical_data.index.astype(int)
+                        historical_data = historical_data.sort_index().dropna(how='all')
                     else:
                         historical_data = pd.concat([historical_data,historical_price],axis=1).sort_index().dropna(how='all')
                 if 'Primary commodity price' in historical_data.columns:
@@ -678,7 +684,7 @@ class Sensitivity():
                     self.hyperparam_copy = self.mod.hyperparam.copy()
 
                     ###### UPDATING MONTE CARLO PARAMETERS ######
-                    if len(params_to_change)>0:
+                    if len(params_to_change)>1:
                         if bayesian_tune:
                             new_param_series = pd.Series(next_parameters[i], params_to_change)
                         else:
@@ -1308,6 +1314,9 @@ class Sensitivity():
         elif os.path.exists('updated_commodity_inputs.pkl'):
             self.updated_commodity_inputs = pd.read_pickle('updated_commodity_inputs.pkl')
             if self.verbosity>-1: print('updated_commodity_inputs source: updated_commodity_inputs.pkl')
+        elif os.path.exists(f'{self.data_folder}/updated_commodity_inputs.pkl'):
+            self.updated_commodity_inputs = pd.read_pickle(f'{self.data_folder}/updated_commodity_inputs.pkl')
+            if self.verbosity>-1: print(f'updated_commodity_inputs source: {self.data_folder}/updated_commodity_inputs.pkl')
         elif hasattr(self,'updated_commodity_inputs'):
             pass
         else:

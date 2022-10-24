@@ -9,9 +9,14 @@ import statsmodels.api as sm
 from sklearn.ensemble import RandomForestRegressor, ExtraTreesRegressor, GradientBoostingRegressor
 from matplotlib.lines import Line2D
 from sklearn.preprocessing import StandardScaler
+import os
+
 import shap
 from Individual import *
 from datetime import datetime
+
+# warnings.filterwarnings('error')
+# np.seterr(all='raise')
 
 class Many():
     '''
@@ -402,7 +407,7 @@ class Many():
 
 def get_X_df_y_df(self, commodity=None, objective=None, standard_scaler=True):
     using_rmse_y = objective is None or hasattr(self,'rmse_df')
-    if using_rmse_y: using_rmse_y = using_rmse_y and objective in self.rmse_df.index.get_level_values(1).unique()
+    if using_rmse_y: using_rmse_y = using_rmse_y and np.any([x in self.rmse_df.index.get_level_values(1).unique() for x in [objective,'RMSE','score']])
     if hasattr(self,'rmse_df'): rmse_df = self.rmse_df.copy().astype(float)
     if not using_rmse_y:
         outer = self.multi_scenario_results_formatted.copy()
@@ -411,7 +416,7 @@ def get_X_df_y_df(self, commodity=None, objective=None, standard_scaler=True):
         outer = outer.loc[idx[commodity,:],:]
     if using_rmse_y:
         X_df = rmse_df.copy()
-        r = [r for r in X_df.index.get_level_values(1) if np.any([j in r for j in ['R2','RMSE','region_specific_price_response','score']])]
+        r = [r for r in X_df.index.get_level_values(1) if np.any([j in r for j in ['R2','RMSE','region_specific_price_response','score','Region specific']])]
         if len(r)>0:
             X_df = X_df.drop(r,level=1)
         X_df = X_df.unstack().stack(level=0)
@@ -439,6 +444,7 @@ def get_X_df_y_df(self, commodity=None, objective=None, standard_scaler=True):
         y_df = y_df.stack(0).stack()
         if type(y_df)==pd.core.series.Series:
             y_df = pd.DataFrame(y_df)
+        y_df = y_df.rename(columns={y_df.columns[0]:objective})
     else:
         print(rmse_df.index.get_level_values(1).unique())
         print(self.multi_scenario_results_formatted.columns)
@@ -496,7 +502,7 @@ def feature_importance(self,plot=None, dpi=50,recalculate=False, standard_scaler
                 regr.fit(X,y)
 
                 test = pd.concat([X_df_test,y_df_test],axis=1)
-                test.loc[:,'predicted RMSE'] = regr.predict(X_test)
+                test.loc[:,'predicted '+self.objective] = regr.predict(X_test)
 
                 if not plot_commodity_importances:
                     importances = pd.Series(regr.feature_importances_, X_df.columns).drop([i for i in X_df.columns if 'commodity' in i]).sort_values(ascending=False)
@@ -513,7 +519,7 @@ def feature_importance(self,plot=None, dpi=50,recalculate=False, standard_scaler
                 importances_df = pd.concat([importances_df, importances],axis=1)
 
                 if plot_train_test:
-                    do_a_regress(test.RMSE, test['predicted RMSE'],ax=ax2[e])
+                    do_a_regress(test.RMSE, test['predicted '+self.objective],ax=ax2[e])
                     ax2[e].set(title=importances.name.replace(' w/','\nw/').replace(' no','\nno'))
 
         dummy_cols = [i for i in importances_df.columns if 'w/ dummies' in i]
@@ -670,7 +676,7 @@ def make_parameter_names_nice(ind):
         'sd','SD').replace(' elas ',' elasticity to ').replace('Direct melt elas','Direct melt fraction elas').replace('CU price elas','CU elasticity to price').replace(
         'ratio TCRC elas','ratio elasticity to TCRC').replace('ratio scrap spread elas','ratio elasticity to scrap spread').replace(
         'Refinery capacity fraction increase mining','Ref. cap. growth frac. from mine prod. growth').replace('Pri ','Primary refinery ').replace(
-        'Sec CU','Secondary refinery CU').replace('Sec ratio','Refinery SR').replace('primary commodity ','').replace('Primary commodity','Refined')
+        'Sec CU','Secondary refinery CU').replace('Sec ratio','Refinery SR').replace('primary commodity ','').replace('Primary commodity','Refined').replace('tcm','TCM')
                                        for i in ind]
     return dict(zip(ind,updated))
 
@@ -858,7 +864,7 @@ def nice_plot_pretuning(demand_or_mining='mining',dpi=50,filename_base='_run_his
     fig.tight_layout()
     return fig,ax
 
-def run_future_scenarios(data_folder='data', run_parallel=3, supply_or_demand='demand', n_baselines=100, price_response=True, commodities=None, years_of_increase=np.arange(1,2),scenario_name_base='_run_scenario_set', simulation_time=np.arange(2019,2041), baseline_sampling='grouped', notes='Scenario run!', verbosity=2):
+def run_future_scenarios(data_folder='data', run_parallel=3, supply_or_demand='demand', n_baselines=100, price_response=True, commodities=None, years_of_increase=np.arange(1,2),scenario_name_base='_run_scenario_set', simulation_time=np.arange(2019,2041), baseline_sampling='grouped', notes='Scenario run!', random_state=None, verbosity=2):
     """
     Runs scrap demand scenarios, for 0.01 to 20% of the market switching from
     refined consumption to scrap consumption, for years given (default is just
@@ -920,7 +926,9 @@ def run_future_scenarios(data_folder='data', run_parallel=3, supply_or_demand='d
              for pct in np.arange(0.2,1.1,0.2)]
         scenarios3 = [f'{s}_{p}_'+str(yr)+'yr_'+str(round(pct,1))+'%tot_0%inc' for yr in years_of_increase
              for pct in np.arange(2,21,2)]
-        scenarios = scenariosb+scenarios2+scenarios3
+        scenarios4 = [f'{s}_{p}_'+str(yr)+'yr_'+str(round(pct,1))+'%tot_0%inc' for yr in years_of_increase
+             for pct in np.arange(25,41,5)]
+        scenarios = scenariosb+scenarios2+scenarios3+scenarios4
     if verbosity>0: print(scenarios)
 
     rmse_df = pd.read_pickle(f'{data_folder}/tuned_rmse_df_out.pkl')
@@ -973,6 +981,12 @@ def run_future_scenarios(data_folder='data', run_parallel=3, supply_or_demand='d
                     rs+=1
                 hyp_sample = pd.concat([hyp_sample,df],axis=1)
             hyp_sample = hyp_sample.T.reset_index(drop=True).T
+        elif baseline_sampling=='actual':
+            best_n = weights.sort_values(ascending=False).head(10).index
+            hyp_sample = params[best_n]
+            hyp_sample = hyp_sample.T.reset_index(drop=True).T
+
+        hyp_sample = get_pretuning_params(best_hyperparameters=hyp_sample, material=col_map[commodity.capitalize()], data_folder=data_folder, verbosity=verbosity)
 
         # running all
         if run_parallel==0:
@@ -988,9 +1002,10 @@ def run_future_scenarios(data_folder='data', run_parallel=3, supply_or_demand='d
             run_parallel=run_parallel,
             simulation_time=simulation_time,
             notes=notes,
+            random_state=random_state,
             )
 
-def op_run_future_scenarios(commodity, hyperparam_df, scenario_list, scenario_name_base='_run_scenario_set', verbosity=0, run_parallel=None, simulation_time=np.arange(2019,2041), notes=''):
+def op_run_future_scenarios(commodity, hyperparam_df, scenario_list, scenario_name_base='_run_scenario_set', verbosity=0, run_parallel=None, simulation_time=np.arange(2019,2041), notes='', random_state=None):
     from integration_functions import Sensitivity
     from datetime import datetime
 
@@ -1015,22 +1030,32 @@ def op_run_future_scenarios(commodity, hyperparam_df, scenario_list, scenario_na
         if verbosity>-1:
             print(f'Hyperparam set {m}/{len(hyp_sample.columns)},\nEst. finish time: {str(datetime.now()+time_remaining)}')
         best_params = hyp_sample[best_ind]
+        if type(random_state)==int:
+            random_state = [random_state]
+        if random_state is None:
+            random_states = np.arange(0,1)
+        else:
+            random_states = np.arange(0,len(random_state))
         for n,scenarios in enumerate(scenario_list):
-            t1 = datetime.now()
-            filename='data/'+material+scenario_name_base+str(m)+'.pkl'
-            if verbosity>-2: print('--'*15+filename+'-'*15)
-            s = Sensitivity(filename,changing_base_parameters_series=col_map[material.capitalize()],notes=notes,
-                            additional_base_parameters=best_params,
-                            simulation_time=simulation_time,
-                            scenarios=scenarios,
-                            OVERWRITE=True,verbosity=verbosity)
-            s.run_monte_carlo(n_scenarios=2,bayesian_tune=False, sensitivity_parameters=['Nothing, giving a string incompatible with any of the variable names'])
-            if verbosity>-1: print(f'time for batch: {str(datetime.now()-t1)}')
-            t_per_batch.loc[m*len(scenario_list)+n] = datetime.now()-t1
-            filename_list += [filename]
+            for rs in random_states:
+                t1 = datetime.now()
+                filename='data/'+material+scenario_name_base+str(m)+'.pkl'
+                if verbosity>-2: print('--'*15+filename+'-'*15)
+                best_params.loc['refinery_capacity_growth_lag']=1
+                if random_state is not None:
+                    best_params.loc['random_state'] = random_state[rs]
+                s = Sensitivity(filename,changing_base_parameters_series=col_map[material.capitalize()],notes=notes,
+                                additional_base_parameters=best_params, historical_price_rolling_window=5,
+                                simulation_time=simulation_time,
+                                scenarios=scenarios,
+                                OVERWRITE=rs==0,verbosity=verbosity)
+                s.run_monte_carlo(n_scenarios=2,bayesian_tune=False, sensitivity_parameters=['Nothing, giving a string incompatible with any of the variable names'])
+                if verbosity>-1: print(f'time for batch: {str(datetime.now()-t1)}')
+                t_per_batch.loc[m*len(scenario_list)+n] = datetime.now()-t1
+                filename_list += [filename]
     if verbosity>-1: print(f'total time elapsed: {str(datetime.now()-t0)}')
 
-def op_run_future_scenarios_parallel(commodity, hyperparam_df, scenario_list, scenario_name_base='_run_scenario_set', verbosity=0, run_parallel=3, simulation_time=np.arange(2019,2041), notes=''):
+def op_run_future_scenarios_parallel(commodity, hyperparam_df, scenario_list, scenario_name_base='_run_scenario_set', verbosity=0, run_parallel=3, simulation_time=np.arange(2019,2041), notes='', random_state=None):
     from integration_functions import Sensitivity
     from datetime import datetime
     from joblib import Parallel, delayed
@@ -1052,24 +1077,61 @@ def op_run_future_scenarios_parallel(commodity, hyperparam_df, scenario_list, sc
     n_scen = len(hyp_sample.columns)*len(scenario_list)
 
 
-    Parallel(n_jobs=run_parallel)(delayed(run_scenario_set)(m, best_ind, hyp_sample, scenario_list, material, scenario_name_base, col_map, verbosity, simulation_time, notes, timer) for m,best_ind in enumerate(hyp_sample.columns))
+    Parallel(n_jobs=run_parallel)(delayed(run_scenario_set)(m, best_ind, hyp_sample, scenario_list, material, scenario_name_base, col_map, verbosity, simulation_time, notes, timer, random_state) for m,best_ind in enumerate(hyp_sample.columns))
 
     if verbosity>-1: print(f'total time elapsed: {str(datetime.now()-t0)}')
 
-def run_scenario_set(m,best_ind,hyp_sample,scenario_list,material,scenario_name_base,col_map,verbosity, simulation_time=np.arange(2019,2041), notes='', timer=None):
+def run_scenario_set(m,best_ind,hyp_sample,scenario_list,material,scenario_name_base,col_map,verbosity, simulation_time=np.arange(2019,2041), notes='', timer=None, random_state=None):
     if verbosity>-1:
         print(f'Hyperparam set {m}/{len(hyp_sample.columns)}')
     best_params = hyp_sample[best_ind]
+    if type(random_state)==int:
+        random_state = [random_state]
+    if random_state is None:
+        random_states = np.arange(0,1)
+    else:
+        random_states = np.arange(0,len(random_state))
     for n,scenarios in enumerate(scenario_list):
-        timer.start_iter()
-        t1 = datetime.now()
-        filename='data/'+material+scenario_name_base+str(m)+'.pkl'
-        if verbosity>-2: print('--'*15+filename+'-'*15)
-        s = Sensitivity(filename,changing_base_parameters_series=col_map[material.capitalize()],notes=notes,
-                        additional_base_parameters=best_params,
-                        simulation_time=simulation_time,
-                        scenarios=scenarios,
-                        OVERWRITE=True,verbosity=verbosity)
-        s.run_monte_carlo(n_scenarios=2,bayesian_tune=False, sensitivity_parameters=['Nothing, giving a string incompatible with any of the variable names'])
-        if verbosity>-1: print(f'time for batch: {str(datetime.now()-t1)}')
-        timer.end_iter()
+        for rs in random_states:
+            # timer.start_iter()
+            t1 = datetime.now()
+            filename='data/'+material+scenario_name_base+str(m)+'.pkl'
+            if verbosity>-2: print('--'*15+filename+'-'*15)
+            best_params.loc['refinery_capacity_growth_lag']=1
+            if random_state is not None:
+                best_params.loc['random_state'] = random_state[rs]
+            s = Sensitivity(filename,changing_base_parameters_series=col_map[material.capitalize()],notes=notes,
+                            additional_base_parameters=best_params, historical_price_rolling_window=5,
+                            simulation_time=simulation_time,
+                            scenarios=scenarios,
+                            OVERWRITE=rs==0,verbosity=verbosity)
+            s.run_monte_carlo(n_scenarios=2,bayesian_tune=False, sensitivity_parameters=['Nothing, giving a string incompatible with any of the variable names'])
+            if verbosity>-1: print(f'time for batch: {str(datetime.now()-t1)}')
+        # timer.end_iter()
+
+def get_pretuning_params(best_hyperparameters, material, data_folder='data', verbosity=0):
+    if os.path.exists('data/updated_commodity_inputs.pkl'):
+        updated_commodity_inputs = pd.read_pickle('data/updated_commodity_inputs.pkl')
+        if verbosity>-1: print('updated_commodity_inputs source: data/updated_commodity_inputs.pkl')
+    elif os.path.exists('updated_commodity_inputs.pkl'):
+        updated_commodity_inputs = pd.read_pickle('updated_commodity_inputs.pkl')
+        if verbosity>-1: print('updated_commodity_inputs source: updated_commodity_inputs.pkl')
+    elif os.path.exists(f'{data_folder}/updated_commodity_inputs.pkl'):
+        updated_commodity_inputs = pd.read_pickle(f'{data_folder}/updated_commodity_inputs.pkl')
+        if verbosity>-1: print(f'updated_commodity_inputs source: {data_folder}/updated_commodity_inputs.pkl')
+    else:
+        raise ValueError('updated_commodity_inputs.pkl does not exist in the expected locations (in this directory, in data relative path, in data_folder input given). Need to run the historical_sim_check_demand() function to create an initialization of updated_commodity_inputs.pkl')
+
+    best_params = updated_commodity_inputs[material].copy().dropna()
+    changing_base_parameters_series = best_params[[j for j in best_params.index if 'pareto' not in j]]
+
+    if verbosity>1:
+        print('without updates, hyperparam:\n',best_hyperparameters)
+
+    for i in changing_base_parameters_series.index:
+        if i not in best_hyperparameters.index:
+            best_hyperparameters.loc[i,:] = changing_base_parameters_series[i]
+
+    if verbosity>1:
+        print('new hyperparam:\n',best_hyperparameters)
+    return best_hyperparameters

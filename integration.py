@@ -3,6 +3,10 @@ from demand_class import *
 from refining_class import *
 import numpy as np
 from warnings import warn
+import warnings
+
+# warnings.filterwarnings('error')
+# np.seterr(all='raise')
 
 class Integration():
     '''
@@ -44,10 +48,10 @@ class Integration():
 
         self.price_to_use = 'log' if price_to_use==None else price_to_use
         self.element_commodity_map = {'Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungsten','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
-
+        data_folder = 'data' if data_folder is None else data_folder
         self.i = simulation_time[0]
         self.commodity = commodity
-        self.data_folder = data_folder
+        self.data_folder = 'data' if data_folder is None else data_folder
         self.simulation_time = simulation_time
         self.verbosity = verbosity
         self.byproduct = byproduct
@@ -95,7 +99,7 @@ class Integration():
             price_map = {'log':'log('+cap_mat+')',  'diff':'∆'+cap_mat,  'original':cap_mat+' original'}
             self.historical_price_data = self.historical_price_data[price_map[self.price_to_use]].astype(float).dropna().sort_index()
             self.historical_price_data.name='Primary commodity price'
-            if 'Primary commodity price' in self.historical_data.columns:
+            if hasattr(self.historical_data,'columns') and 'Primary commodity price' in self.historical_data.columns:
                 self.historical_data.drop('Primary commodity price',axis=1,inplace=True)
             self.historical_data = pd.concat([self.historical_data,self.historical_price_data],axis=1)
 
@@ -290,6 +294,7 @@ class Integration():
                                        self.demand.demand['China'].sum(axis=1),
                                        self.demand.demand['RoW'].sum(axis=1)],
                                       axis=1,keys=['Global','China','RoW'])
+        demand_ph = self.total_demand.copy()
         self.total_demand.loc[self.i+1:] = np.nan
 
         # refined_demand, direct_melt_demand
@@ -317,11 +322,15 @@ class Integration():
             else:
                 multiplier_array -= 1
 #                 ph2 = self.demand.scrap_collected.stack().unstack(1).unstack()
-                self.additional_direct_melt = self.demand.demand.loc[self.simulation_time[0]:].apply(lambda x: self.demand.demand.loc[self.simulation_time[0]]*multiplier_array[x.name-self.simulation_time[0]],axis=1)
-                self.additional_direct_melt = self.additional_direct_melt.groupby(level=0,axis=1).sum()
-                self.additional_direct_melt.loc[:,'Global'] = self.additional_direct_melt.sum(axis=1)
+                self.additional_direct_melt = demand_ph.loc[self.simulation_time[0]:].apply(lambda x: demand_ph.loc[shock_start]*multiplier_array[x.name-self.simulation_time[0]],axis=1)
                 self.additional_direct_melt.loc[self.simulation_time[0]-1,:] = 0
+                ind = (self.additional_direct_melt>demand_ph.loc[self.additional_direct_melt.index]*0.9*self.direct_melt_fraction.loc[self.additional_direct_melt.index]).any(axis=1)
+                if ind.sum()>0:
+                    ind=ind[ind].index
+                    self.additional_direct_melt.loc[ind] = demand_ph.loc[ind]*0.9*self.direct_melt_fraction.loc[ind]
+                    # print(330,'\n',demand_ph.loc[ind]*0.9*self.direct_melt_fraction.loc[ind])
                 self.additional_direct_melt = self.additional_direct_melt.sort_index()
+                # print(333,'\n',self.additional_direct_melt, '\n', demand_ph.loc[self.additional_direct_melt.index]*0.9*self.direct_melt_fraction.loc[self.additional_direct_melt.index])
 
         # concentrate_demand, secondary_refined_demand, refined_supply
         self.concentrate_demand = self.refine.ref_stats.loc[:,idx[:,'Primary production']].droplevel(1,axis=1)
@@ -355,9 +364,7 @@ class Integration():
                 multiplier_array -= 1
 #                 ph2 = self.demand.scrap_collected.stack().unstack(1).unstack()
 #                 self.additional_secondary_refined = self.demand.demand.loc[self.simulation_time[0]:].apply(lambda x: ph2.loc[self.simulation_time[0]]*multiplier_array[x.name-self.simulation_time[0]],axis=1)
-                self.additional_secondary_refined = self.demand.demand.loc[self.simulation_time[0]:].apply(lambda x: self.demand.demand.loc[self.simulation_time[0]]*multiplier_array[x.name-self.simulation_time[0]],axis=1)
-                self.additional_secondary_refined = self.additional_secondary_refined.groupby(level=0,axis=1).sum()
-                self.additional_secondary_refined.loc[:,'Global'] = self.additional_secondary_refined.sum(axis=1)
+                self.additional_secondary_refined = demand_ph.loc[self.simulation_time[0]:].apply(lambda x: demand_ph.loc[shock_start]*multiplier_array[x.name-self.simulation_time[0]],axis=1)
                 self.additional_secondary_refined.loc[self.simulation_time[0]-1,:] = 0
                 self.additional_secondary_refined = self.additional_secondary_refined.sort_index()
                 self.refine.additional_secondary_refined = self.additional_secondary_refined.copy()
@@ -400,6 +407,7 @@ class Integration():
         self.refined_demand = self.refined_demand.where(self.refined_demand>1e-9).fillna(1e-9)
         self.primary_commodity_price.loc[i] = self.primary_commodity_price.loc[i-1]*(self.refined_supply['Global'][i-1]/self.refined_demand['Global'][i-1])**h['primary_commodity_price_elas_sd']
         self.primary_commodity_price = self.primary_commodity_price.where(self.primary_commodity_price>1e-9).fillna(1e-9)
+        self.primary_commodity_price = self.primary_commodity_price.where(self.primary_commodity_price<1e20).fillna(1e20)
 
         # if hasattr(self,'historical_data'):
         #     self.primary_commodity_price.loc[i] = self.historical_data['Primary commodity price'][i]
@@ -410,10 +418,12 @@ class Integration():
         self.tcrc.loc[i] = self.tcrc.loc[i-1]*(self.concentrate_supply[i-1]/self.concentrate_demand['Global'][i-1])**h['tcrc_elas_sd']\
                                 *(self.primary_commodity_price.loc[i]/self.primary_commodity_price.loc[i-1])**h['tcrc_elas_price']
         self.tcrc = self.tcrc.where(self.tcrc>1e-9).fillna(1e-9)
+        self.tcrc = self.tcrc.where(self.tcrc<1e20).fillna(1e20)
 
         # scrap trade
         self.scrap_supply = self.scrap_supply.where(self.scrap_supply>1e-9).fillna(1e-9)
         self.scrap_demand = self.scrap_demand.where(self.scrap_demand>1e-9).fillna(1e-9)
+        self.scrap_spread = self.scrap_spread.where(self.scrap_spread<1e20).fillna(1e20)
         if h['scrap_trade_simplistic'] and i>self.simulation_time[2]:
             self.scrap_supply.loc[i-1,'China'] = self.scrap_supply['China'][i-2]*self.scrap_supply['Global'][i-1]/self.scrap_supply['Global'][i-2]
             self.scrap_supply.loc[i-1,'RoW'] = self.scrap_supply['RoW'][i-2]*self.scrap_supply['Global'][i-1]/self.scrap_supply['Global'][i-2]
@@ -424,6 +434,10 @@ class Integration():
         # scrap spread
         self.scrap_spread.loc[i,'China'] = self.scrap_spread['China'][i-1]*(self.scrap_supply['China'][i-1]/self.scrap_demand['China'][i-1])**h['scrap_spread_elas_sd']\
             * (self.primary_commodity_price[i]/self.primary_commodity_price[i-1])**h['scrap_spread_elas_primary_commodity_price']
+
+        # print(self.scrap_spread['RoW'][i-1], self.scrap_supply['RoW'][i-1], self.scrap_demand['RoW'][i-1],
+        #     self.primary_commodity_price[i], self.primary_commodity_price[i-1])
+
         self.scrap_spread.loc[i,'RoW'] = self.scrap_spread['RoW'][i-1]*(self.scrap_supply['RoW'][i-1]/self.scrap_demand['RoW'][i-1])**h['scrap_spread_elas_sd']\
             * (self.primary_commodity_price[i]/self.primary_commodity_price[i-1])**h['scrap_spread_elas_primary_commodity_price']
         self.scrap_spread.loc[i,'Global'] = self.scrap_spread['Global'][i-1]*(self.scrap_supply['Global'][i-1]/self.scrap_demand['Global'][i-1])**h['scrap_spread_elas_sd']\
@@ -572,6 +586,8 @@ class Integration():
         elif self.direct_melt_price_response:
             temp_direct_melt_demand = self.direct_melt_demand.copy()
             temp_direct_melt_demand.loc[:i,:] -= self.additional_direct_melt.loc[:i,:]
+            # print(581,'\n',temp_direct_melt_demand.dropna())
+            # print(582,'\n',self.additional_direct_melt.dropna())
             temp_direct_melt_fraction = temp_direct_melt_demand/self.total_demand
             self.direct_melt_demand.loc[i-1,:] -= self.additional_direct_melt.loc[i-1,:]
             direct_melt_fraction = temp_direct_melt_fraction.loc[i-1]\

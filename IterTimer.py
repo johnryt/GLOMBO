@@ -24,10 +24,14 @@ class IterTimer():
         '''
 
         self.iter_times = []
+        self.start_times = []
+        self.end_times = []
+        self.durations = []
         self.n_iters = n_iters
         self.default_print = default_print
         self.window = window
         self.current_iter = 0
+        self.start_iter = 0
         self.log_times = log_times
 
         if self.log_times:
@@ -38,9 +42,13 @@ class IterTimer():
     def start_iter(self):
         '''Start measuring time.'''
         self.start = time.perf_counter()
+        self.start_times += [self.start]
+        self.end_times += [np.nan]
+        self.durations += [np.nan]
+        self.start_iter += 1
 
     def end_iter(self, default_print=False):
-        '''Finish measuring time and calculate relevant metrics. Will print if defaul_print=True.
+        '''Finish measuring time and calculate relevant metrics. Will print if default_print=True.
 
         args:
             default_print: (bool) Whether to let IterTimer print at the end of the iteration, overwrites Class default_print (default: False).
@@ -51,7 +59,8 @@ class IterTimer():
         '''
 
         #keep track of time and calculate ETA based on mean iteration time
-        self.iter_times.append(time.perf_counter()-self.start)
+        end = time.perf_counter()
+        self.iter_times.append(end-self.start)
         self.mean_iter = np.array(self.iter_times[self.window:]).mean() #only take the last few iterations to calculate mean to account for changing conditions
         self.t_end = time.time() + self.mean_iter*(self.n_iters-self.current_iter-1)
 

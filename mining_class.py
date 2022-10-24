@@ -1095,7 +1095,7 @@ class miningModel:
         #         num_ramping = int(round(h['ramp_up_fraction']*mines.shape[0],0))
         #         if num_ramping>mines_not_ramping.shape[0]: raise ValueError('ramp_up_fraction hyperparam input is too large, not enough mines in the pool to have any remaining non-ramping mines')
         #
-        #         ind = mines_not_ramping.sample(size=num_ramping,replace=False)
+        #         ind = mines_not_ramping.sample(size=num_ramping,replace=False,random_state=self.rs)
         #         mines_not_ramping.drop(ind,inplace=True)
         #         mines.ramp_up_flag[ind] = i
         #         if h['ramp_up_exponent']!=0:
@@ -1189,11 +1189,11 @@ class miningModel:
             if self.verbosity > 1:
                 print('Generated recovery rates too high, using 99% for all')
         if (rec_rates > 99).any():
-            rr = rec_rates[rec_rates < 99].sample(n=(rec_rates > 99).sum(), replace=True).reset_index(drop=True)
+            rr = rec_rates[rec_rates < 99].sample(n=(rec_rates > 99).sum(), replace=True, random_state=self.rs).reset_index(drop=True)
             rr = rr.rename(dict(zip(rr.index, rec_rates[rec_rates > 99].index)))
             rec_rates.loc[rec_rates > 99] = rr
         if (rec_rates < 0).any():
-            rr = rec_rates[rec_rates > 0].sample(n=(rec_rates < 0).sum(), replace=True).reset_index(drop=True)
+            rr = rec_rates[rec_rates > 0].sample(n=(rec_rates < 0).sum(), replace=True, random_state=self.rs).reset_index(drop=True)
             rr = rr.rename(dict(zip(rr.index, rec_rates[rec_rates < 0].index)))
             rec_rates.loc[rec_rates < 0] = rr
         mines['Recovery rate (%)'] = rec_rates
@@ -2714,7 +2714,7 @@ class miningModel:
             self.initial_subsample_series.loc[i] = incentive_mines.shape[0]
         else:
             n = self.subsample_series.loc[i]
-            incentive_mines = incentive_mines.sample(n=n, replace=True).reset_index(drop=True)
+            incentive_mines = incentive_mines.sample(n=n, replace=True, random_state=self.rs).reset_index(drop=True)
         sxew = incentive_mines['Payable percent (%)']==100.
         self.perturb_cols = [i for i in incentive_mines.dtypes[incentive_mines.dtypes == float].index if
                              'price' not in i and i not in ['Opening', 'Closure', 'Known opening', 'Region',

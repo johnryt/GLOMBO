@@ -45,7 +45,7 @@ class Many():
     - make_parameter_names_nice
     - prep_for_snsplots
     - plot_demand_parameter_correlation
-    - plot_mining_parameter_scatter
+    - plot_important_parameter_scatter
     - commodity_level_feature_importance_heatmap
     - nice_plot_pretuning
     - get_unit
@@ -93,7 +93,7 @@ class Many():
             self.shist.historical_sim_check_demand(n_runs,demand_or_mining='mining')
             print(f'time elapsed: {str(datetime.now()-t1)}')
 
-    def run_all_integration(self, n_runs=200, commodities=None, normalize_objectives=False,constrain_previously_tuned=True, verbosity=0, save_mining_info=False, trim_result_df=True, filename_base='_run_hist', filename_modifier=''):
+    def run_all_integration(self, n_runs=200, commodities=None, train_time=np.arange(2001,2020), normalize_objectives=False,constrain_previously_tuned=True, verbosity=0, save_mining_info=False, trim_result_df=True, filename_base='_run_hist', filename_modifier=''):
         '''
 
         '''
@@ -109,7 +109,7 @@ class Many():
             print('--'*15+filename+'-'*15)
             self.s = Sensitivity(pkl_filename=filename, data_folder=self.data_folder,changing_base_parameters_series=material,notes=f'Monte Carlo {material} run',
                             additional_base_parameters=pd.Series(1,['refinery_capacity_growth_lag']),
-                            simulation_time=np.arange(2001,2020), include_sd_objectives=False,
+                            simulation_time=np.arange(2001,2020), include_sd_objectives=False, train_time=train_time,
                             OVERWRITE=True,verbosity=verbosity,historical_price_rolling_window=5,
                             constrain_previously_tuned=constrain_previously_tuned, normalize_objectives=normalize_objectives,
                             save_mining_info=save_mining_info, trim_result_df=trim_result_df)
@@ -232,17 +232,17 @@ class Many():
         if demand and (not hasattr(self,'demand') or reinitialize):
             self.demand = Many()
             self.demand.get_variables('demand', filename_base=filename_base, filename_modifier=filename_modifier if filename_modify_non_integ else '')
-            feature_importance(self.demand,plot=False)
+            feature_importance(self.demand,plot=False,objective='RMSE')
 
         if mining and (not hasattr(self,'mining') or reinitialize):
             self.mining = Many()
             self.mining.get_variables('mining', filename_base=filename_base, filename_modifier=filename_modifier if filename_modify_non_integ else '')
-            feature_importance(self.mining,plot=False)
+            feature_importance(self.mining,plot=False,objective='score')
 
         if integ and (not hasattr(self,'integ') or reinitialize):
             self.integ = Many()
             self.integ.get_variables('all', filename_base=filename_base, filename_modifier=filename_modifier)
-            feature_importance(self.integ,plot=False)
+            feature_importance(self.integ,plot=False,objective='score')
 
     def plot_all_demand(self, dpi=50, filename_base='_run_hist', filename_modifier=''):
         '''
@@ -465,6 +465,12 @@ def feature_importance(self,plot=None, dpi=50,recalculate=False, standard_scaler
       If left as None, will go ahead with either `score` or `RMSE` depending on
       whether using an Integration or demandModel formulation.
     '''
+    if hasattr(self,'objective'):
+        objective=self.objective
+    elif objective is None:
+        objective='score'
+    self.objective = objective
+
     split_frac = 0.5
 
     if plot==None or (type(plot)==bool and plot):
@@ -484,7 +490,7 @@ def feature_importance(self,plot=None, dpi=50,recalculate=False, standard_scaler
         for Regressor, name in zip([RandomForestRegressor, ExtraTreesRegressor, GradientBoostingRegressor],['RandomForest','ExtraTrees','GradientBoosting']):
             if plot_train_test: fig2,ax2 = easy_subplots(2,dpi=dpi)
             for e,dummies in enumerate([True,False]):
-                X_df, y_df = self.X_df.copy(), self.y_df.copy()
+                X_df, y_df = self.X_df.copy().fillna(0), self.y_df.copy()
 
                 if dummies:
                     X_df.loc[:,'commodity =']=X_df.index.get_level_values(0)
@@ -502,7 +508,7 @@ def feature_importance(self,plot=None, dpi=50,recalculate=False, standard_scaler
                 regr.fit(X,y)
 
                 test = pd.concat([X_df_test,y_df_test],axis=1)
-                test.loc[:,'predicted '+self.objective] = regr.predict(X_test)
+                test.loc[:,'predicted '+objective] = regr.predict(X_test)
 
                 if not plot_commodity_importances:
                     importances = pd.Series(regr.feature_importances_, X_df.columns).drop([i for i in X_df.columns if 'commodity' in i]).sort_values(ascending=False)
@@ -519,7 +525,7 @@ def feature_importance(self,plot=None, dpi=50,recalculate=False, standard_scaler
                 importances_df = pd.concat([importances_df, importances],axis=1)
 
                 if plot_train_test:
-                    do_a_regress(test.RMSE, test['predicted '+self.objective],ax=ax2[e])
+                    do_a_regress(test.RMSE, test['predicted '+objective],ax=ax2[e])
                     ax2[e].set(title=importances.name.replace(' w/','\nw/').replace(' no','\nno'))
 
         dummy_cols = [i for i in importances_df.columns if 'w/ dummies' in i]
@@ -568,9 +574,9 @@ def nice_feature_importance_plot(self, dpi=50):
     if not hasattr(self,'mining'):
         self.get_multiple()
     if not hasattr(self.mining,'importances_df') or np.any(['commodity' in i.lower() for i in self.mining.importances_df.index]):
-        feature_importance(self.mining,plot=False)
+        feature_importance(self.mining,plot=False,objective='score')
     if not hasattr(self.demand,'importances_df') or np.any(['commodity' in i.lower() for i in self.demand.importances_df.index]):
-        feature_importance(self.demand,plot=False)
+        feature_importance(self.demand,plot=False,objective='RMSE')
 
     no_dummy_cols = [i for i in self.mining.importances_df.columns if 'no dummies' in i]
     to_plot_demand = self.demand.importances_df.loc[:,no_dummy_cols].sort_values(by='Mean no dummies',ascending=False).dropna()
@@ -680,10 +686,14 @@ def make_parameter_names_nice(ind):
                                        for i in ind]
     return dict(zip(ind,updated))
 
-def prep_for_snsplots(self,mining=False,percentile=25,n_most_important=4):
-    if mining:
+def prep_for_snsplots(self,demand_mining_integ='demand',percentile=25,n_most_important=4):
+    if demand_mining_integ=='mining':
         df = self.mining.rmse_df_sorted.copy()
         most_important = self.mining.importances_df['Mean no dummies'].sort_values(ascending=False).head(n_most_important).index
+        df = df.loc[idx[:,most_important],:].copy()
+    elif demand_mining_integ=='integ':
+        df = self.integ.rmse_df_sorted.copy()
+        most_important = self.integ.importances_df['Mean no dummies'].sort_values(ascending=False).head(n_most_important).index
         df = df.loc[idx[:,most_important],:].copy()
     else:
         df = self.demand.rmse_df_sorted.copy()
@@ -698,13 +708,13 @@ def prep_for_snsplots(self,mining=False,percentile=25,n_most_important=4):
         df.drop(columns=['Region specific intensity elasticity to price'],inplace=True)
     demand_params = [i for i in df.columns if i not in ['Commodity','Scenario number','Region specific intensity response to price']]
     df.loc[:,demand_params] = df[demand_params].astype(float)
-    if mining:
+    if demand_mining_integ in ['mining','integ']:
         return df, demand_params, most_important
     else:
         return df, demand_params
 
 def plot_demand_parameter_correlation(self,scatter=True, percentile=25, dpi=50):
-    df, demand_params = prep_for_snsplots(self,mining=False,percentile=percentile)
+    df, demand_params = prep_for_snsplots(self,demand_mining_integ='demand',percentile=percentile)
     combos = list(combinations(demand_params,2))
     for pair in combos:
         if scatter:
@@ -719,30 +729,37 @@ def plot_demand_parameter_correlation(self,scatter=True, percentile=25, dpi=50):
     plt.close()
     return g.fig, g.ax_joint
 
-def plot_mining_parameter_scatter(self, percentile=25, n=None, dpi=50, n_most_important=4, scale_y_for_legend=1, plot_median=True, legend=True, best_or_median='mean'):
+def plot_important_parameter_scatter(self, percentile=25, n=None, dpi=50, n_most_important=4, scale_y_for_legend=1, plot_median=True, legend=True, best_or_median='mean', mining_or_integ='mining'):
     if n!=None: percentile=n/600*100
-    df2, demand_params, order = prep_for_snsplots(self,mining=True, percentile=percentile, n_most_important=n_most_important)
+    df2, demand_params, order = prep_for_snsplots(self,demand_mining_integ=mining_or_integ, percentile=percentile, n_most_important=n_most_important)
     df2 = df2.set_index(['Commodity','Scenario number']).stack().reset_index(drop=False).rename(columns={'level_2':'Parameter',0:'Value'})
-    df2a = df2.copy().loc[df2['Parameter']!='Mine cost reduction per year']
+    # df2a = df2.copy().loc[df2['Parameter']!='Mine cost reduction per year']
+    outer = df2.loc[(df2['Value']<0)|(df2['Value']>1)]['Parameter'].unique()
+    df2a = df2.copy().loc[[i not in outer for i in df2['Parameter']]]
 
     def replace_for_mining(string):
         return string.replace(' to T','\nto T').replace('y d','y\nd').replace('ing pr','ing\npr').replace('ge e','ge\ne')
     for i in demand_params:
         df2a.replace(i,replace_for_mining(i),inplace=True)
-    df2b = df2.copy().loc[df2['Parameter']=='Mine cost reduction per year']
+    df2b = df2.copy().loc[[i in outer for i in df2['Parameter']]]
     if best_or_median=='median':
         df2a_means = df2a.groupby(['Commodity','Parameter']).median().reset_index(drop=False)
         df2b_means = df2b.groupby(['Commodity','Parameter']).median().reset_index(drop=False)
     else:
         df2a_means = df2a.loc[df2a['Scenario number']==0]
         df2b_means = df2b.loc[df2b['Scenario number']==0]
-
-    fig,ax=easy_subplots(2,width_scale=1.3+0.1*n_most_important/4,width_ratios=[n_most_important-1,1],dpi=dpi)
+    self.df2 = df2
+    self.df2a = df2a
+    self.df2b = df2b
+    if len(outer)>0:
+        fig,ax=easy_subplots(2,width_scale=1.3+0.1*n_most_important/4,width_ratios=[n_most_important-len(outer),len(outer)],dpi=dpi)
+    else:
+        fig,ax=easy_subplots(1,width_scale=1.3+0.1*n_most_important/4,dpi=dpi)
     a=ax[0]
     # sns.violinplot(data=df2a, x='Parameter', y='Value', hue='Commodity',ax=a, linewidth=2)
     order_rename = make_parameter_names_nice(order)
     order = [order_rename[i] for i in order]
-    order = [replace_for_mining(i) for i in order if 'Mine cost reduction per year'!=i]
+    order = [replace_for_mining(i) for i in order if i not in outer]
     linewidth = 0.5
 
     sns.stripplot(data=df2a, x='Parameter', y='Value', hue='Commodity',ax=a, dodge=True, size=10,
@@ -751,7 +768,7 @@ def plot_mining_parameter_scatter(self, percentile=25, n=None, dpi=50, n_most_im
         marker='s'
         markersize=12
         alpha=0.3
-        sns.stripplot(data=df2a_means, x='Parameter', y='Value', hue='Commodity',ax=a, dodge=True, size=markersize, color='k', alpha=alpha, marker=marker,
+        sns.stripplot(data=df2a_means, x='Parameter', y='Value', hue='Commodity',ax=a, dodge=True, size=markersize, palette='dark:k', alpha=alpha, marker=marker,
                  order=order, edgecolors='k')
     h,l = a.get_legend_handles_labels()
     if plot_median:
@@ -775,13 +792,18 @@ def plot_mining_parameter_scatter(self, percentile=25, n=None, dpi=50, n_most_im
     a.set(xlabel=None, ylim=(alim[0],alim[1]*1.07*(scale_y_for_legend)))
     a.set_title('                                      Mine pre-tuning parameter results\n',weight='bold')
 
-    b=ax[1]
-    sns.stripplot(data=df2b, x='Parameter', y='Value', hue='Commodity',ax=b, dodge=True, size=10, linewidth=linewidth, edgecolor='w')
-    if plot_median:
-        sns.stripplot(data=df2b_means, x='Parameter', y='Value', hue='Commodity',ax=b, dodge=True, size=markersize, color='k', alpha=alpha, marker=marker)
-    b.legend('')
-    alim = a.get_ylim()
-    b.set(ylim=[alim[0]*5,alim[1]*5], ylabel=None, xlabel=None)
+    if len(outer)>0:
+        b=ax[1]
+        sns.stripplot(data=df2b, x='Parameter', y='Value', hue='Commodity',ax=b, dodge=True, size=10, linewidth=linewidth, edgecolor='w')
+        if plot_median:
+            sns.stripplot(data=df2b_means, x='Parameter', y='Value', hue='Commodity',ax=b, dodge=True, size=markersize, palette='dark:k', alpha=alpha, marker=marker)
+        b.legend('')
+        alim = a.get_ylim()
+        scale = np.floor(df2b['Value'].min()) if df2b['Value'].min()<0 else np.ceil(df2b['Value'].max())
+        if df2b['Value'].min()<0:
+            b.set(ylim=[alim[0]+scale,alim[1]-1], ylabel=None, xlabel=None)
+        else:
+            b.set(ylim=[alim[0]*scale,alim[1]*scale], ylabel=None, xlabel=None)
     fig.tight_layout(pad=0.8)
     plt.show()
     plt.close()

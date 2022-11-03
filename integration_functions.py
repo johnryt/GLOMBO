@@ -229,6 +229,7 @@ class Sensitivity():
                  n_per_param=5,
                  notes='Initial run',
                  simulation_time = np.arange(2019,2041),
+                 train_time = np.arange(2001,2020),
                  byproduct=False,
                  verbosity=0,
                  param_scale=0.5,
@@ -268,8 +269,13 @@ class Sensitivity():
         n_per_param: int, number of trials to run per parameter when using the run() function to run a
             a very simple one-parameter sensitivity. Used in conjunction with param_scale.
         notes: str, anything you want to be included in the resulting pickle file under the notes index
-        simulation_time: np.ndarray, list of years for running the simulation. Typically either 2001 through
-            2019 or 2019 through 2040.
+        simulation_time: np.ndarray, array of years for running the simulation. Typically either 2001 through
+            2019, 2019 through 2040, or 2001 through 2040.
+        train_time: np.ndarray, array of years to use for training the Bayesian optimization model. Test years
+            would be any in simulation_time not in train_time. Currently trying to use 2001 through 2014 for
+            train_time (approx. 75% of historical period we have), but default is set to 2001-2019 so that
+            demand and mining pre-tuning and integration pre-tuning are not disturbed unless intentionally
+            (train-test split is not the default)
         byproduct: bool, whether we are simulating a mono-product mined commodity or a multi-product mined
             commodity. Have not yet had the chance to test out the True setting
         verbosity: int, tells how much we print as the model runs. Can be anything including -1 which suppresses
@@ -340,6 +346,7 @@ class Sensitivity():
         self.save_mining_info = save_mining_info
         self.trim_result_df = trim_result_df
         self.simulation_time = simulation_time
+        self.train_time = train_time
         self.changing_base_parameters_series = changing_base_parameters_series
         self.additional_base_parameters = additional_base_parameters
         self.data_folder = 'generalization/data' if data_folder is None else data_folder
@@ -359,7 +366,7 @@ class Sensitivity():
         self.pkl_filename = pkl_filename
         self.params_to_change = params_to_change
         self.n_per_param = n_per_param
-        self.notes = f'{notes}, price version: {price_to_use}, price rolling: {historical_price_rolling_window},'
+        self.notes = f'{notes}, price version: {price_to_use}, price rolling: {historical_price_rolling_window}, train_time: {train_time[0]}-{train_time[-1]}'
         self.scenarios = scenarios
         self.overwrite = OVERWRITE
         self.random_state = random_state
@@ -841,12 +848,16 @@ class Sensitivity():
 
         #get scores
         if type(mod)==Integration and self.demand_or_mining!='mining':
-            rmse_list, r2_list = self.get_rmse_r2(mod)
+            test_time = [i for i in self.simulation_time if i not in self.train_time]
+            # loop over three RMSE calculations using different evaluation time periods (full simulation time, test set, train set), with train set last so it is used in the score calculation/tuning
+            for time,time_name in zip([self.simulation_time, test_time, self.train_time],['','test','train']):
+                if len(time)>1:
+                    rmse_list, r2_list = self.get_rmse_r2(mod, time=time)
 
-            #add rmse and r2 score in new_param_series to then be added into rmse_df
-            for param, rmse, r2 in zip(self.objective_parameters, rmse_list, r2_list):
-                new_param_series.loc[param+' RMSE'] = rmse[0]
-                new_param_series.loc[param+' R2'] = r2[0]
+                    #add rmse and r2 score in new_param_series to then be added into rmse_df
+                    for param, rmse, r2 in zip(self.objective_parameters, rmse_list, r2_list):
+                        new_param_series.loc[param+time_name+' RMSE'] = rmse[0]
+                        new_param_series.loc[param+time_name+' R2'] = r2[0]
         else:
             rmse_list, r2_list = self.get_rmse_r2_mining(mod)
 
@@ -878,7 +889,11 @@ class Sensitivity():
 
     def calculate_rmse_r2(self, sim, hist, use_rmse):
         n = len(self.simulation_time)
-        x, y = sim.loc[self.simulation_time].astype(float), hist.loc[self.simulation_time].astype(float)
+        try:
+            x, y = sim.astype(float), hist.astype(float)
+        except KeyError as e:
+            print('train_time input variable must fit entirely within simulation_time variable')
+            raise e
         if hasattr(x,'columns') and 'Global' in x.columns: x=x['Global']
         if hasattr(y,'columns') and 'Global' in y.columns: y=y['Global']
         # m = sm.GLS(x,sm.add_constant(y)).fit(cov_type='HC3')
@@ -900,7 +915,7 @@ class Sensitivity():
         rmse_df = rmse_df.unstack()
         self.rmse_df = rmse_df.copy()
 
-    def get_rmse_r2(self, mod=None):
+    def get_rmse_r2(self, mod=None, time=np.arange(2001,2020)):
         #if no mod is provided, use self.mod, otherwise use mod
         #this is because default model behaviour was to use self.mod but that doesn't work with
         #having multiple samples per BO iteration
@@ -914,8 +929,12 @@ class Sensitivity():
         r2_list = []
         for param in self.objective_parameters:
             if 'SD' not in param:
-                historical = self.historical_data[param].loc[self.simulation_time]
-                simulated = getattr(mod,param_variable_map[param]).loc[self.simulation_time]
+                try:
+                    historical = self.historical_data[param].loc[time]
+                    simulated = getattr(mod,param_variable_map[param]).loc[time]
+                except KeyError as e:
+                    print('train_time input variable must fit entirely within simulation_time variable')
+                    raise e
                 if hasattr(simulated,'columns') and 'Global' in simulated.columns:
                     simulated = simulated['Global']
                 rmse = self.calculate_rmse_r2(simulated,historical,True)

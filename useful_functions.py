@@ -360,7 +360,7 @@ def easy_subplots(nplots, ncol=None, height_scale=1,width_scale=1,use_subplots=F
       plt.figure, which then allows dpi to be specified.'''
     if type(nplots) != int:
         nplots = len(nplots)
-    if nplots <= 4:
+    if nplots <= 4 and ncol is None:
         ncol = nplots
     if nplots%3==0 and ncol is None:
         ncol=3

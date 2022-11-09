@@ -104,7 +104,7 @@ class Individual():
         element_commodity_map = {'Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungsten','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
         commodity_element_map = dict(zip(element_commodity_map.values(),element_commodity_map.keys()))
         if filename!='':
-            if '/' in filename: filename=filename.split('/')[1]
+            if '/' in filename: filename=filename.split('/')[-1]
             self.material = commodity_element_map[filename.split('_')[0].capitalize()]
         self.rmse_not_mae = rmse_not_mae
         self.drop_no_price_elasticity = drop_no_price_elasticity
@@ -132,13 +132,14 @@ class Individual():
                 self.historical_data_column_list = [j for j in self.historical_data_column_list if j in self.historical_data.columns]
 
                 notes = self.big_df[0]['notes']
+                self.notes = notes
                 if 'price rolling: ' in notes:
                     self.price_rolling = notes.split('price rolling: ')[1].split(',')[0]
                     try: self.price_rolling = int(self.price_rolling)
                     except: self.price_rolling = int(self.price_rolling.split()[0])
                 if 'price version: ' in notes:
                     price_to_use = notes.split('price version: ')[1].split(',')[0]
-                    commodity = self.filename if '/' not in self.filename else self.filename.split('/')[1]
+                    commodity = self.filename if '/' not in self.filename else self.filename.split('/')[-1]
                     commodity = commodity.split('_')[0].capitalize()
                     if price_to_use!='case study data':
                         price_update_file = pd.read_excel(self.price_adjustment_results_file_path,index_col=0)
@@ -150,6 +151,7 @@ class Individual():
                         else:
                             self.historical_data = pd.concat([self.historical_data,historical_price],axis=1).sort_index().dropna(how='all')
                 if 'Primary commodity price' in self.historical_data.columns:
+                    self.historical_data.loc[:,'Original primary commodity price'] = self.historical_data.loc[:,'Primary commodity price']
                     self.historical_data.loc[:,'Primary commodity price'] = self.historical_data.loc[:,'Primary commodity price'].rolling(self.price_rolling,min_periods=1,center=True).mean()
                 self.price =  pd.concat([big_df.loc['results'][i]['Primary commodity price'] for i in big_df.columns],keys=big_df.columns,axis=1).loc[2001:2019]
                 self.hyperparam =  pd.concat([big_df.loc['hyperparam'][i] for i in big_df.columns],keys=big_df.columns,axis=1)
@@ -209,14 +211,15 @@ class Individual():
         self.historical_data_column_list = ['Total demand','Primary commodity price','Primary supply','Scrap demand','Total production','Primary demand']
         self.historical_data_column_list = [j for j in self.historical_data_column_list if j in historical_data.columns]
 
-        notes = big_df[0]['notes']
+        notes = big_df.iloc[:,0]['notes']
+        self.notes = notes
         if 'price rolling: ' in notes:
             self.price_rolling = notes.split('price rolling: ')[1].split(',')[0]
             try: self.price_rolling = int(self.price_rolling)
             except: self.price_rolling = int(self.price_rolling.split()[0])
         if 'price version: ' in notes:
             price_to_use = notes.split('price version: ')[1].split(',')[0]
-            commodity = self.filename if '/' not in self.filename else self.filename.split('/')[1]
+            commodity = self.filename if '/' not in self.filename else self.filename.split('/')[-1]
             commodity = commodity.split('_')[0].capitalize()
             if price_to_use!='case study data':
                 price_update_file = pd.read_excel(self.price_adjustment_results_file_path,index_col=0)
@@ -229,6 +232,7 @@ class Individual():
                     historical_data = pd.concat([historical_data,historical_price],axis=1).sort_index().dropna(how='all')
 
         if 'Primary commodity price' in historical_data.columns:
+            historical_data.loc[:,'Original primary commodity price'] = historical_data.loc[:,'Primary commodity price']
             historical_data.loc[:,'Primary commodity price'] = historical_data.loc[:,'Primary commodity price'].rolling(self.price_rolling,min_periods=1,center=True).mean()
 
         self.objective_params = self.historical_data_column_list[:n_params]
@@ -257,10 +261,9 @@ class Individual():
         self.big_df = big_df.copy()
 
         if 'rmse_df' in big_df.index and type(big_df.loc['rmse_df'].iloc[-1])!=int:
-            self.rmse_df = big_df.loc['rmse_df'].iloc[-1][0]
+            self.rmse_df = big_df.loc['rmse_df'].iloc[-1].iloc[:,0]
             self.rmse_df.index = pd.MultiIndex.from_tuples(self.rmse_df.index)
             self.rmse_df = self.rmse_df.unstack(0)
-
         if 'mine_data' in big_df.index and type(big_df.loc['mine_data'].iloc[1])==pd.core.frame.DataFrame:
             self.mine_data = pd.concat([big_df[i]['mine_data'] for i in big_df.columns],keys=big_df.columns)
         else:
@@ -600,7 +603,7 @@ class Individual():
         best.plot(ax=ax[0],linewidth=4,color='blue')
         historical_demand.plot(ax=ax[0],linewidth=4,color='k').grid(axis='x')
         material = self.filename.split('_')[0]
-        material = material if '/' not in material else material.split('/')[1]
+        material = material if '/' not in material else material.split('/')[-1]
 
         if self.demand_flag:
             ax[0].set(title='Historical '+material+' demand',xlabel='Years',ylabel=f'{material} demand ({unit})'.capitalize())

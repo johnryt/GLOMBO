@@ -38,6 +38,8 @@ class Many():
 
     The Many object can also be passed to many of the other functions included
     in this file, which include:
+
+    For feature importance:
     - feature_importance
     - nice_feature_importance_plot
     - commodity_level_feature_importance
@@ -48,17 +50,48 @@ class Many():
     - plot_important_parameter_scatter
     - commodity_level_feature_importance_heatmap
     - nice_plot_pretuning
-    - get_unit
+
+    For running future scenarios:
     - run_future_scenarios
         - op_run_future_scenarios
         - op_run_sensitivity_fn
         - op_run_future_scenarios_parallel
         - run_scenario_set
+    - generate_clustered_hyperparam
+
+    For comparing train and test sets:
     - get_pretuning_params
     - get_train_test_scores
     - get_commodity_scores
     - get_best_columns
-    - generate_clustered_hyperparam
+    - plot_given_columns
+    - plot_best_scenarios_train_test
+    - plot_test_score_vs_train_score
+        - plot_test_score_vs_train_score_commodity
+    - plot_best_scores_history
+    - plot_best_scores_hyperparam_distributions
+
+    For comparing constrained and unconstrained tuning:
+    - compare_constrained_unconstrained_tuning
+        - get_rmse_df_results_hyperparam
+        - get_expected_parameter_signs
+
+    For SHAP and SRI analysis:
+    - SHAP
+        - __init__
+        - initialize
+        - run_tree_based_regression
+        - initialize_shap
+        - get_interactions
+        - plot_shap
+        - summary_plot
+        - waterfall_plot
+        - heatmap_plot
+        - shap_vs_param_plot
+        - gamma_facet
+    - draw_facet_dendrogram
+    - plot_sri_matrices
+
     Not all of the above take Many as an input; some are standalone or are
     called by other functions in this file.
     '''
@@ -112,7 +145,7 @@ class Many():
             print('-'*40)
             print(material)
             mat = self.element_commodity_map[material].lower()
-            filename=f'{self.pkl_folder}/{mat}{filename_base}.pkl'
+            filename=f'{self.pkl_folder}/{mat}{filename_base}{filename_modifier}.pkl'
             self.shist1 = Sensitivity(pkl_filename=filename, data_folder=self.data_folder,changing_base_parameters_series=material,notes='Monte Carlo aluminum run',
                             simulation_time=np.arange(2001,2020),OVERWRITE=True,use_alternative_gold_volumes=True,
                             constrain_tuning_to_sign=constrain_tuning_to_sign,
@@ -165,7 +198,7 @@ class Many():
             self.shist.historical_sim_check_demand(n_runs,demand_or_mining='mining')
             print(f'time elapsed: {str(datetime.now()-t1)}')
 
-    def run_all_integration(self, n_runs=200, tuned_rmse_df_out_append='', commodities=None, train_time=np.arange(2001,2020), simulation_time=np.arange(2001,2020), normalize_objectives=False,constrain_previously_tuned=True, verbosity=0, save_mining_info=False, trim_result_df=True, constrain_tuning_to_sign=True, filename_base='_run_hist', filename_modifier=''):
+    def run_all_integration(self, n_runs=200, tuned_rmse_df_out_append=None, commodities=None, train_time=np.arange(2001,2020), simulation_time=np.arange(2001,2020), normalize_objectives=False,constrain_previously_tuned=True, verbosity=0, save_mining_info=False, trim_result_df=True, constrain_tuning_to_sign=True, filename_base='_run_hist', filename_modifier=''):
         """
         Runs parameter tuning, trying to match to historical demand, price, and
         mine production. Tuning uses Bayesian optimization. Saves all results in
@@ -175,6 +208,7 @@ class Many():
         n_runs: int, number of Bayesian optimization runs until stopping
         tuned_rmse_df_out_append: str, string appended to tuned_rmse_df_out
             filename so you can differentiate tuning results, if needed.
+            Defaults to using the same value as filename_modifier input
         commodities: None or list, commodity names to run (formatted as in the
             case study data.xlsx file) if a list is given, if None will use
             self.ready_commodities
@@ -218,6 +252,9 @@ class Many():
         filename_modifier: str, filename modifier, comes after the `_mining` but
             before `.pkl`
         """
+        if tuned_rmse_df_out_append is None:
+            tuned_rmse_df_out_append = filename_modifier
+
         commodities = self.ready_commodities if commodities==None else commodities
         for material in commodities:
             t1 = datetime.now()
@@ -599,12 +636,15 @@ def get_X_df_y_df(self, commodity=None, objective=None, standard_scaler=True):
         None, uses the full dataframe, going across all commodities
     objective: None or str. If str, has to be one of the columns in
         multi_scenario_results_formatted, otherwise will be using `score` or
-        `RMSE` from rmse_df dataframe depending on whether using and Integration
-        or demandModel formulation
+        `RMSE` from rmse_df dataframe depending on whether using the Integration
+        or demandModel formulation. If str, will try to do the mean difference
+        from baseline.
     standard_scaler: bool, whether to use standard scaler to rescale data so it
         is N(0,1), which we should probably always do.
     """
     using_rmse_y = objective is None or hasattr(self,'rmse_df')
+    if objective is None and not hasattr(self,'rmse_df'):
+        raise ValueError('Many object does not have rmse_df, so cannot support running with objective=None. Set objective to something you want to observe, e.g. `Conc. supply`')
     if using_rmse_y: using_rmse_y = using_rmse_y and np.any([x in self.rmse_df.index.get_level_values(1).unique() for x in [objective,'RMSE','score']])
     if hasattr(self,'rmse_df'): rmse_df = self.rmse_df.copy().astype(float)
     if not using_rmse_y:
@@ -644,7 +684,8 @@ def get_X_df_y_df(self, commodity=None, objective=None, standard_scaler=True):
             y_df = pd.DataFrame(y_df)
         y_df = y_df.rename(columns={y_df.columns[0]:objective})
     else:
-        print(rmse_df.index.get_level_values(1).unique())
+        print('Potential objective values:\n')
+        print(rmse_df.index.get_level_values(1).unique(),'\n')
         print(self.multi_scenario_results_formatted.columns)
         raise ValueError('cannot load y_df objective')
 
@@ -1313,6 +1354,8 @@ def run_future_scenarios(data_folder='data', run_parallel=3, supply_or_demand='d
     from integration_functions import Sensitivity
     from datetime import datetime
 
+    if verbosity>-2:
+        print(f'using tuned_rmse_df_out_append={tuned_rmse_df_out_append}')
     if supply_or_demand is None:
         scenarios = ['']
     else:
@@ -1763,3 +1806,994 @@ def generate_clustered_hyperparam(rmse_df, commodity, n_best_scenarios=25, n_per
             hyperparam_ph[i].iloc[:n_per_baseline].plot.hist(ax=a,title=i)
         return hyperparam_ph.T, fig,ax
     return hyperparam_ph.T
+
+def plot_given_columns(many, commodity, columns, column_name=None, ax=None, column_subset=None, dpi=50):
+    """
+    Plots historical vs simulated demand, mining,
+    and primary commodity price for a given commodity
+    and whichever hyperparameter sets given as the
+    `columns` variable. Can get the n_best_scenarios
+    using the get_best_columns function, or more manually
+    by running get_train_test_scores on an rmse_df (or
+    commodity subset), then running its output through
+    get_commodity_scores, e.g.
+
+    rr = get_train_test_scores(many_test.integ.rmse_df.loc['silver'])
+    s1 = get_commodity_scores(rr,None)
+    then passing s1.loc[s1.selection2].index as the columns input.
+
+    -------------
+    many: Many() object, needs to have results object of its own,
+        so if you ran get_multiple to load many, you should pass
+        many.integ to this function
+    commodity: str, commodity name in lowercase form
+    columns: list, columns from rmse_df to plot. Will highlight
+        the lowest-score one if no column_subset is passed
+    column_name: str, gets included in the plot title if not None
+    ax: matplotlib axes object, can leave out and this will
+        create its own plot for you.
+    column_subset: list, allows you to select a subset of the
+        passed columns to highlight, or to just plot two groups
+        of parameter sets simultaneously, since column_subset
+        and columns do not have to intesect. Pass a list or
+        array of numbers corresponding to rmse_df columns.
+    dpi: dots per inch, controls resolution. Only functions if
+        the ax input is None.
+    """
+    if ax is None:
+        fig,ax=easy_subplots(3, dpi=dpi)
+    else:
+        fig = 0
+    objective_results_map = {'Total demand':'Total demand','Primary commodity price':'Refined price',
+                                 'Primary demand':'Conc. demand','Primary supply':'Mine production',
+                                'Conc. SD':'Conc. SD','Scrap SD':'Scrap SD','Ref. SD':'Ref. SD'}
+    for i,a in zip(['Total demand','Primary commodity price','Primary supply'], ax):
+        results = many.results.copy()[objective_results_map[i]].sort_index()\
+            .loc[idx[commodity,:,2001:]].droplevel(0).unstack(0)
+        if 'SD' not in i:
+            historical_data = many.historical_data.copy()[i].loc[commodity].loc[2001:2019]
+        else:
+            historical_data = pd.Series(results.min(),[0])
+        results_ph = results.copy()
+        results = results[columns]
+
+        diction = get_unit(results, historical_data, i)
+        results, historical_data, unit = [diction[i] for i in ['simulated','historical','unit']]
+        results_ph *= results[columns[0]].mean()/results_ph[columns[0]].mean()
+        sim_line = a.plot(results,linewidth=1,color='gray',alpha=0.3,label=results.columns)
+        if column_subset is None:
+            best_line= a.plot(results[columns[0]],linewidth=6,label='Simulated',color='tab:blue')
+        else:
+            best_line= a.plot(results_ph[column_subset],linewidth=1,label='Simulated',color='tab:blue')
+        mins = min(historical_data.min(),results[columns[0]].min())*0.95
+        maxs = max(historical_data.max(),results[columns[0]].max())*1.1
+        hist_line = a.plot(historical_data,label='Historical',color='k',linewidth=6)
+        m = sm.GLS(historical_data.loc[results.index], sm.add_constant(results[columns[0]])).fit(cov_type='HC3')
+        mse = round(m.mse_resid**0.5,2)
+        mse = round(m.rsquared,2)
+        if column_name is not None:
+            title=f'Best {i}, {column_name},\nR2={mse}, {columns[0]}'
+        else:
+            title=f'Best {i},\nR2={mse}, {columns[0]}'
+        a.set(title=title,
+              ylabel=i+' ('+unit+')',xlabel='Year',ylim=(mins,maxs))
+        if len(sim_line)<10:
+            a.legend()
+    return fig,ax
+
+def plot_best_scenarios_train_test(many, weight_price=1, dpi=50):
+    """
+    plotting the 25 best scenarios for each of the score
+    bases (train, test, total, sum) for each commodity.
+    Makes a very large grid for each commodity.
+
+    many: Many() object, needs to have results object of its own,
+        so if you ran get_multiple to load many, you should pass
+        many.integ to this function
+    weight_price: exponent price gets raised to when summing the
+        normed RMSEs - is an effort to try to see what the best
+        scenario looks like with different weighting
+    dpi: float, dots per inch, controls figure resolution
+    """
+    fig_list = []
+    ax_list = []
+    commodities = many.results.index.get_level_values(0).unique()
+    for commodity in commodities:
+        fig,axes = easy_subplots(12,4,dpi=dpi)
+        n=-1
+        column_dict = get_best_columns(many, commodity=commodity)
+        for column_name in ['train','test','total','sum']:
+            n+=1
+            ax = axes[n::4]
+            columns = column_dict[column_name+' score']
+            plot_given_columns(many, commodity, columns, column_name, ax)
+        fig.tight_layout()
+        fig.suptitle(commodity.capitalize(),weight='bold',y=1.02,x=0.515)
+        fig_list += [fig]
+        ax_list += [ax]
+        plt.show()
+        plt.close()
+    return fig_list
+
+def plot_test_score_vs_train_score_commodity(rmse_df, commodity, ax, quantile=0.5, show_selection=None, n_best_scenarios=25, color=True, plot=True):
+    """
+    plots scatterplots of train vs test scores for a commodity,
+    with the color option making it so they are colored according
+    to the total score.
+
+    show_selection: None or str, where str can be pareto, selection1,
+    or selection2. Causes the corresponding scenarios to be highlighted
+    in blue.
+    """
+    rmse_train_test = get_train_test_scores(rmse_df, weight_price=1)
+    scores = get_commodity_scores(rmse_train_test,commodity,n_best_scenarios=n_best_scenarios)
+
+    x = 'train score'
+    y = 'test score'
+    scores = scores.loc[scores['train score']<scores['train score'].quantile(quantile)]
+    s=60
+    if color and plot:
+        ax.scatter(scores[x],scores[y],s=s, c=scores['total score'],cmap='gist_earth_r')
+    elif plot:
+        ax.scatter(scores[x],scores[y],s=s)
+
+    if show_selection is not None:
+        selection = scores.loc[scores[show_selection]]
+        if plot:
+            ax.scatter(selection[x],selection[y], s=s, c='blue')
+    if plot:
+        ax.set(xlabel=x.capitalize(), ylabel=y.capitalize())
+    return scores
+
+def plot_test_score_vs_train_score(many, quantile=0.5, n_best_scenarios=25, show_selection=None, color=True, plot=True):
+    """
+    plots scatterplots of train vs test scores for each commodity,
+    with the color option making it so they are colored according
+    to the total score.
+
+    show_selection: None or str, where str can be pareto, selection1,
+    or selection2. Causes the corresponding scenarios to be highlighted
+    in blue.
+    """
+    commodities = [many.element_commodity_map[i].lower() for i in many.ready_commodities]
+    if plot:
+        fig,ax = easy_subplots(commodities)
+    else:
+        ax = commodities
+    scores_dict = {}
+    for commodity,a in zip(commodities,ax):
+        scores_dict[commodity] = plot_test_score_vs_train_score_commodity(
+            many.rmse_df, commodity, a, quantile=quantile, n_best_scenarios=25,
+            show_selection=show_selection, color=color, plot=plot
+        )
+        if plot:
+            a.set(title=commodity.capitalize())
+    if plot:
+        fig.tight_layout()
+    else: fig,ax=None,None
+    return fig, ax, scores_dict
+
+def plot_best_scores_history(many, commodity, show_selection='selection1', n_best_train=0):
+    """
+    Just used to check the historical vs
+    simulated for a single commodity, may
+    be deprecated
+    """
+    fig,ax,scores_dict = plot_test_score_vs_train_score(many, show_selection=None,
+                                                        quantile=0.5, color=True,plot=False)
+    scores = scores_dict[commodity]
+    fig,ax=easy_subplots(3)
+    columns = [i for i in scores.loc[scores[show_selection]].index if i not in [0]]
+    if n_best_train!=0:
+        column_subset = columns
+        columns = [i for i in scores['train score'].sort_values().head(n_best_train).index if i not in [0]]
+    else: column_subset=None
+    # columns = [i for i in scores.sort_values(by='sum').head(20).index if i not in [0]]
+    plot_given_columns(many, commodity, columns, show_selection, ax, column_subset=column_subset)
+    fig.tight_layout()
+
+def plot_best_scores_hyperparam_distributions(many, commodity):
+    """
+    Trying to see how the hyperparameter
+    distributions are affected by choosing
+    selection1 vs selection2 for baseline
+    """
+    fig,ax,scores_dict = plot_test_score_vs_train_score(many, show_selection=None,
+                                                        quantile=0.5, color=True,plot=False)
+    scores = scores_dict[commodity]
+    rmse_df = many.rmse_df.copy().loc[commodity]
+    droppers = [i for i in rmse_df.index.unique() if np.any([j in i for j in ['score','R2','RMSE']])]
+    rmse_df.drop(droppers,inplace=True)
+    fig,ax = easy_subplots(rmse_df.index.unique())
+    rmse_df_subset = pd.concat([
+        rmse_df[scores.loc[scores.selection1].index].T,
+        rmse_df[scores.loc[scores.selection2].index].T],
+        keys=['Option 1','Option 2'])
+    for i,a in zip(rmse_df_subset.columns,ax):
+        mins = rmse_df_subset[i].min()
+        maxs = rmse_df_subset[i].max()
+        # rmse_df_subset[i].unstack(0).plot.hist(ax=a,alpha=0.5,bins=np.linspace(mins,maxs,50))
+        rmse_df_subset[i].unstack(0).plot.kde(ax=a,bw_method=0.2)
+        a.set(title=make_parameter_names_nice([i])[i])
+    fig.tight_layout()
+
+def get_rmse_df_results_hyperparam(commodity, filename_modifier, demand_or_mining='demand', filename_base='_run_hist',file_folder='data/Historical tuning'):
+    """
+    returns rmse_df, results, and hyperparam for an individual
+    pkl file, taking in all the necessary inputs to describe the
+    filename.
+    """
+    demand_or_mining = demand_or_mining.replace('demand','DEM')
+    filename=f'{file_folder}/{commodity}{filename_base}{filename_modifier}_{demand_or_mining}.pkl'
+    df = pd.read_pickle(filename)
+    ph = df.loc['rmse_df'].iloc[-1][0]
+    ph.index = pd.MultiIndex.from_tuples(ph.index)
+    ph2 = pd.concat([df.loc['results'][i] for i in df.loc['results'].index],axis=0,keys=df.columns)
+    ph3 = pd.concat([df.loc['hyperparam'][i] for i in df.loc['results'].index],axis=0,keys=df.columns)
+    return ph,ph2,ph3
+
+def get_expected_parameter_signs(demand_or_mining, rmse_df_multi):
+    """
+    Used in compare_constrained_unconstrained_tuning
+    function. Inputs correspond with variables in that
+    fuction.
+
+    Returns a dataframe of `positive` or `negative` for
+    each parameter based on its value in the `_constrain`
+    run in the rmse_df_multi dataframe. If `_constrain`
+    is not in the rmse_df_multi dataframe, puts `unknown`
+
+    rmse_df_multi: pandas dataframe with three index levels:
+        filename_modifier, scenario_number, parameter
+    """
+    if '_constrain' in rmse_df_multi.index.levels[0]:
+        tuning_range = np.sign(rmse_df_multi.loc['_constrain'].loc[rmse_df_multi.index.get_level_values(1)[0]])
+        tuning_range.loc[:] = ['positive' if i>0 else 'negative' for i in tuning_range.values]
+    else:
+        tuning_range = rmse_df_multi.loc[
+            rmse_df_multi.index.get_level_values(0)[0]].loc[rmse_df_multi.index.get_level_values(1)[0]]
+        tuning_range.loc[:] = ['unknown' for i in tuning_range.values]
+
+    return tuning_range
+
+def compare_constrained_unconstrained_tuning(plot_cummin_rmse=True,log_cummin_rmse=True,plot_best_distributions=True,n_best_distributions=25,demand_or_mining='demand', to_compare = ['_constrain','_unconstrain','_unconstrain1'],dpi=50):
+    """
+    plot_cummin_rmse: bool, whether to plot the cumulative minimum
+        RMSE/score value vs the number of Bayesian optimization
+        runs, for each commodity and tuning method
+    log_cummin_rmse: bool, whether to take the log10 of RMSE so it is
+        easier to visualize
+    plot_best_distributions: bool, whether to plot the distributions
+        for the parameters tuned for each commodity and tuning method
+    n_best_distributions: int, number of best parameters to use in
+        plot_best_distributions
+    mining_or_demand: str, either `mining` or `demand`, selects which
+        pre-tuning method parameters are shown
+    to_compare: list, list containing the filename_modifier strings
+        for each tuning method to compare
+    dpi: float, dots per inch, figure resolution
+    """
+    ready_commodities = ['Al','Au','Sn','Cu','Ni','Ag','Zn','Pb','Steel']
+    element_commodity_map = {'Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungsten','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
+    commodities = [element_commodity_map[i].lower() for i in ready_commodities]
+
+    fig_dict = {}
+    if plot_cummin_rmse:
+        cummin_fig, cummin_ax = easy_subplots(commodities,dpi=dpi)
+
+    if demand_or_mining in ['demand','mining']:
+        rmse_or_score = 'RMSE'
+    else:
+        rmse_or_score = 'score'
+
+    rmse_df_all = pd.DataFrame()
+    for commodity,cummin_a in zip(commodities,cummin_ax):
+        rmse_df_multi = pd.concat([get_rmse_df_results_hyperparam(commodity=commodity,
+                                                                  filename_modifier=tc,
+                                                                  demand_or_mining=demand_or_mining,
+                                                                  filename_base='_run_hist',
+                                                                  file_folder='data/Historical tuning')[0]
+                                   for tc in to_compare],
+                                  keys=to_compare)
+        rmse_df_all = pd.concat([rmse_df_all,
+                                 pd.concat([rmse_df_multi],keys=[commodity])])
+        expected_parameter_signs = get_expected_parameter_signs(demand_or_mining,rmse_df_multi)
+
+        if plot_cummin_rmse:
+            for tc in to_compare:
+                rmse_df_multi.loc[tc].loc[idx[:,rmse_or_score]].cummin().plot(
+                    logy=log_cummin_rmse,
+                    label=tc.replace('_','').capitalize(),
+                    ax=cummin_a,
+                    title=f'{commodity.capitalize()}',
+                    xlabel='n iterations',
+                    ylabel='RMSE'
+                )
+            cummin_a.legend()
+            # ph.loc[idx[:,'RMSE']].plot()
+
+        best_multi = {}
+        for tc in to_compare:
+            best = rmse_df_multi.loc[tc].loc[idx[:,rmse_or_score]].sort_values().head(n_best_distributions).index
+            best_multi[tc] = best
+        if plot_best_distributions:
+            demand_params = [i for i in rmse_df_multi.index.get_level_values(2).unique() if not
+                             np.any([j in i for j in ['RMSE','score','R2','region_specific_price_response']])]
+            dist_fig,dist_ax = easy_subplots(demand_params)
+            for b,a in zip(demand_params,dist_ax):
+                for tc in to_compare:
+                    c = expected_parameter_signs[b]
+                    rmse_df_multi.loc[tc].loc[idx[best_multi[tc],b]].plot.hist(
+                        ax=a,label=tc.replace('_','').capitalize(),alpha=0.5,
+                        title=f'{b}\nexpect {c}'
+                    )
+                a.legend()
+                # ph.loc[idx[]].sample(ph.loc[ph.loc[idx[:,'RMSE']]])
+            dist_fig.tight_layout()
+            dist_fig.suptitle(f'{commodity.capitalize()}',y=1.05,weight='bold')
+            fig_dict['dist_fig_'+commodity] = dist_fig
+    if plot_cummin_rmse:
+        cummin_fig.tight_layout()
+        fig_dict['cummin_fig'] = cummin_fig
+    rmse_df_all.index = pd.MultiIndex.from_tuples(rmse_df_all.index)
+    return rmse_df_all, fig_dict
+
+def get_pca_tsne_results(all_hyperparam, n_best):
+    """
+    Fits the PCA and TSNE models to the data. Does
+    the standard scaler transformation for both.
+    returns 2 dataframes, pca_results and tsne_results
+    in that order.
+
+    all_hyperparam: pandas dataframe, from
+        format_data_for_pca_tsne function
+    n_best: int, number of best-fitting
+        parameters to use in fitting the
+        PCA and TSNE models
+    """
+    from sklearn.manifold import TSNE
+    from sklearn.decomposition import PCA
+    from sklearn.preprocessing import StandardScaler
+    n=n_best
+    x = all_hyperparam.loc[:,:n].unstack().stack(0)
+    tsne = TSNE(n_components=2, verbose=0, random_state=123)
+    pca = PCA(n_components=2)
+    scaler = StandardScaler()
+    x_std = scaler.fit_transform(x.values)
+    # x_std=x.values
+    z_pca = pca.fit_transform(x_std)
+    z_tsne = tsne.fit_transform(x_std)
+
+    tsne_results = pd.DataFrame(z_tsne, index=x.index, columns=['T-SNE 1','T-SNE 2'])
+    pca_results = pd.DataFrame(z_pca, index=x.index, columns=['PCA 1','PCA 2'])
+    return pca_results,tsne_results
+
+def format_data_for_pca_tsne(demand_or_mining='demand', filename_base='_run_hist', filename_modifier=''):
+    """
+    returns a dataframe including all the hyperparameters
+    for each commodity for pre-tuning. For mining, currently
+    picks just three parameters (which are typically important
+    ones). Sorts each commodity sub-frame according to lowest RMSE.
+
+    demand_or_mining: str, `demand` or `mining`, determines
+        which set of pre-tuning hyperparameters are used.
+    filename_base: str
+    filename_modifier: str
+    """
+    mining_only = demand_or_mining=='mining'
+    ready_commodities = ['Al','Au','Sn','Cu','Ni','Ag','Zn','Pb','Steel']
+    element_commodity_map = {'Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungsten','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
+    all_rmse_df = pd.DataFrame()
+    for material in ready_commodities:
+        material = element_commodity_map[material].lower()
+        indiv_demand = Individual(filename=f'data/Historical tuning/{material}{filename_base}{filename_modifier}_DEM.pkl',rmse_not_mae=False,dpi=50)
+        indiv_mining = Individual(filename=f'data/Historical tuning/{material}{filename_base}{filename_modifier}_mining.pkl',rmse_not_mae=False,dpi=50)
+        # both = pd.concat([indiv_mining.rmse_df.rename({'R2':'Mining R2','RMSE':'Mining RMSE'}),indiv_demand.rmse_df.rename({'R2':'Demand R2','RMSE':'Demand RMSE'})])
+        if mining_only:
+            df = indiv_mining.rmse_df.copy().sort_values(by='RMSE',axis=1).T.reset_index(drop=True).T
+            df = df.rename({'R2':'Mining R2','RMSE':'Mining RMSE'})
+            both = pd.concat([df])
+        else:
+            df = indiv_demand.rmse_df.copy().sort_values(by='RMSE',axis=1).T.reset_index(drop=True).T
+            df = df.rename({'R2':'Demand R2','RMSE':'Demand RMSE'})
+            both = pd.concat([df])
+        both = pd.concat([both],keys=[material])
+        all_rmse_df = pd.concat([all_rmse_df,both])
+    # all_hyperparam = all_rmse_df.drop(['Mining R2','Mining RMSE','Demand R2','Demand RMSE'],level=1)
+    if 'Mining R2' in all_rmse_df.index.get_level_values(1).unique():
+        all_hyperparam = all_rmse_df.drop(['Mining R2','Mining RMSE'],level=1)
+        all_hyperparam = all_hyperparam.loc[idx[:,['mine_cu_margin_elas','primary_oge_scale','mine_cost_tech_improvements']],:]
+    if 'Demand R2' in all_rmse_df.index.get_level_values(1).unique():
+        all_hyperparam = all_rmse_df.drop(['Demand R2','Demand RMSE'],level=1)
+    return all_hyperparam
+
+def plot_pca_tsne(pca_results, tsne_results, demand_or_mining='demand', filename_modifier='', n_best=25, dpi=50):
+    """
+    plots 2-dimensional TSNE and PCA plots for the given
+    results, for each commodity.
+
+    Returns fig_dict, all_hyperparam, pca_results, tsne_results
+
+    demand_or_mining: str, `demand` or `mining`, determines
+        which set of pre-tuning hyperparameters are used.
+    filename_base: str
+    filename_modifier: str
+    n_best: int, number of best-fitting
+        parameters to use in fitting the
+        PCA and TSNE models
+    dpi: float, dots per inch, figure resolution
+    """
+    all_hyperparam = format_data_for_pca_tsne(demand_or_mining,filename_modifier=filename_modifier)
+    pca_results,tsne_results = get_pca_tsne_results(all_hyperparam, n_best)
+
+    fig_dict = {}
+    fig,ax=easy_subplots(1,dpi=dpi)
+    tsne_results_sns = tsne_results.reset_index().rename(columns={'level_0':'Commodity','index':'Commodity','level_1':'Scenario'})
+    g = sns.scatterplot(data=tsne_results_sns, x='T-SNE 1', y='T-SNE 2', hue='Commodity',ax=ax[0])
+    sns.move_legend(g,loc=(1,0))
+    fig_dict['tsne'] = fig
+
+    fig,ax=easy_subplots(1,dpi=dpi)
+    pca_results_sns = pca_results.reset_index().rename(columns={'level_0':'Commodity','index':'Commodity','level_1':'Scenario'})
+    g = sns.scatterplot(data=pca_results_sns, x='PCA 1', y='PCA 2', hue='Commodity', ax=ax[0])
+    sns.move_legend(g,loc=(1,0))
+    fig_dict['pca'] = fig
+    return fig_dict, all_hyperparam, pca_results, tsne_results
+
+class SHAP():
+    '''
+    A useful description of the way SHAP produces interaction effects:
+      (see https://www.databricks.com/blog/2019/06/17/detecting-bias-with-shap.html)
+      The total effect of identifying as female on the prediction can be
+      broken down into the effect of identifying as female AND being an
+      engineering manager, AND working with Windows, etc
+
+    Another good link, with some resources listed at the bottom:
+     (see https://blog.datascienceheroes.com/how-to-interpret-shap-values-in-r/#:~:text=How%20to%20interpret%20the%20shap%20summary%20plot%3F%201,point%20represents%20a%20row%20from%20the%20original%20dataset.)
+     There is a vast literature around this technique, check the online book Interpretable Machine Learning by Christoph Molnar. It addresses in a nicely way Model-Agnostic Methods and one of its particular cases Shapley values. An outstanding work.
+        https://christophm.github.io/interpretable-ml-book/shapley.html
+      From classical variable, ranking approaches like weight and gain, to shap values: Interpretable Machine Learning with XGBoost by Scott Lundberg.
+        https://towardsdatascience.com/interpretable-machine-learning-with-xgboost-9ec80d148d27
+      A permutation perspective with examples: One Feature Attribution Method to (Supposedly) Rule Them All: Shapley Values.
+        https://towardsdatascience.com/one-feature-attribution-method-to-supposedly-rule-them-all-shapley-values-f3e04534983d
+
+    -----------------------------
+    Initialization variables:
+    many: instance of the Many class, with data loaded
+    commodity: (None | str), commodity name, upper or lower case. None
+        causes all commodities to be used; individual commodities can
+        be used by giving their corresponding string
+    standard_scaler: bool, whether to run
+        sklearn.preprocessing.StandardScaler on each column of data such
+        that it is normalized to have mean 0 and std 1
+    dummies: bool, whether to include commodity-level dummy variables
+        (e.g. a column of zeros with 1s for all Ag scenarios)
+    split_frac: float (0,1), for train-test split in creating the ML
+        model for the tree-based regression we get SHAP values from
+    Regressor: tree-based regression class, can be RandomForestRegressor,
+        ExtraTreesRegressor, GradientBoostingRegressor, likely others;
+        regression to use for the tree-based regression that we get SHAP values from
+    use_train_data: bool, whether to use the train data rather than test
+        data for shap.TreeExplainer(regression_model).explainer(data)
+    objective:  None or str. If str, has to be one of the columns in
+        multi_scenario_results_formatted, otherwise will be using `score`
+        or `RMSE` from rmse_df dataframe depending on whether using the
+        Integration or demandModel formulation. If str, will try to do
+        the mean difference from baseline.
+    -----------------------------
+    Methods:
+    initialize: runs all the main code (run_tree_based_regression, initialize_shap,
+        and gamma_facet) to produce the data for variables rmse_df, shap_values_df,
+        shap_interaction_df, synergy_matrix, independence_matrix, redundancy_matrix
+    run_tree_based_regression: splits rmse_df and runs a tree-based regression model
+        for RMSE from the parameter values, so we can then run SHAP on that
+    initialize_shap: sets up the shap.TreeExplainer object from the regression model,
+        runs its explainer method on the data, and sets up the arrays and dataframes
+        for shap_values/shap_values_df and shap_interaction_values/shap_interaction_df
+    get_interactions: precursor to gamma_facet, which uses the equations in Ittner et
+        al 2021 paper to calculate the synergy, independence, and redundancy matrices.
+        This has no correction for non-orthogonality but is much faster
+    plot_shap: plots the various SHAP plots using the shap methods summary, waterfall,
+        and heatmap, as well as plotting the shap value vs parameter value for each
+        parameter
+    summary_plot: Does the SHAP summary plot (the one with lots of
+        little colored dots across lines for each parameter)
+    waterfall_plot: does the SHAP waterfall plot for a single data point
+    heatmap_plot: Does the SHAP heatmap plot, which is fairly similar to
+        the summary plot in terms of information, as far as I
+        can tell
+    shap_vs_param_plot: plots the SHAP values as functions of the
+        corresponding parameter value. Similar to an unstacked
+        version of the summary plot.
+
+    -------------
+    Typical run looks like:
+    sh = SHAP(many,commodity='aluminum',split_frac=0.6, use_train_data=False,
+              standard_scaler=True, objective='Conc. supply')
+    sh.initialize()
+    sh.plot_shap(dpi=50,highlight_best=True)
+    '''
+    def __init__(self, many, commodity=None, standard_scaler=True, dummies=False, split_frac=0.5, Regressor=RandomForestRegressor, use_train_data=False, objective=None):
+        self.many = many
+        if commodity!=None:
+            commodity=commodity.lower()
+        self.commodity = commodity
+        self.standard_scaler = standard_scaler
+        self.dummies = dummies
+        self.split_frac = split_frac
+        self.Regressor = Regressor
+        self.use_train_data = use_train_data
+        self.objective = objective
+
+    def initialize(self):
+        '''
+        runs all the main code (run_tree_based_regression, initialize_shap,
+        and gamma_facet) to produce the data for variables rmse_df,
+        shap_values_df, shap_interaction_df, synergy_matrix,
+        independence_matrix, redundancy_matrix
+        '''
+        self.run_tree_based_regression(self.many, commodity=self.commodity, standard_scaler=self.standard_scaler,
+                                       dummies=self.dummies, split_frac=self.split_frac, Regressor=self.Regressor,)
+        self.initialize_shap()
+        self.gamma_facet() # was previously self.get_interactions(), but have shifted in favor of the package provided by Ittner (see function notes)
+
+    def run_tree_based_regression(self, many, commodity=None, standard_scaler=True, dummies=False, split_frac=0.5, Regressor=RandomForestRegressor, objective=None):
+#         self.rmse_df = many.rmse_df_sorted.copy().astype(float)
+#         rmse_df = self.rmse_df.rename(make_parameter_names_nice([i for i in self.rmse_df.index.get_level_values(1).unique() if 'RMSE' not in i and 'R2' not in i and i!='score']),level=1)
+
+#         if standard_scaler:
+#             scaler = StandardScaler()
+#             x_std = scaler.fit_transform(rmse_df.values)
+#             rmse_df = pd.DataFrame(x_std,rmse_df.index,rmse_df.columns)
+
+#         self.X_df = rmse_df.copy()
+#         for r in ['R2','RMSE','score','region_specific_price_response','Region specific intensity elasticity to price']:
+#             if self.X_df.index.nlevels==1 and r in self.X_df.index:
+#                 self.X_df = self.X_df.drop(r)
+#             elif self.X_df.index.nlevels>1 and r in self.X_df.index.get_level_values(1):
+#                 self.X_df = self.X_df.drop(r,level=1)
+
+#         self.y_df = rmse_df.loc[idx[:,'RMSE'],:]
+#         self.y_df = np.log(self.y_df)
+#         self.X_df = self.X_df.unstack().stack(level=0)
+#         self.y_df = self.y_df.unstack().stack(level=0).iloc[:,0]
+        # self.rmse_df = self.rmse_df if commodity==None else self.rmse_df.loc[commodity]
+        # self.X_df = self.X_df if commodity==None else self.X_df.loc[commodity]
+        # self.y_df = self.y_df if commodity==None else self.y_df.loc[commodity]
+
+        get_X_df_y_df(self.many, commodity=commodity, standard_scaler=standard_scaler, objective=self.objective)
+        self.X_df = self.many.X_df.copy()
+        self.X_df = self.X_df.rename(columns=make_parameter_names_nice(self.X_df.columns))
+        self.y_df = self.many.y_df.copy()
+
+        if dummies:
+            self.X_df.loc[:,'commodity =']=self.X_df.index.get_level_values(0)
+            self.X_df = pd.get_dummies(self.X_df,columns=['commodity ='])
+        self.many.X_df = self.X_df.copy()
+
+        if self.use_train_data:
+            self.X_df_test = self.X_df.copy()
+            self.X_test = self.X_df_test.values
+            self.y_df_test = self.y_df.copy()
+        else:
+            self.X_df_test = self.X_df.sample(frac=split_frac,replace=False,random_state=0)
+            self.X_test = self.X_df_test.reset_index(drop=True).values
+            self.y_df_test = self.y_df.loc[self.X_df_test.index]
+            self.X_df = self.X_df.loc[~self.X_df.index.isin(self.X_df_test.index)]
+            self.y_df = self.y_df.loc[self.X_df.index]
+
+        self.X = self.X_df.values
+        self.y = self.y_df.values.flatten()
+
+        self.regr = Regressor(random_state=0)
+        if type(self.y_df)==pd.core.frame.DataFrame:
+            self.y_df = self.y_df.iloc[:,0]
+        self.regr.fit(self.X_df,self.y_df)
+
+        if self.objective is None: self.objective='RMSE'
+        self.test = pd.concat([self.X_df_test,self.y_df_test.rename(columns={self.y_df_test.columns[0]:self.objective})],axis=1)
+        self.test.loc[:,'predicted '+self.objective] = self.regr.predict(self.X_df_test)
+
+    def initialize_shap(self):
+        self.explainer = shap.TreeExplainer(self.regr)
+        explainer_copy = deepcopy([self.explainer])[0]
+        data = self.X_df.copy() if self.use_train_data else self.X_df_test.copy()
+        data = data.rename(columns=make_parameter_names_nice(data.columns))
+        self.data = data.copy()
+        self.shap_values_object = self.explainer(data)
+        self.shap_values = self.shap_values_object.values
+        self.shap_values_df = pd.DataFrame(self.shap_values, data.index, data.columns)
+        # alt_explainer = shap.TreeExplainer(self.regr)
+        # self.shap_interaction_values = alt_explainer.shap_interaction_values(data)
+        self.shap_interaction_values = explainer_copy.shap_interaction_values(data)
+        x = self.shap_interaction_values
+        data_ph = data.stack()
+        if self.commodity!=None:
+            self.shap_interaction_df = pd.DataFrame(x.reshape(x.shape[0]*x.shape[1],x.shape[2]), data_ph.index, data.columns)
+        else:
+            self.shap_interaction_df = pd.DataFrame(x.reshape(x.shape[0]*x.shape[1],x.shape[2]), data_ph.index, data.columns)
+
+    def get_interactions(self):
+        '''
+        This code is now depracated in favor of gamma_facet,
+        does the same general thing but without the
+        orthogonality correction, so the results are a little
+        different, but do tell the same story. The gamma_facet
+        function has very specific package version requirements
+        and it is very tempting to avoid it for that reason.
+
+        Code pulled from Towards Data Science post by
+        Tiago Toledo Jr.
+
+        See blog post (1) and github repo (2):
+          (1) https://towardsdatascience.com/identifying-global-feature-relationships-with-shap-values-f9e8b2b4121c#:~:text=The%20SHAP%20interaction%20vector%20between%20two%20features%20defines,it%20for%20all%20possibilities%20generates%20the%20interaction%20vector.
+          (2) https://github.com/BCG-Gamma/facet
+
+        Appears based on:
+          Ittner et al., Feature Synergy, Redundancy,
+          and Independence in Global Model Explanations
+          using SHAP Vector Decomposition (2021),
+          arXiv:2107.12436 [cs.LG]
+
+        Feature synergy matrix: This yields an asymmetric matrix where each row and column represents one
+        feature, and the values at the intersections are the pairwise feature synergies,
+        ranging from `0.0` (no synergy - both features contribute to predictions fully
+        autonomously of each other) to `1.0` (full synergy, both features rely on
+        combining all of their information to achieve any contribution to predictions).
+        Synergy with self is defined as `1.0`
+
+        This yields an asymmetric matrix where each row and column represents one
+        feature, and the values at the intersections are the pairwise feature
+        redundancies, ranging from `0.0` (no redundancy - both features contribute to
+        predictions fully independently of each other) to `1.0` (full redundancy, either
+        feature can replace the other feature without loss of predictive power).
+        Redundancy with self is defined as `1.0`
+        '''
+        shap_values = self.shap_values
+        shap_interaction_values = self.shap_interaction_values
+        # Define matrices to be filled
+        s = np.zeros((shap_values.shape[1], shap_values.shape[1], shap_values.shape[0]))
+        a = np.zeros((shap_values.shape[1], shap_values.shape[1], shap_values.shape[0]))
+        r = np.zeros((shap_values.shape[1], shap_values.shape[1], shap_values.shape[0]))
+        i_ = np.zeros((shap_values.shape[1], shap_values.shape[1], shap_values.shape[0]))
+        S = np.zeros((shap_values.shape[1], shap_values.shape[1]))
+        R = np.zeros((shap_values.shape[1], shap_values.shape[1]))
+        I = np.zeros((shap_values.shape[1], shap_values.shape[1]))
+
+        for i in np.arange(0,shap_values.shape[1]):
+            for j in np.arange(0,shap_values.shape[1]):
+                # Selects the p_i vector -> Shap Values vector for feature i
+                pi = shap_values[:, i]
+                # Selects pij -> SHAP interaction vector between features i and j
+                pij = shap_interaction_values[:, i, j]
+
+                # Other required vectors
+                pji = shap_interaction_values[:, j, i]
+                pj = shap_values[:, j]
+
+                # Synergy vector
+                s[i, j] = (np.inner(pi, pij) / np.linalg.norm(pij)**2) * pij
+                s[j, i] = (np.inner(pj, pji) / np.linalg.norm(pji)**2) * pji
+                # Autonomy vector
+                a[i,j] = pi - s[i, j]
+                a[j,i] = pj - s[j, i]
+                # Redundancy vector
+                r[i,j] = (np.inner(a[i, j], a[j, i]) / np.linalg.norm(a[j, i])**2) * a[j, i]
+                r[j,i] = (np.inner(a[j, i], a[i, j]) / np.linalg.norm(a[i, j])**2) * a[i, j]
+                # Independece vector
+                i_[i, j] = a[i, j] - r[i, j]
+                i_[j, i] = a[j, i] - r[j, i]
+
+                # Synergy value
+                S[i, j] = np.linalg.norm(s[i, j])**2 / np.linalg.norm(pi)**2
+                # Redundancy value
+                R[i, j] = np.linalg.norm(r[i, j])**2 / np.linalg.norm(pi)**2
+                # Independence value
+                I[i, j] = np.linalg.norm(i_[i, j])**2 / np.linalg.norm(pi)**2
+
+        param_map = make_parameter_names_nice(self.shap_values_df.columns)
+        param_names = [param_map[i] for i in self.shap_values_df.columns]
+        self.synergy = pd.DataFrame(S, param_names, param_names)
+        self.redundancy = pd.DataFrame(R, param_names, param_names)
+        self.independence = pd.DataFrame(I, param_names, param_names)
+
+    def plot_shap(self, which=['summary','waterfall','heatmap','shap_vs_param'], figsize=None, dpi=100, **kwargs):
+        '''
+        figsize can be given as an input, must be a list of
+        tuples with length equal to the number of values passed
+        in `which`
+
+
+        --------------------------
+        kwargs not shown in the main parameter list:
+        scenario_number: int, used in waterfall_plot
+          function, is the scenario being plotted
+        highlight_best: bool, used in shap_vs_param_plot
+          function, whether to identify the sample with
+          lowest RMSE, from the predicted RMSEs and actual
+        n_plots: int, used in shap_vs_param_plot
+          function. If there are many parameters in a given
+          model/tuning, can be used to limit the number of
+          plots generated
+        '''
+        if type(which)==str: which = [which]
+
+        self.fig_list = []
+        for s, w in enumerate(which):
+            fig = plt.figure()
+            if w=='summary':
+                self.summary_plot()
+            elif w=='waterfall':
+                n = kwargs['scenario_number'] if 'scenario_number' in kwargs.keys() else None
+                self.waterfall_plot(scenario_number=n)
+            elif w=='heatmap':
+                self.heatmap_plot()
+                fig.axes[1].remove()
+            elif w=='shap_vs_param':
+                highlight_best = kwargs['highlight_best'] if 'highlight_best' in kwargs.keys() else None
+                n_plots = kwargs['n_plots'] if 'n_plots' in kwargs.keys() else None
+                fig = self.shap_vs_param_plot(highlight_best=highlight_best, n_plots=n_plots)
+            if figsize!=None:
+                fig.set_size_inches(size[s][0],size[s][1])
+            fig.set_dpi(dpi)
+            self.fig_list += [fig]
+            plt.show()
+            plt.close()
+
+    def summary_plot(self):
+        """
+        Does the SHAP summary plot (the one with lots of
+        little colored dots across lines for each parameter)
+        """
+        shap.summary_plot(self.shap_values_object,self.data,show=False)
+
+    def waterfall_plot(self, scenario_number=None):
+        """
+        Does the SHAP waterfall plot for a single data point
+        given by scenario number (int)
+        """
+        scenario_number=0 if scenario_number==None else scenario_number
+        shap.plots._waterfall.waterfall_legacy(self.explainer.expected_value[0], self.shap_values[scenario_number], self.X_df.iloc[scenario_number],show=False)
+
+    def heatmap_plot(self):
+        """
+        Does the SHAP heatmap plot, which is fairly similar to
+        the summary plot in terms of information, as far as I
+        can tell
+        """
+        shap.plots.heatmap(self.shap_values_object,show=False)
+
+    def shap_vs_param_plot(self, highlight_best=None, n_plots=None):
+        """
+        plots the SHAP values as functions of the corresponding parameter
+        value. Similar to an unstacked version of the summary plot.
+
+        highlight_best: bool or str in [True,False,'max'], where False
+            means the best scenario will not be highlighted, True means
+            the minimum objective value will be highlighted, and 'max'
+            means the maximum objective value will be highlighted
+        n_plots: number of plots to show, can be used to limit how many
+            parameters you display but not typically useful.
+        """
+        highlight_best = False if highlight_best is None else highlight_best
+        cols = self.shap_values_df.columns
+        n_plots = len(cols) if n_plots==None else n_plots
+        cols = cols[:n_plots]
+        fig,ax = easy_subplots(n_plots)
+        name_map = make_parameter_names_nice(cols)
+        data = self.test.copy()
+
+        for param,a in zip(cols,ax):
+            a.scatter(data[param],self.shap_values_df[param],label='all')
+            if highlight_best:
+                min_rmse = data['predicted '+self.objective].idxmin()
+                a.scatter(data[param][min_rmse],self.shap_values_df[param][min_rmse],marker='s',s=200,label='pred. min. RMSE')
+                if highlight_best=='max':
+                    min_rmse = data[self.objective].idxmin()
+                else:
+                    min_rmse = data[self.objective].idxmin()
+                a.scatter(data[param][min_rmse],self.shap_values_df[param][min_rmse],marker='^',s=200, label='actual min. RMSE')
+
+            line_series = pd.concat([self.shap_values_df[param],data[param]],axis=1,keys=['shap values','parameter values']).set_index('parameter values').sort_index()
+            a.plot(line_series.rolling(5,min_periods=1,center=True).mean(),color='k',alpha=0.3,zorder=0)
+
+            a.set(xlabel='Parameter value', ylabel='SHAP value')
+            a.set_title(name_map[param],weight='bold')
+            if highlight_best: a.legend()
+        fig.tight_layout()
+        return fig
+
+    def gamma_facet(self):
+        '''
+        see the feature_interactions function
+        docstring for full information.
+
+        requires:
+        scikit-learn==1.0.2
+        shap==0.39.0
+        '''
+        # sklearn imports
+        from sklearn.metrics import (
+            classification_report,
+            confusion_matrix,
+            roc_curve,
+            roc_auc_score,
+            auc,
+            accuracy_score,
+            f1_score,
+            precision_score,
+            recall_score,
+            precision_recall_curve,
+            ConfusionMatrixDisplay,
+            PrecisionRecallDisplay,
+        )
+        from sklearn.model_selection import RepeatedKFold
+
+        # some helpful imports from sklearndf
+        from sklearndf.pipeline import RegressorPipelineDF
+        from sklearndf.regression import RandomForestRegressorDF
+
+        # relevant FACET imports
+        from facet.data import Sample
+        from facet.selection import LearnerRanker, LearnerGrid
+
+        get_X_df_y_df(self.many, commodity=self.commodity, standard_scaler=self.standard_scaler, objective=self.objective)
+        self.many.y_df = self.many.y_df.rename(columns={self.many.y_df.columns[0]:self.objective})
+        self.facet_data = pd.concat([self.many.X_df.copy(),self.many.y_df.copy()],axis=1)
+        # initial data wrangling
+        # self.facet_data = self.facet_data.T
+        self.facet_data.columns = [i for i in self.facet_data.columns]
+        self.facet_data.index = [i for i in self.facet_data.index]
+        r = [i for i in self.facet_data.columns if np.any([j in i and j!=self.objective for j in ['R2','RMSE','score','region_specific_price_response','Region specific']])]
+        self.facet_data = self.facet_data.drop(columns=r)
+
+        # creating the sample object
+        sample = Sample(observations=self.facet_data,
+                        feature_names=self.facet_data.drop(columns=self.objective).columns,
+                        target_name=self.objective,)
+
+        # create a (trivial) pipeline for a random forest regressor
+        rnd_forest_reg = RegressorPipelineDF(
+            regressor=RandomForestRegressorDF(n_estimators=200, random_state=42)
+        )
+
+        # define grid of models which are "competing" against each other
+        rnd_forest_grid = [
+            LearnerGrid(
+                pipeline=rnd_forest_reg,
+                learner_parameters={
+                    "min_samples_leaf": [8, 11, 15],
+                    "max_depth": [4, 5, 6],
+                }
+            ),
+        ]
+
+        # create repeated k-fold CV iterator
+        rkf_cv = RepeatedKFold(n_splits=5, n_repeats=10, random_state=42)
+
+        # rank your candidate models by performance (default is mean CV score - 2*SD)
+        self.ranker = LearnerRanker(
+            grids=rnd_forest_grid, cv=rkf_cv, n_jobs=-3
+        ).fit(sample=sample)
+
+        # get summary report
+        self.summary_report = self.ranker.summary_report()
+
+        # fit the model inspector
+        from facet.inspection import LearnerInspector
+        self.inspector = LearnerInspector(n_jobs=-3)
+        self.inspector.fit(crossfit=self.ranker.best_model_crossfit_)
+
+        # get matrices
+        self.synergy_matrix = self.inspector.feature_synergy_matrix()
+        self.redundancy_matrix = self.inspector.feature_redundancy_matrix()
+
+        map_names = make_parameter_names_nice(self.synergy_matrix.index)
+        self.synergy_matrix.rename(index=map_names,columns=map_names,inplace=True)
+        self.redundancy_matrix.rename(index=map_names,columns=map_names,inplace=True)
+
+        # From the paper S_ij + R_ij + I_ij = 1, so
+        self.independence_matrix = 1 - self.synergy_matrix - self.redundancy_matrix
+        for i in self.independence_matrix.index:
+            self.independence_matrix.loc[i,i] = 0
+
+        self.names = self.synergy_matrix.index
+        self.synergy_matrix = self.synergy_matrix.loc[self.names,self.names]
+        self.redundancy_matrix = self.redundancy_matrix.loc[self.synergy_matrix.index, self.synergy_matrix.index]
+        self.independence_matrix = self.independence_matrix.loc[self.synergy_matrix.index, self.synergy_matrix.index]
+
+def draw_facet_dendrogram(self):
+    """
+    visualise redundancy using a dendrogram,
+    need to make sure SHAP.gamma_facet has
+    already been run.
+    """
+    #
+    from pytools.viz.dendrogram import DendrogramDrawer
+    redundancy = self.inspector.feature_redundancy_linkage()
+    DendrogramDrawer().draw(data=redundancy, title="Redundancy Dendrogram")
+
+def plot_sri_matrices(self, n_param=3, width_ratio_scale = 0.83, dpi = 100):
+    '''
+    notes: the synergy matrix shows that from the perspective of nearly
+    any parameter (rows), the information in "incentive pool opening
+    probability" is required to predict RMSE well, e.g. for "price lag
+    used for incentive pool tonnage," about 60% of its information is
+    combined with opening probability, so it cannot predict RMSE well
+    on its own. High values on the diagonal indicate the parameter is
+    minimally informed by other parameters, since the rows sum to one. Each
+    row is showing the total contribution to prediction, and the diagonal
+    should align with feature importance.
+
+    In the redundancy matrix, the row is still the "perspective from" feature.
+
+    It also appears that the information contained in the three different
+    plots is largely redundant in itself.
+
+    ------------------------
+    self: SHAP object (need SHAP.gamma_facet to have run before this function)
+    n_params: int, can be 1-3, allows plotting of synergy, redundancy, and
+        independence in that order (e.g. if =1, only plots synergy)
+    width_ratio_scale: float, used to change the relative widths of the
+        subplots since the colorbar makes the rightmost figure narrower
+    dpi: int, dots per square inch / figure resolution
+    '''
+    dfs = [self.synergy_matrix,self.redundancy_matrix,self.independence_matrix][:n_param]
+    names = ['Synergy','Redundancy','Independence'][:n_param]
+    fig,ax = easy_subplots(dfs,use_subplots=True,width_ratios=[width_ratio_scale,width_ratio_scale,1][-n_param:],sharey=True)
+    for i,a,name in zip(dfs,ax,names):
+        b = sns.heatmap(i,ax=a,annot=True,fmt='.2f',annot_kws={'fontsize':16},cbar=(name==names[-1]),xticklabels=True,yticklabels=True)
+        a.set_title(name,weight='bold')
+        a.set(ylabel='Feature' if name==names[0] else '',xlabel='Feature')
+    if len(self.synergy_matrix.index)>11:
+        fig.set_size_inches(12*n_param+6,16)
+    else:
+        fig.set_size_inches(7*n_param+6,12)
+    fig.set_dpi = dpi
+    fig.tight_layout(pad=1)
+    return fig
+
+def plot_all_sri_matrices(many, commodities=None, standard_scaler=True, dummies=False, split_frac=0.6, Regressor=RandomForestRegressor, use_train_data=False, objective=None):
+    """
+    Rather than needing to initialize the SHAP function every time,
+    can just run this function to get all the SRI matrices. Takes
+    essentially the same inputs as the SHAP initialization. Will run
+    your computer hard.
+
+    many: instance of the Many class, with data loaded
+    commodity: (None | list), list of commodity names, lower case. None
+        causes all commodities to be used
+    standard_scaler: bool, whether to run
+        sklearn.preprocessing.StandardScaler on each column of data such
+        that it is normalized to have mean 0 and std 1
+    dummies: bool, whether to include commodity-level dummy variables
+        (e.g. a column of zeros with 1s for all Ag scenarios)
+    split_frac: float (0,1), for train-test split in creating the ML
+        model for the tree-based regression we get SHAP values from
+    Regressor: tree-based regression class, can be RandomForestRegressor,
+        ExtraTreesRegressor, GradientBoostingRegressor, likely others;
+        regression to use for the tree-based regression that we get SHAP values from
+    use_train_data: bool, whether to use the train data rather than test
+        data for shap.TreeExplainer(regression_model).explainer(data).
+        We are supposed to use the test data, so leave this one False.
+    objective:  None or str. If str, has to be one of the columns in
+        multi_scenario_results_formatted, otherwise will be using `score`
+        or `RMSE` from rmse_df dataframe depending on whether using the
+        Integration or demandModel formulation. If str, will try to do
+        the mean difference from baseline.
+    """
+    if commodities is None:
+        if hasattr(many,'rmse_df'):
+            commodities = list(many.rmse_df.index.get_level_values(0).unique())+[None]
+        elif hasattr(many,'multi_scenario_results'):
+            commodities = list(many.multi_scenario_results.index.get_level_values(0).unique())+[None]
+        else:
+            raise ValueError('either the Many object fed into this function needs to have rmse_df or multi_scenario_results objects, or you need to provide a list of commodities')
+
+    for comm in commodities:
+        print(comm)
+        sh1 = SHAP(many,commodity=comm, standard_scaler=standard_scaler, dummies=dummies, split_frac=split_frac, Regressor=Regressor, use_train_data=use_train_data, objective=objective)
+        sh1.gamma_facet()
+        plot_sri_matrices(sh1)
+        plt.show()
+        plt.close()

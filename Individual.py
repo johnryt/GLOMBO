@@ -164,7 +164,7 @@ class Individual():
             else:
                 self.get_results_hyperparam_history()
         except Exception as e:
-            print('Files within current path:')
+            print(f'Looking for: {self.filename}\nFiles within current path:')
             self.check_available_files()
             for e,i in enumerate(self.filename.split('/')[:-1]):
                 i = '/'.join(self.filename.split('/')[:e+1])

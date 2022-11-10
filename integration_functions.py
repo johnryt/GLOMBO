@@ -744,8 +744,10 @@ class Sensitivity():
                                 values = stats.uniform.rvs(loc=0,scale=1,size=len(params_to_change),random_state=rs)
                                 new_param_series = pd.Series(values, params_to_change)
 
-                            if 'sector_specific_price_response' in params_to_change and 'region_specific_price_response' not in params_to_change:
+                            if 'sector_specific_price_response' in params_to_change:
                                 new_param_series.loc['region_specific_price_response'] = new_param_series['sector_specific_price_response']
+                            elif 'region_specific_price_response' in params_to_change:
+                                new_param_series.loc['sector_specific_price_response'] = new_param_series['region_specific_price_response']
                             if self.verbosity>0:
                                 print('Parameters getting changed via Monte Carlo random selection:\n',params_to_change)
                             if 'sector_specific_dematerialization_tech_growth' in params_to_change and self.check_for_previously_tuned('sector_specific_dematerialization_tech_growth'):
@@ -779,11 +781,20 @@ class Sensitivity():
                                 new_param_series.loc['mine_cost_tech_improvements'] *= 5
                             if 'primary_overhead_const' in params_to_change and self.check_for_previously_tuned('primary_overhead_const'):
                                 new_param_series.loc['primary_overhead_const'] = (new_param_series['primary_overhead_const']-0.5)*1
+                            max_dict = dict(zip(['sector_specific_dematerialization_tech_growth','sector_specific_price_response','region_specific_price_response','intensity_response_to_gdp'],[0.08,0.6,0.6,1.5]))
+                            if 'sector_specific_price_response' in new_param_series.index:
+                                new_param_series.loc['sector_specific_price_response'] *= max_dict['sector_specific_price_response']
+                            if 'sector_specific_dematerialization_tech_growth' in params_to_change:
+                                new_param_series.loc['sector_specific_dematerialization_tech_growth'] *= max_dict['sector_specific_dematerialization_tech_growth']
+                            if 'region_specific_price_response' in new_param_series.index:
+                                new_param_series.loc['region_specific_price_response'] *= max_dict['region_specific_price_response']
+                            if 'intensity_response_to_gdp' in params_to_change:
+                                new_param_series.loc['intensity_response_to_gdp'] *= max_dict['intensity_response_to_gdp']
                             int_params = ['reserves_ratio_price_lag','close_years_back']
                             for j in int_params:
                                 if j in new_param_series.index: new_param_series.loc[j] = int(new_param_series[j])
                             for param in params_to_change:
-                                if type(self.mod.hyperparam['Value'][param])!=bool and self.mod.hyperparam['Value'][param]!=np.nan and self.constrain_tuning_to_sign:
+                                if type(self.mod.hyperparam['Value'][param])!=bool and self.mod.hyperparam['Value'][param]!=np.nan and (self.constrain_tuning_to_sign or param in cannot_unconstrain):
                                     new_param_series.loc[param] = abs(new_param_series[param])*np.sign(self.mod.hyperparam.loc[param,'Value'])
                                     self.mod.hyperparam.loc[param,'Value'] = abs(new_param_series[param])*np.sign(self.mod.hyperparam.loc[param,'Value'])
                                 else:
@@ -858,9 +869,16 @@ class Sensitivity():
         variance_from_previous = 1
         lowerbound = 1-variance_from_previous
         lowerbound = 0.001 if lowerbound<=0 else lowerbound
-        default_bounds = (0.001,1) if self.constrain_tuning_to_sign else (-1,1)
+        cannot_unconstrain = ['primary_oge_scale','incentive_opening_probability',
+                      'close_years_back','reserves_ratio_price_lag','refinery_capacity_fraction_increase_mining']
+        default_bounds = dict([(_,(0.001,1)) if self.constrain_tuning_to_sign or _ in cannot_unconstrain else (_,(0.001,2))
+                          for _ in self.sensitivity_param])
         self.opt = Optimizer(
-            dimensions=[default_bounds if (not self.constrain_previously_tuned or _ not in self.updated_commodity_inputs_sub.dropna().index) else (abs(self.updated_commodity_inputs_sub[_])*(lowerbound),abs(self.updated_commodity_inputs_sub[_])*(1+variance_from_previous)) for _ in self.sensitivity_param],
+            dimensions=[default_bounds[_]
+                        if (not self.constrain_previously_tuned or _ not in self.updated_commodity_inputs_sub.dropna().index)
+                        else (abs(self.updated_commodity_inputs_sub[_])*(lowerbound),
+                              abs(self.updated_commodity_inputs_sub[_])*(1+variance_from_previous))
+                        for _ in self.sensitivity_param],
             base_estimator=surrogate_model,
             n_initial_points=20,
             initial_point_generator='random' if surrogate_model=='dummy' else 'lhs',
@@ -1100,15 +1118,13 @@ class Sensitivity():
             raise ValueError('require a price input in primary commodity price for historical_sim_check_demand to work properly, also require primary supply')
         self.update_changing_base_parameters_series()
 
-        cannot_unconstrain = ['primary_oge_scale','incentive_opening_probability','close_years_back','reserves_ratio_price_lag']
+        cannot_unconstrain = ['primary_oge_scale','incentive_opening_probability',
+                              'close_years_back','reserves_ratio_price_lag']
         if demand_or_mining=='demand':
             self.mod = demandModel(verbosity=self.verbosity, simulation_time=self.simulation_time, data_folder=self.data_folder)
             params_to_change = self.demand_params
-            max_dict = dict(zip(['sector_specific_dematerialization_tech_growth','sector_specific_price_response','intensity_response_to_gdp'],[0.08,0.6,1.5]))
-            if self.constrain_tuning_to_sign:
-                dimensions = [(0.001,max_dict[i]) for i in params_to_change]
-            else:
-                dimensions = [(0.001,max_dict[i]*2) for i in params_to_change]
+            default_bounds = (0.001,1) if self.constrain_tuning_to_sign else (0.001,2)
+            dimensions = [default_bounds if i not in cannot_unconstrain else (0.001,1) for i in params_to_change]
         else:
             # self.mod = miningModel(verbosity=self.verbosity, simulation_time=self.simulation_time,byproduct=self.byproduct)
             self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct,commodity=self.material, price_to_use=self.price_to_use)
@@ -1184,46 +1200,54 @@ class Sensitivity():
                     for x in new_param_series.index:
                         if x not in cannot_unconstrain:
                             new_param_series.loc[x] -= 1
-                if 'sector_specific_price_response' in params_to_change and 'region_specific_price_response' not in params_to_change:
+                max_dict = dict(zip(['sector_specific_dematerialization_tech_growth','sector_specific_price_response','region_specific_price_response','intensity_response_to_gdp'],[0.08,0.6,0.6,1.5]))
+                if 'sector_specific_price_response' in params_to_change:
                     new_param_series.loc['region_specific_price_response'] = new_param_series['sector_specific_price_response']
-                if demand_or_mining=='mining':
-                    if 'incentive_opening_probability' in params_to_change:
-                        new_param_series.loc['incentive_opening_probability']*=0.5/(1-self.incentive_opening_probability_fraction_zero)
-                        if new_param_series['incentive_opening_probability']>0.5 and self.incentive_opening_probability_fraction_zero!=0:
-                            new_param_series.loc['incentive_opening_probability'] = 0
-                    if 'primary_oge_scale' in params_to_change:
-                        new_param_series.loc['primary_oge_scale']*=0.5
-                    if 'initial_ore_grade_decline' in params_to_change:
-                        new_param_series.loc['initial_ore_grade_decline']*=0.5
-                    all_three_here = np.all([q in params_to_change for q in ['close_probability_split_max','close_probability_split_mean','close_probability_split_min']])
-                    if 'close_probability_split_max' in params_to_change and not all_three_here:
-                        new_param_series.loc['close_probability_split_max'] *= 0.8
-                    if 'close_probability_split_mean' in params_to_change and not all_three_here:
-                        new_param_series.loc['close_probability_split_mean'] *= 0.8
-                    if 'close_probability_split_max' in params_to_change and 'close_probability_split_mean' in params_to_change and not all_three_here:
-                        sum_mean_max = new_param_series.loc[['close_probability_split_max','close_probability_split_mean']].sum()
-                        if sum_mean_max>0.95:
-                            new_param_series.loc[['close_probability_split_max','close_probability_split_mean']] *= 0.95/sum_mean_max
-                        new_param_series.loc['close_probability_split_mean'] = 1-new_param_series.loc[['close_probability_split_max','close_probability_split_mean']].sum()
-                    if 'close_years_back' in params_to_change:
-                        new_param_series.loc['close_years_back'] = int(7*new_param_series.loc['close_years_back']+3)
-                    if 'reserves_ratio_price_lag' in params_to_change:
-                        new_param_series.loc['reserves_ratio_price_lag'] = int(7*new_param_series['reserves_ratio_price_lag']+3)
-                    if 'mine_cost_tech_improvements' in params_to_change:
-                        new_param_series.loc['mine_cost_tech_improvements'] *= 5
-                    if 'primary_overhead_const' in params_to_change:
-                        new_param_series.loc['primary_overhead_const'] = (new_param_series['primary_overhead_const']-0.5)*10
-                    if all_three_here:
-                        new_param_series.loc[['close_probability_split_mean','close_probability_split_min','close_probability_split_max']] /=  new_param_series.loc[['close_probability_split_mean','close_probability_split_min','close_probability_split_max']].sum()
+                elif 'region_specific_price_response' in params_to_change:
+                    new_param_series.loc['sector_specific_price_response'] = new_param_series['region_specific_price_response']
+                if 'incentive_opening_probability' in params_to_change:
+                    new_param_series.loc['incentive_opening_probability']*=0.5/(1-self.incentive_opening_probability_fraction_zero)
+                    if new_param_series['incentive_opening_probability']>0.5 and self.incentive_opening_probability_fraction_zero!=0:
+                        new_param_series.loc['incentive_opening_probability'] = 0
+                if 'primary_oge_scale' in params_to_change:
+                    new_param_series.loc['primary_oge_scale']*=0.5
+                if 'initial_ore_grade_decline' in params_to_change:
+                    new_param_series.loc['initial_ore_grade_decline']*=0.5
+                all_three_here = np.all([q in params_to_change for q in ['close_probability_split_max','close_probability_split_mean','close_probability_split_min']])
+                if 'close_probability_split_max' in params_to_change and not all_three_here:
+                    new_param_series.loc['close_probability_split_max'] *= 0.8
+                if 'close_probability_split_mean' in params_to_change and not all_three_here:
+                    new_param_series.loc['close_probability_split_mean'] *= 0.8
+                if 'close_probability_split_max' in params_to_change and 'close_probability_split_mean' in params_to_change and not all_three_here:
+                    sum_mean_max = new_param_series.loc[['close_probability_split_max','close_probability_split_mean']].sum()
+                    if sum_mean_max>0.95:
+                        new_param_series.loc[['close_probability_split_max','close_probability_split_mean']] *= 0.95/sum_mean_max
+                    new_param_series.loc['close_probability_split_mean'] = 1-new_param_series.loc[['close_probability_split_max','close_probability_split_mean']].sum()
+                if 'close_years_back' in params_to_change:
+                    new_param_series.loc['close_years_back'] = int(7*new_param_series.loc['close_years_back']+3)
+                if 'reserves_ratio_price_lag' in params_to_change:
+                    new_param_series.loc['reserves_ratio_price_lag'] = int(7*new_param_series['reserves_ratio_price_lag']+3)
+                if 'mine_cost_tech_improvements' in params_to_change:
+                    new_param_series.loc['mine_cost_tech_improvements'] *= 5
+                if 'primary_overhead_const' in params_to_change:
+                    new_param_series.loc['primary_overhead_const'] = (new_param_series['primary_overhead_const']-0.5)*10
+                if 'sector_specific_price_response' in new_param_series.index:
+                    new_param_series.loc['sector_specific_price_response'] *= max_dict['sector_specific_price_response']
+                if 'sector_specific_dematerialization_tech_growth' in params_to_change:
+                    new_param_series.loc['sector_specific_dematerialization_tech_growth'] *= max_dict['sector_specific_dematerialization_tech_growth']
+                if 'region_specific_price_response' in new_param_series.index:
+                    new_param_series.loc['region_specific_price_response'] *= max_dict['region_specific_price_response']
+                if 'intensity_response_to_gdp' in params_to_change:
+                    new_param_series.loc['intensity_response_to_gdp'] *= max_dict['intensity_response_to_gdp']
+                if all_three_here:
+                    new_param_series.loc[['close_probability_split_mean','close_probability_split_min','close_probability_split_max']] /=  new_param_series.loc[['close_probability_split_mean','close_probability_split_min','close_probability_split_max']].sum()
 
-                cannot_unconstrain = ['primary_oge_scale','incentive_opening_probability','close_years_back','reserves_ratio_price_lag']
                 for param in new_param_series.index:
                     if mod.hyperparam.loc[param,'Value']!=0 and param!='primary_overhead_const' and (self.constrain_tuning_to_sign or param in cannot_unconstrain):
                         new_param_series.loc[param] = abs(new_param_series[param])*np.sign(self.mod.hyperparam.loc[param,'Value'])
                         mod.hyperparam.loc[param,'Value'] = abs(new_param_series.loc[param])*np.sign(mod.hyperparam.loc[param,'Value'])
                     else:
                         mod.hyperparam.loc[param,'Value'] = new_param_series[param]
-
                 if n_jobs>1:
                     self.mod = mod
                     mods.append(mod)
@@ -1231,8 +1255,8 @@ class Sensitivity():
                     #output is of the form [(score_0, new_params_0, potential_append_0), (score_1, new_params_1, potential_append_0),
                 else:
                     self.mod = mod
-                    potential_append = self.check_run_append(self.mod)
-                    self.mod = mod
+                    potential_append = self.check_run_append(self.mod,n+j)
+                    mod = self.mod
 
                     if demand_or_mining=='demand':
                         sim = mod.demand.sum(axis=1).loc[self.simulation_time]

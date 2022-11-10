@@ -166,7 +166,8 @@ class Individual():
         except Exception as e:
             print('Files within current path:')
             self.check_available_files()
-            for i in self.filename.split('/')[:-1]:
+            for e,i in enumerate(self.filename.split('/')[:-1]):
+                i = '/'.join(self.filename.split('/')[:e+1])
                 print('Files within folder ['+i+'/] specified:')
                 self.check_available_files(i)
             raise e

@@ -43,7 +43,7 @@ class Integration():
         Can ctrl+F `direct_melt_duration` or `secondary_refined_duration`
         to see the actual methods
     '''
-    def __init__(self, data_folder=None, simulation_time=np.arange(2019,2041), verbosity=0, byproduct=False, input_hyperparam=0, scenario_name='', commodity=None, price_to_use=None):
+    def __init__(self, data_folder=None, simulation_time=np.arange(2019,2041), verbosity=0, byproduct=False, input_hyperparam=0, scenario_name='', commodity=None, price_to_use=None, historical_price_rolling_window=1, force_integration_historical_price=False):
         self.version = '2022-09-19 18:03:44' # str(datetime.now())[:19]
 
         self.price_to_use = 'log' if price_to_use==None else price_to_use
@@ -57,6 +57,9 @@ class Integration():
         self.byproduct = byproduct
         self.input_hyperparam = input_hyperparam
         self.scenario_name = scenario_name
+        self.historical_price_rolling_window = historical_price_rolling_window
+        self.force_integration_historical_price = force_integration_historical_price
+
         self.demand = demandModel(data_folder=data_folder, simulation_time=simulation_time, verbosity=verbosity)
         self.refine = refiningModel(simulation_time=simulation_time, verbosity=verbosity)
         self.initialize_hyperparam()
@@ -86,22 +89,25 @@ class Integration():
         self.decode_scrap_scenario_name()
 
     def load_historical_data(self):
-        if self.commodity!=None and type(self.commodity)==str and not hasattr(self,'historical_data'):
-            self.case_study_data_file_path = f'{self.data_folder}/case study data.xlsx'
-            history_file = pd.read_excel(self.case_study_data_file_path,index_col=0,sheet_name=self.commodity)
-            self.historical_data = history_file.iloc[1:]['Primary supply' if 'Primary supply' in history_file.columns else 'Primary production'].astype(float)
-            self.historical_data = self.historical_data.dropna()
-            self.historical_data.index = self.historical_data.index.astype(int)
-        self.price_adjustment_results_file_path = f'{self.data_folder}/price adjustment results.xlsx'
-        if self.price_to_use!='case study data' or 'Primary commodity price' not in self.historical_data.dropna().columns:
-            self.historical_price_data = pd.read_excel(self.price_adjustment_results_file_path,index_col=0)
-            cap_mat = self.element_commodity_map[self.commodity]
-            price_map = {'log':'log('+cap_mat+')',  'diff':'∆'+cap_mat,  'original':cap_mat+' original'}
-            self.historical_price_data = self.historical_price_data[price_map[self.price_to_use]].astype(float).dropna().sort_index()
-            self.historical_price_data.name='Primary commodity price'
-            if hasattr(self.historical_data,'columns') and 'Primary commodity price' in self.historical_data.columns:
-                self.historical_data.drop('Primary commodity price',axis=1,inplace=True)
-            self.historical_data = pd.concat([self.historical_data,self.historical_price_data],axis=1)
+        if not hasattr(self,'historical_data'):
+            if self.commodity!=None and type(self.commodity)==str:
+                self.case_study_data_file_path = f'{self.data_folder}/case study data.xlsx'
+                history_file = pd.read_excel(self.case_study_data_file_path,index_col=0,sheet_name=self.commodity)
+                self.historical_data = history_file.iloc[1:]['Primary supply' if 'Primary supply' in history_file.columns else 'Primary production'].astype(float)
+                self.historical_data = self.historical_data.dropna()
+                self.historical_data.index = self.historical_data.index.astype(int)
+            self.price_adjustment_results_file_path = f'{self.data_folder}/price adjustment results.xlsx'
+            if self.price_to_use!='case study data' or 'Primary commodity price' not in self.historical_data.dropna().columns:
+                self.historical_price_data = pd.read_excel(self.price_adjustment_results_file_path,index_col=0)
+                cap_mat = self.element_commodity_map[self.commodity]
+                price_map = {'log':'log('+cap_mat+')',  'diff':'∆'+cap_mat,  'original':cap_mat+' original'}
+                self.historical_price_data = self.historical_price_data[price_map[self.price_to_use]].astype(float).dropna().sort_index()
+                self.historical_price_data.name='Primary commodity price'
+                if hasattr(self.historical_data,'columns') and 'Primary commodity price' in self.historical_data.columns:
+                    self.historical_data.drop('Primary commodity price',axis=1,inplace=True)
+                self.historical_data = pd.concat([self.historical_data,self.historical_price_data],axis=1)
+            if 'Primary commodity price' in self.historical_data.columns:
+                self.historical_data.loc[self.historical_data.index,'Primary commodity price'] = self.historical_data['Primary commodity price'].rolling(self.historical_price_rolling_window,min_periods=1,center=True).mean()
 
     def initialize_hyperparam(self):
         hyperparameters = pd.DataFrame(np.nan,index=[],columns=['Value','Notes'])
@@ -408,7 +414,8 @@ class Integration():
         self.primary_commodity_price.loc[i] = self.primary_commodity_price.loc[i-1]*(self.refined_supply['Global'][i-1]/self.refined_demand['Global'][i-1])**h['primary_commodity_price_elas_sd']
         self.primary_commodity_price = self.primary_commodity_price.where(self.primary_commodity_price>1e-9).fillna(1e-9)
         self.primary_commodity_price = self.primary_commodity_price.where(self.primary_commodity_price<1e20).fillna(1e20)
-
+        if self.force_integration_historical_price:
+            self.primary_commodity_price.loc[i] = self.historical_data['Primary commodity price'][i]
         # if hasattr(self,'historical_data'):
         #     self.primary_commodity_price.loc[i] = self.historical_data['Primary commodity price'][i]
 
@@ -527,6 +534,7 @@ class Integration():
             m.primary_price_series.name = 'Primary commodity price'
             m.primary_price_series = pd.concat([pd.Series(m.primary_price_series.iloc[0],[i for i in mine_simulation_time if i not in m.primary_price_series.index]),
                 m.primary_price_series]).sort_index()
+            self.primary_price_series = m.primary_price_series.copy()
             m.hyperparam['primary_commodity_price'] = m.primary_price_series.iloc[0]
 
         else:

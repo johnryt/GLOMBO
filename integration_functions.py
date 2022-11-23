@@ -242,7 +242,7 @@ class Sensitivity():
                  dpi=50,
                  normalize_objectives=False,
                  use_alternative_gold_volumes=True,
-                 historical_price_rolling_window=1,
+                 historical_price_rolling_window=5,
                  force_integration_historical_price=False,
                  constrain_tuning_to_sign=True,
                  constrain_previously_tuned=False,
@@ -724,7 +724,10 @@ class Sensitivity():
                         print(f'\tSub-scenario {enum+1}/{len(self.scenarios)}: {scenario_name} checking if exists...')
                     self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct,scenario_name=scenario_name,commodity=self.material, price_to_use=self.price_to_use, historical_price_rolling_window=self.historical_price_rolling_window, force_integration_historical_price=self.force_integration_historical_price)
                     self.mod.historical_data = self.historical_data.copy()
-                    self.notes = scenario_name
+                    if enum>0:
+                        self.notes = self.notes.replace(self.scenarios[enum-1],scenario_name)
+                    else:
+                        self.notes += ' '+scenario_name
 
                     ###### CHANGING BASE PARAMETERS ######
                     changing_base_parameters_series = self.changing_base_parameters_series.copy()
@@ -781,8 +784,8 @@ class Sensitivity():
                                 new_param_series.loc['reserves_ratio_price_lag'] = int(7*new_param_series['reserves_ratio_price_lag']+3)
                             if all_three_here and np.all([self.check_for_previously_tuned(j) for j in ['close_probability_split_mean','close_probability_split_min','close_probability_split_max']]):
                                 new_param_series.loc[['close_probability_split_mean','close_probability_split_min','close_probability_split_max']] /=  new_param_series.loc[['close_probability_split_mean','close_probability_split_min','close_probability_split_max']].sum()
-                            if 'mine_cost_tech_improvements' in params_to_change and self.check_for_previously_tuned('mine_cost_tech_improvements'):
-                                new_param_series.loc['mine_cost_tech_improvements'] *= 5
+                            if 'mine_cost_change_per_year' in params_to_change and self.check_for_previously_tuned('mine_cost_change_per_year'):
+                                new_param_series.loc['mine_cost_change_per_year'] *= 5
                             if 'primary_overhead_const' in params_to_change and self.check_for_previously_tuned('primary_overhead_const'):
                                 new_param_series.loc['primary_overhead_const'] = (new_param_series['primary_overhead_const']-0.5)*1
                             max_dict = dict(zip(['sector_specific_dematerialization_tech_growth','sector_specific_price_response','region_specific_price_response','intensity_response_to_gdp'],[0.08,0.6,0.6,1.5]))
@@ -823,7 +826,7 @@ class Sensitivity():
             if bayesian_tune or given_hyperparam_df:
                 self.complete_bayesian_trial(mods=mods,
                                              new_param_series_all=new_param_series_all,
-                                             scenario_numbers=range(self.n_jobs*(n-1)+1, self.n_jobs*n+1),
+                                             scenario_numbers=range(self.n_jobs*(n-1)+1, self.n_jobs*(n)+1),
                                              next_parameters=next_parameters,
                                              bayesian_tune=bayesian_tune,
                                              n_params=n_params)
@@ -904,7 +907,6 @@ class Sensitivity():
         calculates root mean squared errors (RMSE) from current variables and historical
         values to give the error the Bayesian optimization is trying to minimize.
         '''
-
         #output is of the form [(score_0, new_params_0, potential_append_0), (score_1, new_params_1, potential_append_0), ...]
         output = Parallel(n_jobs=self.n_jobs)(delayed(self.skopt_run_score)(mod, param_series, s_n, bayesian_tune, n_params) for mod, param_series, s_n in zip(mods, new_param_series_all, scenario_numbers))
 
@@ -1134,8 +1136,8 @@ class Sensitivity():
                               'close_years_back','reserves_ratio_price_lag']
         if 'constrain' in self.pkl_filename:
             if self.pkl_filename.split('constrain')[1][0]=='1':
-                cannot_unconstrain += ['intensity_response_to_gdp','mine_cost_tech_improvements']
-                print('1126, added intensity_response_to_gdp and mine_cost_tech_improvements to cannot_unconstrain')
+                cannot_unconstrain += ['intensity_response_to_gdp','mine_cost_change_per_year']
+                print('1126, added intensity_response_to_gdp and mine_cost_change_per_year to cannot_unconstrain')
 
         if demand_or_mining=='demand':
             self.mod = demandModel(verbosity=self.verbosity, simulation_time=self.simulation_time, data_folder=self.data_folder)
@@ -1146,7 +1148,7 @@ class Sensitivity():
             # self.mod = miningModel(verbosity=self.verbosity, simulation_time=self.simulation_time,byproduct=self.byproduct)
             self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct,commodity=self.material, price_to_use=self.price_to_use, historical_price_rolling_window=self.historical_price_rolling_window, force_integration_historical_price=self.force_integration_historical_price)
             self.mod.historical_data = self.historical_data.copy()
-            params_to_change = ['primary_oge_scale','mine_cu_margin_elas','mine_cost_og_elas','mine_cost_tech_improvements','mine_cost_price_elas','initial_ore_grade_decline','primary_price_resources_contained_elas','incentive_opening_probability','close_years_back','reserves_ratio_price_lag']
+            params_to_change = ['primary_oge_scale','mine_cu_margin_elas','mine_cost_og_elas','mine_cost_change_per_year','mine_cost_price_elas','initial_ore_grade_decline','primary_price_resources_contained_elas','incentive_opening_probability','close_years_back','reserves_ratio_price_lag']
             checker = np.intersect1d(params_to_change,self.additional_base_parameters.index)
             if len(checker)>0 and self.verbosity>-1:
                 print(f'1152, checking and removing: {checker}')
@@ -1248,8 +1250,8 @@ class Sensitivity():
                     new_param_series.loc['close_years_back'] = int(7*new_param_series.loc['close_years_back']+3)
                 if 'reserves_ratio_price_lag' in params_to_change:
                     new_param_series.loc['reserves_ratio_price_lag'] = int(7*new_param_series['reserves_ratio_price_lag']+3)
-                if 'mine_cost_tech_improvements' in params_to_change:
-                    new_param_series.loc['mine_cost_tech_improvements'] *= 5
+                if 'mine_cost_change_per_year' in params_to_change:
+                    new_param_series.loc['mine_cost_change_per_year'] *= 5
                 if 'primary_overhead_const' in params_to_change:
                     new_param_series.loc['primary_overhead_const'] = (new_param_series['primary_overhead_const']-0.5)*10
                 if 'sector_specific_price_response' in new_param_series.index:
@@ -1348,7 +1350,8 @@ class Sensitivity():
         updated_commodity_inputs = 'updated_commodity_inputs'
         if not self.constrain_tuning_to_sign:
             updated_commodity_inputs += '_unconstrained'
-        if 'mine_cost_price_elas' in self.additional_base_parameters.index:
+        if 'mcpe0' in self.pkl_filename or (hasattr(self.additional_base_parameters,'index') and 'mine_cost_price_elas' in self.additional_base_parameters.index):
+            print(1351,updated_commodity_inputs)
             updated_commodity_inputs += '_mcpe0'
         if os.path.exists(f'data/{updated_commodity_inputs}.pkl'):
             self.updated_commodity_inputs = pd.read_pickle(f'data/{updated_commodity_inputs}.pkl')
@@ -1368,7 +1371,8 @@ class Sensitivity():
                 self.updated_commodity_inputs.to_pickle(f'{updated_commodity_inputs}.pkl')
         for i in best_params.index:
             self.changing_base_parameters_series.loc[i] = best_params[self.material][i]
-        self.notes = self.notes.split(' check demand')[0]
+        self.notes = self.notes.split(' check demand')[0] if len(self.notes.split(' check demand'))==1 else ' '.join(self.notes.split(' check demand'))
+        self.notes = self.notes.split(' check mining')[0] if len(self.notes.split(' check mining'))==1 else ' '.join(self.notes.split(' check mining'))
         if demand_or_mining=='demand':
             self.pkl_filename = self.pkl_filename.split('_DEM')[0]+'.pkl'
         else:
@@ -1466,6 +1470,7 @@ class Sensitivity():
         log: bool, whether to log the rmse (or r2) score prior to giving it to BO, setting it
             to True leads to better performance
         '''
+        n_scenarios += 1
         self.random_state = random_state
         self.bayesian_tune = bayesian_tune
         updated_commodity_inputs = 'updated_commodity_inputs'
@@ -1513,7 +1518,8 @@ class Sensitivity():
                              sensitivity_parameters=sensitivity_parameters,
                              bayesian_tune=bayesian_tune,
                              n_params=n_params,
-                             surrogate_model=surrogate_model)
+                             surrogate_model=surrogate_model,
+                             n_jobs=n_jobs)
 
     def create_potential_append(self,big_df,notes,reg_results,initialize=False, mod=None):
         '''

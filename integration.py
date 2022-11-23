@@ -177,7 +177,7 @@ class Integration():
         hyperparameters.loc['mine_cu_margin_elas','Value'] = 0.8
         hyperparameters.loc['mine_cost_price_elas','Value'] = 0.125
         hyperparameters.loc['mine_cost_og_elas','Value'] = -0.113
-        hyperparameters.loc['mine_cost_tech_improvements','Value'] = 0.05
+        hyperparameters.loc['mine_cost_change_per_year','Value'] = 0.05
         hyperparameters.loc['primary_price_resources_contained_elas','Value'] = 0.5
         hyperparameters.loc['close_price_method','Value']='max'
         hyperparameters.loc['close_years_back','Value']=3
@@ -513,11 +513,13 @@ class Integration():
                 print('  ',param,'now',h[param])
 
         initial_ore_grade_decline = m.hyperparam['initial_ore_grade_decline']
-        incentive_mine_cost_improvement = m.hyperparam['incentive_mine_cost_improvement']
+        incentive_mine_cost_change_per_year = m.hyperparam['incentive_mine_cost_change_per_year']
+        mine_cost_change_per_year = m.hyperparam['mine_cost_change_per_year']
         annual_reserves_ratio_with_initial_production_slope = m.hyperparam['annual_reserves_ratio_with_initial_production_slope']
         m.hyperparam['internal_price_formation'] = False
         m.hyperparam['initial_ore_grade_decline'] = 0
-        m.hyperparam['incentive_mine_cost_improvement'] = 0
+        m.hyperparam['incentive_mine_cost_change_per_year'] = 0
+        m.hyperparam['mine_cost_change_per_year'] = 0
         m.hyperparam['annual_reserves_ratio_with_initial_production_slope'] = 0
 
 #         primary_production
@@ -569,7 +571,8 @@ class Integration():
                 plt.close()
 
         m.hyperparam['initial_ore_grade_decline'] = initial_ore_grade_decline
-        m.hyperparam['incentive_mine_cost_improvement'] = incentive_mine_cost_improvement
+        m.hyperparam['incentive_mine_cost_change_per_year'] = incentive_mine_cost_change_per_year
+        m.hyperparam['mine_cost_change_per_year'] = mine_cost_change_per_year
         m.hyperparam['annual_reserves_ratio_with_initial_production_slope'] = annual_reserves_ratio_with_initial_production_slope
         m.hyperparam['internal_price_formation'] = False
         self.concentrate_supply = m.concentrate_supply_series.copy()

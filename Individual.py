@@ -124,6 +124,7 @@ class Individual():
             if '_DEM' in self.filename or '_mining' in self.filename:
                 self.demand_flag = '_DEM' in self.filename
                 self.big_df = pd.read_pickle(self.filename)
+                self.big_df = self.big_df.loc[:,~self.big_df.columns.duplicated()]
                 big_df = self.big_df.copy()
                 self.simulated_demand = pd.concat([big_df.loc['results'][i]['Total demand'] for i in big_df.columns],keys=big_df.columns,axis=1).loc[2001:2019]
                 self.historical_data = pd.read_excel(self.historical_data_file_path,sheet_name=self.material,index_col=0).loc[self.simulated_demand.index].astype(float)

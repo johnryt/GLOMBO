@@ -9,6 +9,7 @@ import statsmodels.api as sm
 from sklearn.ensemble import RandomForestRegressor, ExtraTreesRegressor, GradientBoostingRegressor
 from matplotlib.lines import Line2D
 from sklearn.preprocessing import StandardScaler
+from joblib import Parallel, delayed
 import os
 
 import shap
@@ -113,7 +114,7 @@ class Many():
                                  'Primary demand':'Conc. demand','Primary supply':'Mine production',
                                 'Conc. SD':'Conc. SD','Scrap SD':'Scrap SD','Ref. SD':'Ref. SD'}
 
-    def run_all_demand(self, n_runs=50, commodities=None, save_mining_info=False, trim_result_df=True, constrain_tuning_to_sign=True, filename_base='_run_hist', filename_modifier=''):
+    def run_all_demand(self, n_runs=50, commodities=None, save_mining_info=False, trim_result_df=True, constrain_tuning_to_sign=True, filename_base='_run_hist', filename_modifier='', n_parallel=1):
         """
         Runs pre-tuning of the demand-specific parameters, using historical
         price and having demand match to historical demand based on historical
@@ -142,10 +143,12 @@ class Many():
             `_DEM`
         filename_modifier: str, filename modifier, comes after the `_DEM` but
             before `.pkl`
+        n_parallel: int, number of cores to use for running commodities in
+            parallel (number of commodities to run simultaneously)
         """
         t1 = datetime.now()
         commodities = self.ready_commodities if commodities==None else commodities
-        for material in commodities:
+        def run_individual_demand(material):
             print('-'*40)
             print(material)
             mat = self.element_commodity_map[material].lower()
@@ -157,7 +160,9 @@ class Many():
             self.shist1.historical_sim_check_demand(n_runs,demand_or_mining='demand')
             print(f'time elapsed: {str(datetime.now()-t1)}')
 
-    def run_all_mining(self, n_runs=50, commodities=None, save_mining_info=False, trim_result_df=True, constrain_tuning_to_sign=True, filename_base='_run_hist', filename_modifier=''):
+        Parallel(n_jobs=n_parallel)(delayed(run_individual_demand)(material) for material in commodities)
+
+    def run_all_mining(self, n_runs=50, commodities=None, save_mining_info=False, trim_result_df=True, constrain_tuning_to_sign=True, filename_base='_run_hist', filename_modifier='', n_parallel=1):
         """
         Runs pre-tuning of the mining-specific parameters, using historical
         price and having mining match to historical demand based on historical
@@ -185,9 +190,12 @@ class Many():
             `_mining`
         filename_modifier: str, filename modifier, comes after the `_mining` but
             before `.pkl`
+        n_parallel: int, number of cores to use for running commodities in
+            parallel (number of commodities to run simultaneously)
         """
         commodities = self.ready_commodities if commodities==None else commodities
-        for material in commodities:
+        # for material in commodities:
+        def run_individual_mining(material):
             t1 = datetime.now()
             print('-'*40)
             print(material)
@@ -206,7 +214,9 @@ class Many():
             self.shist.historical_sim_check_demand(n_runs,demand_or_mining='mining')
             print(f'time elapsed: {str(datetime.now()-t1)}')
 
-    def run_all_integration(self, n_runs=200, n_params=3, tuned_rmse_df_out_append=None, commodities=None, train_time=np.arange(2001,2020), simulation_time=np.arange(2001,2020), normalize_objectives=False, force_integration_historical_price=False, constrain_previously_tuned=True, verbosity=0, save_mining_info=False, trim_result_df=True, constrain_tuning_to_sign=True, filename_base='_run_hist', filename_modifier=''):
+        Parallel(n_jobs=n_parallel)(delayed(run_individual_mining)(material) for material in commodities)
+
+    def run_all_integration(self, n_runs=200, n_params=3, n_jobs=3, tuned_rmse_df_out_append=None, commodities=None, train_time=np.arange(2001,2020), simulation_time=np.arange(2001,2020), normalize_objectives=False, force_integration_historical_price=False, constrain_previously_tuned=True, verbosity=0, save_mining_info=False, trim_result_df=True, constrain_tuning_to_sign=True, filename_base='_run_hist', filename_modifier='', n_parallel=1):
         """
         Runs parameter tuning, trying to match to historical demand, price, and
         mine production. Tuning uses Bayesian optimization. Saves all results in
@@ -219,6 +229,7 @@ class Many():
             do the first three and drop any with `price` in the str (upper- or
             lowercase) - will still save the RMSEs of all three, but the score
             will be computed without it (see skopt_run_score function)
+        n_jobs: int, number of parallel jobs run in the Bayesian optimization
         tuned_rmse_df_out_append: str, string appended to tuned_rmse_df_out
             filename so you can differentiate tuning results, if needed.
             Defaults to using the same value as filename_modifier input
@@ -267,33 +278,40 @@ class Many():
             `_mining`
         filename_modifier: str, filename modifier, comes after the `_mining` but
             before `.pkl`
+        n_parallel: int, number of cores to use for running commodities in
+            parallel (number of commodities to run simultaneously)
         """
         if tuned_rmse_df_out_append is None:
             tuned_rmse_df_out_append = filename_modifier
 
         commodities = self.ready_commodities if commodities==None else commodities
         if os.path.exists(f'data/tuned_rmse_df_out{tuned_rmse_df_out_append}.pkl'):
-            rmse_df_out = (f'data/tuned_rmse_df_out{tuned_rmse_df_out_append}.pkl')
+            rmse_df_out = pd.read_pickle(f'data/tuned_rmse_df_out{tuned_rmse_df_out_append}.pkl')
             if rmse_df_out.index.nlevels==1:
                 rmse_df_out = pd.DataFrame()
         else:
             rmse_df_out = pd.DataFrame()
 
         for material in commodities:
-            t1 = datetime.now()
-            print('-'*40)
-            print(material)
-            # timer=IterTimer()
             mat = self.element_commodity_map[material].lower()
             if rmse_df_out.index.nlevels>1:
                 if mat in rmse_df_out.index.get_level_values(0):
                     rmse_df_out.drop(mat,level=0,inplace=True)
+
+        t1 = datetime.now()
+
+        def run_individual_integration(material):
+            print('-'*40)
+            print(material)
+            # timer=IterTimer()
+            mat = self.element_commodity_map[material].lower()
+
             filename=f'{self.pkl_folder}/{mat}{filename_base}_all{filename_modifier}.pkl'
             print('--'*15+filename+'-'*15)
             additional_base_parameters = pd.Series(1,['refinery_capacity_growth_lag'])
             if 'mcpe0' in filename_modifier:
                 additional_base_parameters.loc['mine_cost_price_elas'] = 0
-            self.s = Sensitivity(pkl_filename=filename, data_folder=self.data_folder,changing_base_parameters_series=material,notes=f'Monte Carlo {material} run',
+            self.s = Sensitivity(pkl_filename=filename, data_folder=self.data_folder,changing_base_parameters_series=material,notes=f'{filename}: Monte Carlo {material} run',
                             additional_base_parameters=additional_base_parameters,
                             simulation_time=simulation_time, include_sd_objectives=False, train_time=train_time,
                             OVERWRITE=True,verbosity=verbosity,historical_price_rolling_window=5,
@@ -301,6 +319,7 @@ class Many():
                             constrain_tuning_to_sign=constrain_tuning_to_sign,
                             constrain_previously_tuned=constrain_previously_tuned, normalize_objectives=normalize_objectives,
                             save_mining_info=save_mining_info, trim_result_df=trim_result_df)
+
             sensitivity_parameters = [
                 'pri CU price elas',
                 'sec CU price elas',
@@ -318,27 +337,46 @@ class Many():
                 'refinery_capacity_fraction_increase_mining',
                 'incentive_opening_probability',
                 'mine_cu_margin_elas',
-                'mine_cost_tech_improvements',
+                'mine_cost_change_per_year',
                 'primary_oge_scale',
                 'sector_specific_dematerialization_tech_growth',
                 'intensity_response_to_gdp',
                 'sector_specific_price_response',
             ]
             if force_integration_historical_price:
+                sensitivity_parameters = [
+                    'pri CU price elas',
+                    'sec CU price elas',
+                    'pri CU TCRC elas',
+                    'sec CU TCRC elas',
+                    'sec ratio TCRC elas',
+                    'sec ratio scrap spread elas',
+                    'tcrc_elas_sd',
+                    'tcrc_elas_price',
+                    'scrap_spread_elas_sd',
+                    'scrap_spread_elas_primary_commodity_price',
+                    'direct_melt_elas_scrap_spread',
+                    'collection_elas_scrap_price',
+                    'refinery_capacity_fraction_increase_mining']
+            if n_params==2:
                 sensitivity_parameters = [i for i in sensitivity_parameters if i!='primary_commodity_price_elas_sd']
             self.s.run_historical_monte_carlo(n_scenarios=n_runs,bayesian_tune=True,n_params=n_params,
-                sensitivity_parameters=sensitivity_parameters)
+                sensitivity_parameters=sensitivity_parameters, n_jobs=n_jobs)
             rmse_df = self.s.rmse_df.copy()
             ind = [j for j in self.s.updated_commodity_inputs.index if j not in rmse_df.columns and j!='pareto_3p']
             for k in ind:
                 rmse_df.loc[:,k] = self.s.updated_commodity_inputs[material][k]
             rmse_df = pd.concat([rmse_df],keys=[mat])
-            rmse_df_out = pd.concat([rmse_df_out,rmse_df])
-            rmse_df_out.to_pickle(f'data/tuned_rmse_df_out{tuned_rmse_df_out_append}.pkl')
-            print(f'time elapsed: {str(datetime.now()-t1)}')
-            # add 'response','growth' to sensitivity_parameters input to allow demand parameters to change again
+            return rmse_df
 
-    def get_variables(self, demand_mining_all='demand',filename_base='_run_hist',filename_modifier=''):
+        output = Parallel(n_jobs=n_parallel)(delayed(run_individual_integration)(material) for material in commodities)
+
+        rmse_df_out = pd.concat([rmse_df_out, pd.concat(output)]).fillna(0)
+        rmse_df_out.to_pickle(f'data/tuned_rmse_df_out{tuned_rmse_df_out_append}.pkl')
+        print(f'time elapsed: {str(datetime.now()-t1)}')
+        # add 'response','growth' to sensitivity_parameters input to allow demand parameters to change again
+
+    def get_variables(self, demand_mining_all='demand',filename_base='_run_hist',filename_modifier='',tuned_rmse_df_out_append=None):
         '''
         loads the data from the output pkl files and concatenates the dataframes
         for each commodity. Main variable names are results, hyperparam, and
@@ -357,6 +395,9 @@ class Many():
         '''
         self.filename_base = filename_base
         self.filename_modifier = filename_modifier
+        self.tuned_rmse_df_out_append = tuned_rmse_df_out_append if tuned_rmse_df_out_append!=None else filename_modifier
+        if demand_mining_all=='all':
+            self.tuned_rmse_df_out = pd.read_pickle(f'data/tuned_rmse_df_out{filename_modifier}.pkl')
 
         for df_name in ['rmse_df','hyperparam','simulated_demand','results','historical_data','mine_supply']:
             df_outer = pd.DataFrame()
@@ -379,6 +420,8 @@ class Many():
                 rmse_or_score = 'score'
             else: raise ValueError('input for the demand_mining_all variable when calling the Many().get_variables() function must be a string of one of the following: demand, many, all')
 
+            if 'limit' in self.filename_modifier:
+                self.add_primary_commodity_price_elas_sd_commodity(indiv)
             setattr(self,'indiv_'+material,indiv)
 
             for df_name in ['rmse_df','hyperparam','simulated_demand','results','historical_data','mine_supply']:
@@ -417,6 +460,9 @@ class Many():
                     setattr(self,df_name,df_outer)
                     if df_name!='historical_data':
                         setattr(self,df_name_sorted,df_outer_sorted)
+
+        if 'limit' in filename_modifier and demand_mining_all=='all':
+            self.add_primary_commodity_price_elas_sd_tuned()
 
         types = pd.Series([type(i) for i in self.hyperparam.iloc[:,0]],self.hyperparam.index)
         self.types = types.copy()
@@ -460,6 +506,65 @@ class Many():
             self.integ = Many()
             self.integ.get_variables('all', filename_base=filename_base, filename_modifier=filename_modifier)
             feature_importance(self.integ,plot=False,objective='score')
+
+    def add_primary_commodity_price_elas_sd_tuned(self):
+        """
+
+        """
+        def get_regression_results(price, sd):
+            price=price.copy()
+            sd = sd.copy()
+            sd.name = 'SD'
+            m = sm.GLS(np.log(price), sm.add_constant(np.log(sd))).fit(cov_type='HC3')
+            return pd.Series([m.params['SD'], round(m.pvalues['SD'],6), m.rsquared],['coefficient','pvalue','rsquared'])
+
+        commodities = self.results.index.get_level_values(0).unique()
+        regress_results = pd.DataFrame()
+        for commodity in commodities:
+            res = self.results.loc[commodity]
+            sd = (res['Ref. supply']/res['Ref. demand']).unstack(0).shift(1).dropna()
+            price = res['Refined price'].unstack(0).loc[sd.index]
+            regr = sd.apply(lambda x: get_regression_results(price[0],x),axis=0)
+            regr = pd.concat([regr],keys=[commodity])
+            regress_results = pd.concat([regress_results,regr])
+
+        rename_dict={'coefficient':'primary_commodity_price_elas_sd',
+                     'pvalue':'primary_price_pval_score',
+                     'rsquared':'primary_price_r2_score'}
+        for k in rename_dict.values():
+            if k in self.tuned_rmse_df_out.columns:
+                self.tuned_rmse_df_out.drop(k,axis=1,inplace=True)
+        self.tuned_rmse_df_out = pd.concat([
+            self.tuned_rmse_df_out,
+            regress_results.loc[idx[:,:],1:].rename(rename_dict,level=1).stack().unstack(1)],axis=1
+            ).sort_index().T.sort_index().T
+
+    def add_primary_commodity_price_elas_sd_commodity(self,indiv):
+        def get_regression_results(price, sd):
+            price=price.copy()
+            sd = sd.copy()
+            sd.name = 'SD'
+            m = sm.GLS(np.log(price), sm.add_constant(np.log(sd))).fit(cov_type='HC3')
+            return pd.Series([m.params['SD'], round(m.pvalues['SD'],6), m.rsquared],['coefficient','pvalue','rsquared'])
+
+
+        regress_results = pd.DataFrame()
+        res = indiv.results.copy()
+        sd = (res['Ref. supply']/res['Ref. demand']).unstack(0).shift(1).dropna()
+        price = res['Refined price'].unstack(0).loc[sd.index]
+        regress_results = sd.apply(lambda x: get_regression_results(price[0],x),axis=0)
+        if 0 in regress_results.columns:
+            regress_results = regress_results.loc[:,1:]
+
+        rename_dict={'coefficient':'primary_commodity_price_elas_sd',
+                     'pvalue':'primary_price_pval_score',
+                     'rsquared':'primary_price_R2_score'}
+        for k in rename_dict.values():
+            if k in indiv.rmse_df.index:
+                indiv.rmse_df.drop(k,inplace=True)
+        indiv.rmse_df = pd.concat([
+            indiv.rmse_df,
+            regress_results.rename(rename_dict)]).sort_index().T.sort_index().T
 
     def plot_all_demand(self, dpi=50, filename_base='_run_hist', filename_modifier=''):
         '''
@@ -600,6 +705,7 @@ class Many():
 
         self.multi_scenario_results = pd.DataFrame()
         self.multi_scenario_hyperparam = pd.DataFrame()
+        self.historical_data = pd.DataFrame()
         loaded_commodities=[]
         for element in commodities:
             if verbosity>1: print(f'starting {element}')
@@ -634,6 +740,9 @@ class Many():
                 multi_scenario_hyperparam_ph = pd.concat([multi_scenario_hyperparam_ph],keys=[commodity])
                 self.multi_scenario_results = pd.concat([self.multi_scenario_results, multi_scenario_results_ph])
                 self.multi_scenario_hyperparam = pd.concat([self.multi_scenario_hyperparam, multi_scenario_hyperparam_ph])
+                hist_data = indiv_list[0].historical_data
+                hist_data = pd.concat([hist_data],keys=[commodity])
+                self.historical_data = pd.concat([self.historical_data, hist_data])
                 if verbosity>0: print(f'{element} completed')
                 loaded_commodities += [element]
             elif verbosity>0: print(f'{element} skipped due to missing scenarios')
@@ -697,36 +806,64 @@ def get_X_df_y_df(self, commodity=None, objective=None, standard_scaler=True):
             X_df = X_df.drop(r,level=1)
         X_df = X_df.unstack().stack(level=0)
     else:
-        X_df = self.multi_scenario_hyperparam_formatted.copy()
-        if commodity!=None: X_df = X_df.loc[idx[commodity,:],:]
-        X_df = X_df.loc[[type(i) not in [str,np.ndarray,bool] and not np.isnan(i) for i in X_df.iloc[:,0].values]]
-        X_df = X_df.unstack(1)
-        params_changing = X_df.loc[abs(X_df.subtract(X_df.loc[:,idx[0,1,0]],axis=0).sum(axis=1))>1e-12].index.get_level_values(1).unique()
-        X_df = X_df.loc[idx[:,params_changing],:].unstack().stack(2).stack()
-        X_df = X_df.stack(0).stack().unstack(2)
-        X_df = X_df.loc[:,[i for i in X_df.columns if 'RMSE' not in i and 'R2' not in i and i!='score']]
-        X_df = X_df.loc[idx[:,:,[j for j in X_df.index.get_level_values(2).unique() if j!=0],:],:]
+        if not hasattr(self,'processing_option'):
+            X_df = self.multi_scenario_hyperparam_formatted.copy()
+            if commodity!=None: X_df = X_df.loc[idx[commodity,:],:]
+            X_df = X_df.loc[[type(i) not in [str,np.ndarray,bool] and not np.isnan(i) for i in X_df.iloc[:,0].values]]
+            X_df = X_df.unstack(1)
+            params_changing = X_df.loc[abs(X_df.subtract(X_df.loc[:,idx[0,1,0]],axis=0).sum(axis=1))>1e-12].index.get_level_values(1).unique()
+            X_df = X_df.loc[idx[:,params_changing],:].unstack().stack(2).stack()
+            X_df = X_df.stack(0).stack().unstack(2)
+            X_df = X_df.loc[:,[i for i in X_df.columns if 'RMSE' not in i and 'R2' not in i and i!='score']]
+            X_df = X_df.loc[idx[:,:,[j for j in X_df.index.get_level_values(2).unique() if j!=0],:],:]
+        else:
+            X_df = self.multi_scenario_hyperparam.copy()
+            X_df = X_df.stack().droplevel(1).unstack()
+            X_df = X_df.loc[[type(i) not in [str,np.ndarray,bool] and not np.isnan(i) for i in X_df.iloc[:,0].values]]
+            params_changing = X_df.loc[abs(X_df.subtract(X_df.iloc[:,0],axis=0).sum(axis=1))>1e-12].index.get_level_values(1).unique()
+            params_changing = [i for i in params_changing if np.all([j not in i for j in ['R2','RMSE','score']])]
+            X_df = X_df.loc[idx[:,params_changing],:]
+            X_df = X_df.stack().unstack(1)
+            X_df = X_df.sort_index()
+            if commodity!=None: X_df = X_df.loc[idx[commodity,:],:]
 
     if using_rmse_y and 'score' in rmse_df.index.get_level_values(1):
         y_df = rmse_df.loc[idx[:,'score'],:].unstack().stack(level=0)
     elif using_rmse_y:
         y_df = np.log(rmse_df.loc[idx[:,'RMSE'],:].unstack().stack(level=0))
     elif objective in self.multi_scenario_results_formatted.columns:
-        y_df = outer[objective]
-        y_df = y_df.unstack(3).unstack().dropna(axis=1,how='all')
-        y_df = y_df.subtract(y_df.loc[:,idx[0,1]],axis=0)
-        y_df = y_df.groupby(level=[0,1]).mean()
-        y_df = y_df.loc[:,(y_df!=0).any()]
-        y_df = y_df.stack(0).stack()
-        if type(y_df)==pd.core.series.Series:
-            y_df = pd.DataFrame(y_df)
-        y_df = y_df.rename(columns={y_df.columns[0]:objective})
+        if not hasattr(self, 'processing_option'):
+            y_df = outer[objective]
+            y_df = y_df.unstack(3).unstack().dropna(axis=1,how='all')
+            y_df = y_df.subtract(y_df.loc[:,idx[0,1]],axis=0)
+            y_df = y_df.groupby(level=[0,1]).mean()
+            y_df = y_df.loc[:,(y_df!=0).any()]
+            y_df = y_df.stack(0).stack()
+            if type(y_df)==pd.core.series.Series:
+                y_df = pd.DataFrame(y_df)
+            y_df = y_df.rename(columns={y_df.columns[0]:objective})
+        elif self.processing_option=='2040 ratio 2018 hist':
+            y_df = self.multi_scenario_results[objective].droplevel(1)
+            y_df = y_df.loc[idx[:,:,2040]]
+            ph = self.objective_results_map
+            results_objective_map = dict(zip(ph.values(),ph.keys()))
+            y_df = y_df.unstack()
+            y_df = y_df.divide(
+                self.historical_data[results_objective_map['Mine production']].loc[idx[:,2018]],
+                axis=0).stack()
+            if type(y_df)==pd.core.series.Series:
+                y_df = pd.DataFrame(y_df)
+            y_df = y_df.rename(columns={y_df.columns[0]:'Mine production'})
+            y_df = y_df.sort_index()
+            if commodity!=None: y_df = y_df.loc[idx[commodity,:],:]
     else:
         print('Potential objective values:\n')
         print(rmse_df.index.get_level_values(1).unique(),'\n')
         print(self.multi_scenario_results_formatted.columns)
         raise ValueError('cannot load y_df objective')
 
+    self.y_df_prescale = y_df.copy()
+    self.X_df_prescale = X_df.copy()
     if standard_scaler:
         scaler = StandardScaler()
         x_std = scaler.fit_transform(X_df.values)
@@ -736,7 +873,7 @@ def get_X_df_y_df(self, commodity=None, objective=None, standard_scaler=True):
     self.y_df = y_df.copy()
     self.X_df = X_df.copy()
 
-def feature_importance(self,plot=None,recalculate=False, standard_scaler=True, plot_commodity_importances=False, commodity=None, objective=None, dpi=50):
+def feature_importance(self,plot=None,recalculate=False, standard_scaler=True, plot_commodity_importances=False, commodity=None, objective=None, processing_option=None, dpi=50):
     '''
     Calculates feature importances using three different tree-based machine
     learning algorithms: RandomForestRegressor, ExtraTreesRegressor, and
@@ -772,8 +909,19 @@ def feature_importance(self,plot=None,recalculate=False, standard_scaler=True, p
         multi_scenario_results_formatted, otherwise will be using `score` or
         `RMSE` from rmse_df dataframe depending on whether using and Integration
         or demandModel formulation
+    processing_option: None or str, used to determine which method we use to
+        set up y_df in get_X_df_y_df function, particularly for criticality
+        evaluation. Options are:
+        - `2040 ratio 2018 hist`: y_df will contain the ratio between the
+           simulated 2040 value and the historical 2018 value, for the given
+           objective, provided the objective has a corresponding historical
+           value
     dpi: float, dots per inch, controls figure resolution.
     '''
+
+    if processing_option is not None:
+        self.processing_option = processing_option
+
     if hasattr(self,'objective'):
         objective=self.objective
     elif objective is None:
@@ -1026,7 +1174,8 @@ def make_parameter_names_nice(ind):
         'sd','SD').replace(' elas ',' elasticity to ').replace('Direct melt elas','Direct melt fraction elas').replace('CU price elas','CU elasticity to price').replace(
         'ratio TCRC elas','ratio elasticity to TCRC').replace('ratio scrap spread elas','ratio elasticity to scrap spread').replace(
         'Refinery capacity fraction increase mining','Ref. cap. growth frac. from mine prod. growth').replace('Pri ','Primary refinery ').replace(
-        'Sec CU','Secondary refinery CU').replace('Sec ratio','Refinery SR').replace('primary commodity ','').replace('Primary commodity','Refined').replace('tcm','TCM')
+        'Sec CU','Secondary refinery CU').replace('Sec ratio','Refinery SR').replace('primary commodity ','').replace('Primary commodity','Refined').replace(
+        'tcm','TCM').replace(' sr',' SR')
                                        for i in ind]
     return dict(zip(ind,updated))
 
@@ -1114,7 +1263,8 @@ def plot_demand_parameter_correlation(self,scatter=True, percentile=25, dpi=50):
     plt.close()
     return g.fig, g.ax_joint
 
-def plot_important_parameter_scatter(self, mining_or_integ='mining', percentile=25, n=None, n_most_important=4, scale_y_for_legend=1, plot_median=True, best_or_median='mean', legend=True, scale_fig_width=1, dpi=50):
+def plot_important_parameter_scatter(self, mining_or_integ='mining', percentile=25, n=None, n_most_important=4, scale_y_for_legend=1, plot_median=True, best_or_median='mean', legend=True, scale_fig_width=1, scale_fig_height=1, split_params=True, dpi=50):
+
     """
     Plots the vertical seaborn stripplot of the most important parameters
     for either the mining pre-tuning or the full integration tuning.
@@ -1137,19 +1287,29 @@ def plot_important_parameter_scatter(self, mining_or_integ='mining', percentile=
       just the median of the selected best-fitting parameter set.
     legend: bool, whether to plot the legend on the plot
     scale_fig_width: float, can be used to widen or narrow the plot, default 1
+    split_params: bool, whether to split different parameters to plot on
+        different subplot
     dpi: int, dots per inch, figure resolution (higher = better)
     """
     if n!=None: percentile=n/600*100
-    df2, demand_params, order = prep_for_snsplots(self,demand_mining_integ=mining_or_integ, percentile=percentile, n_most_important=n_most_important)
-    df2 = df2.set_index(['Commodity','Scenario number']).stack().reset_index(drop=False).rename(columns={'level_2':'Parameter',0:'Value'})
+    df2, demand_params, order = prep_for_snsplots(self,demand_mining_integ=mining_or_integ,
+                                                  percentile=percentile, n_most_important=n_most_important)
+    df2 = df2.set_index(['Commodity','Scenario number']).stack().reset_index(drop=False).rename(
+        columns={'level_2':'Parameter',0:'Value'})
+    df2.loc[df2['Parameter']=='Mine cost reduction per year','Value'] /= 10
     # df2a = df2.copy().loc[df2['Parameter']!='Mine cost reduction per year']
-    outer = df2.loc[(df2['Value']<0)|(df2['Value']>1)]['Parameter'].unique()
+    if split_params:
+        outer = df2.loc[((df2['Value']<0)|(df2['Value']>1))]['Parameter'].unique()
+    else:
+        outer = df2.loc[((df2['Value']<0)|(df2['Value']>1))&(df2['Value']==np.inf)]['Parameter'].unique()
     df2a = df2.copy().loc[[i not in outer for i in df2['Parameter']]]
 
     def replace_for_mining(string):
-        return string.replace(' to T','\nto T').replace('y d','y\nd').replace('ing pr','ing\npr').replace('ge e','ge\ne')
-    for i in demand_params:
-        df2a.replace(i,replace_for_mining(i),inplace=True)
+        return string.replace(' to T','\nto T').replace('y d','y\nd').replace('ing pr','ing\npr')\
+            .replace('ge e','ge\ne')
+    if mining_or_integ=='mining':
+        for i in demand_params:
+            df2a.replace(i,replace_for_mining(i),inplace=True)
     df2b = df2.copy().loc[[i in outer for i in df2['Parameter']]]
     if best_or_median=='median':
         df2a_means = df2a.groupby(['Commodity','Parameter']).median().reset_index(drop=False)
@@ -1161,28 +1321,39 @@ def plot_important_parameter_scatter(self, mining_or_integ='mining', percentile=
     self.df2a = df2a
     self.df2b = df2b
     if len(outer)>0:
-        fig,ax=easy_subplots(2,width_scale=scale_fig_width*1.3+0.1*n_most_important/4,width_ratios=[n_most_important-len(outer),len(outer)],dpi=dpi)
+        fig,ax=easy_subplots(2,width_scale=scale_fig_width*1.3+0.1*n_most_important/4,
+                             width_ratios=[n_most_important-len(outer),len(outer)],dpi=dpi)
     else:
-        fig,ax=easy_subplots(1,width_scale=scale_fig_width*1.5+0.1*n_most_important/4,dpi=dpi)
+        fig,ax=easy_subplots(1,width_scale=scale_fig_width*1.5+0.1*n_most_important/4,
+                             height_scale=scale_fig_height, dpi=dpi)
     a=ax[0]
     # sns.violinplot(data=df2a, x='Parameter', y='Value', hue='Commodity',ax=a, linewidth=2)
     order_rename = make_parameter_names_nice(order)
     order = [order_rename[i] for i in order]
-    order = [replace_for_mining(i) for i in order if i not in outer]
+    if mining_or_integ=='mining':
+        order = [replace_for_mining(i) for i in order if i not in outer]
     linewidth = 0.5
 
-    sns.stripplot(data=df2a, x='Parameter', y='Value', hue='Commodity',ax=a, dodge=True, size=10,
-                 order=order, edgecolor='w', linewidth=linewidth)
+    orient='v'
+    if orient=='v':
+        kwd_args = {'x':'Parameter', 'y':'Value', 'hue':'Commodity', 'dodge':True,
+                     'order':order,'linewidth':linewidth, 'orient':orient}
+    else:
+        kwd_args = {'y':'Parameter', 'x':'Value', 'hue':'Commodity', 'dodge':True,
+                     'order':order,'linewidth':linewidth, 'orient':orient}
+    sns.stripplot(data=df2a, ax=a, size=10, edgecolor='w', **kwd_args)
     if plot_median:
         marker='s'
         markersize=12
         alpha=0.3
-        sns.stripplot(data=df2a_means, x='Parameter', y='Value', hue='Commodity',ax=a, dodge=True, size=markersize, palette='dark:k', alpha=alpha, marker=marker,
-                 order=order, edgecolors='k')
+        sns.stripplot(data=df2a_means,ax=a,
+                      size=markersize, palette='dark:k', alpha=alpha, marker=marker,
+                      edgecolors='k',**kwd_args)
     h,l = a.get_legend_handles_labels()
     if plot_median:
         n_commodities = len(df2a.Commodity.unique())
-        square_h, square_l = Line2D([0],[0],marker=marker,color='w',alpha=alpha+0.1,markersize=10,markerfacecolor='k', markeredgecolor='k'),best_or_median.capitalize()
+        square_h, square_l = Line2D([0],[0],marker=marker,color='w',alpha=alpha+0.1,markersize=10,
+                                    markerfacecolor='k', markeredgecolor='k'),best_or_median.capitalize()
         h = h[:n_commodities]
         l = l[:n_commodities]
     ncol=1
@@ -1192,10 +1363,11 @@ def plot_important_parameter_scatter(self, mining_or_integ='mining', percentile=
         h_update += [square_h]
         l_update += [square_l]
     if legend:
-        a.legend(ncol=ncol,handles=h_update, labels=l_update, frameon=True, columnspacing=0.2, handletextpad=0.1, borderpad=0.5, labelspacing=0.1)
+        a.legend(ncol=ncol,handles=h_update, labels=l_update, frameon=True, columnspacing=0.2,
+                 handletextpad=0.1, borderpad=0.5, labelspacing=0.1)
     else:
         a.legend('')
-
+    a.tick_params(axis='x',rotation=90)
 
     alim = a.get_ylim()
     a.set(xlabel=None, ylim=(alim[0],alim[1]*1.07*(scale_y_for_legend)))
@@ -1207,9 +1379,10 @@ def plot_important_parameter_scatter(self, mining_or_integ='mining', percentile=
         a.set_title(title_string+' parameter results',weight='bold')
     if len(outer)>0:
         b=ax[1]
-        sns.stripplot(data=df2b, x='Parameter', y='Value', hue='Commodity',ax=b, dodge=True, size=10, linewidth=linewidth, edgecolor='w')
+        sns.stripplot(data=df2b,ax=b, size=10, edgecolor='w', **kwd_args)
         if plot_median:
-            sns.stripplot(data=df2b_means, x='Parameter', y='Value', hue='Commodity',ax=b, dodge=True, size=markersize, palette='dark:k', alpha=alpha, marker=marker)
+            sns.stripplot(data=df2b_means, ax=b, size=markersize, palette='dark:k', alpha=alpha, marker=marker,
+                          **kwd_args)
         b.legend('')
         alim = a.get_ylim()
         scale = np.floor(df2b['Value'].min()) if df2b['Value'].min()<0 else np.ceil(df2b['Value'].max())
@@ -1223,7 +1396,7 @@ def plot_important_parameter_scatter(self, mining_or_integ='mining', percentile=
 
     return fig,ax,df2
 
-def commodity_level_feature_importance_heatmap(self,dpi=50,recalculate=True):
+def commodity_level_feature_importance_heatmap(self,dpi=50,recalculate=True,objective=None):
     """
     Creates a plot showing commodity level feature importances in heatmap form.
 
@@ -1251,8 +1424,12 @@ def commodity_level_feature_importance_heatmap(self,dpi=50,recalculate=True):
                  'Direct melt fraction elasticity to scrap spread']
     if not hasattr(self,'importances_df_reformed') or recalculate:
         importances_df = pd.DataFrame()
-        for comm in list(self.rmse_df.index.get_level_values(0).unique())+[None]:
-            feature_importance(self,commodity=comm,recalculate=True,plot=False)
+        if hasattr(self,'rmse_df'):
+            outer = self.rmse_df.copy()
+        else:
+            outer = self.multi_scenario_results.copy()
+        for comm in list(outer.index.get_level_values(0).unique())+[None]:
+            feature_importance(self,commodity=comm,recalculate=True,plot=False,objective=objective)
             ph = self.importances_df['Mean no dummies']
             ph.name=comm if comm!=None else 'None'
             importances_df = pd.concat([importances_df,ph],axis=1)
@@ -1415,7 +1592,7 @@ def run_future_scenarios(data_folder='data', run_parallel=3, supply_or_demand='d
         scenarios = scenariosb+scenarios2+scenarios3+scenarios4
     if verbosity>0: print(scenarios)
 
-    rmse_df = pd.read_pickle(f'{data_folder}/tuned_rmse_df_out{tuned_rmse_df_out_append}.pkl')
+    rmse_df = pd.read_pickle(f'{data_folder}/tuned_rmse_df_out{tuned_rmse_df_out_append}.pkl').stack().unstack(1)
     if commodities is None:
         commodities = ['Steel','Al','Au','Sn','Cu','Ni','Ag','Zn','Pb']
 
@@ -1457,7 +1634,7 @@ def run_future_scenarios(data_folder='data', run_parallel=3, supply_or_demand='d
                     for _ in np.arange(0,3):
                         generated += mean-np.mean(generated)
                         generated = generated[generated>0]
-                        if i!= 'mine_cost_tech_improvements':
+                        if i!= 'mine_cost_change_per_year':
                             generated = generated[generated<1]
                     df.loc[i] = generated[:n_per_baseline]*sign
                     rs+=1
@@ -1697,14 +1874,20 @@ def get_train_test_scores(rmse_df, weight_price=1):
                                   if 'price' in i]],:] = \
                 test_rmses.loc[idx[:,[i for i in test_rmses.index.get_level_values(1).unique()
                                   if 'price' in i]],:]**weight_price
-            test_score = np.log(test_rmses.groupby(level=0).sum().div(3))
+            if (test_rmses.groupby(level=0).sum()!=0).any().any():
+                test_score = np.log(test_rmses.groupby(level=0).sum().div(3))
+            else:
+                test_score = test_rmses.groupby(level=0).sum().div(3)
             test_score = pd.concat([test_score.unstack()],keys=[f'{i} score'],axis=1).stack().unstack(0)
             rmse_copy = pd.concat([rmse_copy,test_score])
 
         # now doing overall score (score saved from original rmse_df is for train set)
         test_rmses = rmse_copy.loc[idx[:,[i for i in rmse_copy.index.get_level_values(1).unique()
                                       if 'RMSE' in i and 'test' not in i and 'train' not in i]],:].sort_index()
-        test_score = np.log(test_rmses.groupby(level=0).sum().div(3))
+        if (test_rmses.groupby(level=0).sum()!=0).any().any():
+            test_score = np.log(test_rmses.groupby(level=0).sum().div(3))
+        else:
+            test_score = test_rmses.groupby(level=0).sum().div(3)
 
         test_score = pd.concat([test_score.unstack()],keys=['total score'],axis=1).stack().unstack(0)
         rmse_copy = pd.concat([rmse_copy,test_score])
@@ -1828,16 +2011,18 @@ def generate_clustered_hyperparam(rmse_df, commodity, n_best_scenarios=25, n_per
     rmse_df.drop(droppers,inplace=True)
 
     rmse_ph = rmse_df[scores.loc[scores.selection1].index].T
+
     hyperparam_ph = pd.DataFrame(np.nan,np.arange(0,rmse_ph.shape[0]*n_per_baseline),rmse_ph.columns)
     for ei,i in enumerate(rmse_ph.index):
         for ef,f in enumerate(hyperparam_ph.columns):
             sign = np.sign(rmse_ph[f][i])
             if n_per_baseline>1:
-                data = abs(rmse_ph[f][i]+stats.norm.rvs(loc=0, scale=rmse_ph[f].std(),
-                                                    size=n_per_baseline, random_state=ei+ef))
+                data = np.append(abs(rmse_ph[f][i]),
+                                 abs(rmse_ph[f][i]+stats.norm.rvs(loc=0, scale=rmse_ph[f].std(),
+                                                    size=n_per_baseline-1, random_state=ei+ef)))
             else:
                 data = np.array([abs(rmse_ph[f][i])])
-            if f!='mine_cost_tech_improvements':
+            if abs(rmse_ph[f]).max()<=1:
                 data[data>1] = 2-data[data>1]
             data = sign*data
             hyperparam_ph.iloc[ei*n_per_baseline:(ei+1)*n_per_baseline,ef]=data
@@ -2245,7 +2430,7 @@ def format_data_for_pca_tsne(demand_or_mining='demand', filename_base='_run_hist
     # all_hyperparam = all_rmse_df.drop(['Mining R2','Mining RMSE','Demand R2','Demand RMSE'],level=1)
     if 'Mining R2' in all_rmse_df.index.get_level_values(1).unique():
         all_hyperparam = all_rmse_df.drop(['Mining R2','Mining RMSE'],level=1)
-        all_hyperparam = all_hyperparam.loc[idx[:,['mine_cu_margin_elas','primary_oge_scale','mine_cost_tech_improvements']],:]
+        all_hyperparam = all_hyperparam.loc[idx[:,['mine_cu_margin_elas','primary_oge_scale','mine_cost_change_per_year']],:]
     if 'Demand R2' in all_rmse_df.index.get_level_values(1).unique():
         all_hyperparam = all_rmse_df.drop(['Demand R2','Demand RMSE'],level=1)
     return all_hyperparam
@@ -2323,6 +2508,13 @@ class SHAP():
         or `RMSE` from rmse_df dataframe depending on whether using the
         Integration or demandModel formulation. If str, will try to do
         the mean difference from baseline.
+    processing_option: None or str, used to determine which method we use to
+        set up y_df in get_X_df_y_df function, particularly for criticality
+        evaluation. Options are:
+        - `2040 ratio 2018 hist`: y_df will contain the ratio between the
+           simulated 2040 value and the historical 2018 value, for the given
+           objective, provided the objective has a corresponding historical
+           value
     -----------------------------
     Methods:
     initialize: runs all the main code (run_tree_based_regression, initialize_shap,
@@ -2356,7 +2548,7 @@ class SHAP():
     sh.initialize()
     sh.plot_shap(dpi=50,highlight_best=True)
     '''
-    def __init__(self, many, commodity=None, standard_scaler=True, dummies=False, split_frac=0.5, Regressor=RandomForestRegressor, use_train_data=False, objective=None):
+    def __init__(self, many, commodity=None, standard_scaler=True, dummies=False, split_frac=0.5, Regressor=RandomForestRegressor, use_train_data=False, objective=None, processing_option=None):
         self.many = many
         if commodity!=None:
             commodity=commodity.lower()
@@ -2367,6 +2559,8 @@ class SHAP():
         self.Regressor = Regressor
         self.use_train_data = use_train_data
         self.objective = objective
+        if processing_option is not None:
+            self.processing_option = processing_option
 
     def initialize(self):
         '''
@@ -2406,12 +2600,17 @@ class SHAP():
 
         get_X_df_y_df(self.many, commodity=commodity, standard_scaler=standard_scaler, objective=self.objective)
         self.X_df = self.many.X_df.copy()
+        self.X_df_prescale = self.many.X_df_prescale.copy()
         self.X_df = self.X_df.rename(columns=make_parameter_names_nice(self.X_df.columns))
+        self.X_df_prescale = self.X_df_prescale.rename(columns=make_parameter_names_nice(self.X_df_prescale.columns))
         self.y_df = self.many.y_df.copy()
+        self.y_df_prescale = self.many.y_df_prescale.copy()
 
         if dummies:
             self.X_df.loc[:,'commodity =']=self.X_df.index.get_level_values(0)
             self.X_df = pd.get_dummies(self.X_df,columns=['commodity ='])
+            self.X_df_prescale.loc[:,'commodity =']=self.X_df_prescale.index.get_level_values(0)
+            self.X_df_prescale = pd.get_dummies(self.X_df_prescale,columns=['commodity ='])
         self.many.X_df = self.X_df.copy()
 
         if self.use_train_data:
@@ -2425,6 +2624,9 @@ class SHAP():
             self.X_df = self.X_df.loc[~self.X_df.index.isin(self.X_df_test.index)]
             self.y_df = self.y_df.loc[self.X_df.index]
 
+        self.X_df_prescale_test = self.X_df_prescale.loc[self.X_df_test.index]
+        self.y_df_prescale_test = self.y_df_prescale.loc[self.y_df_test.index]
+
         self.X = self.X_df.values
         self.y = self.y_df.values.flatten()
 
@@ -2435,7 +2637,9 @@ class SHAP():
 
         if self.objective is None: self.objective='RMSE'
         self.test = pd.concat([self.X_df_test,self.y_df_test.rename(columns={self.y_df_test.columns[0]:self.objective})],axis=1)
+        self.test_prescale = pd.concat([self.X_df_prescale_test,self.y_df_prescale_test.rename(columns={self.y_df_prescale_test.columns[0]:self.objective})],axis=1)
         self.test.loc[:,'predicted '+self.objective] = self.regr.predict(self.X_df_test)
+        self.test_prescale.loc[:,'predicted '+self.objective] = self.test['predicted '+self.objective]
 
     def initialize_shap(self):
         self.explainer = shap.TreeExplainer(self.regr)
@@ -2624,7 +2828,7 @@ class SHAP():
         cols = cols[:n_plots]
         fig,ax = easy_subplots(n_plots)
         name_map = make_parameter_names_nice(cols)
-        data = self.test.copy()
+        data = self.test_prescale.copy()
 
         for param,a in zip(cols,ax):
             a.scatter(data[param],self.shap_values_df[param],label='all')
@@ -2756,7 +2960,7 @@ def draw_facet_dendrogram(self):
     redundancy = self.inspector.feature_redundancy_linkage()
     DendrogramDrawer().draw(data=redundancy, title="Redundancy Dendrogram")
 
-def plot_sri_matrices(self, n_param=3, width_ratio_scale = 0.83, dpi = 100):
+def plot_sri_matrices(self, n_param=3, width_scale=1, width_ratio_scale = 0.83, dpi = 100):
     '''
     notes: the synergy matrix shows that from the perspective of nearly
     any parameter (rows), the information in "incentive pool opening
@@ -2780,18 +2984,24 @@ def plot_sri_matrices(self, n_param=3, width_ratio_scale = 0.83, dpi = 100):
     width_ratio_scale: float, used to change the relative widths of the
         subplots since the colorbar makes the rightmost figure narrower
     dpi: int, dots per square inch / figure resolution
+    ------------------------
+    Returns figure
+
     '''
     dfs = [self.synergy_matrix,self.redundancy_matrix,self.independence_matrix][:n_param]
     names = ['Synergy','Redundancy','Independence'][:n_param]
-    fig,ax = easy_subplots(dfs,use_subplots=True,width_ratios=[width_ratio_scale,width_ratio_scale,1][-n_param:],sharey=True)
+    fig,ax = easy_subplots(dfs,use_subplots=True,
+                            width_scale=width_scale,
+                            width_ratios=[width_ratio_scale,width_ratio_scale,1][-n_param:],
+                            sharey=True)
     for i,a,name in zip(dfs,ax,names):
         b = sns.heatmap(i,ax=a,annot=True,fmt='.2f',annot_kws={'fontsize':16},cbar=(name==names[-1]),xticklabels=True,yticklabels=True)
         a.set_title(name,weight='bold')
         a.set(ylabel='Feature' if name==names[0] else '',xlabel='Feature')
     if len(self.synergy_matrix.index)>11:
-        fig.set_size_inches(12*n_param+6,16)
+        fig.set_size_inches((12*n_param+6)*width_scale,16)
     else:
-        fig.set_size_inches(7*n_param+6,12)
+        fig.set_size_inches((7*n_param+6)*width_scale,12)
     fig.set_dpi = dpi
     fig.tight_layout(pad=1)
     return fig
@@ -2954,6 +3164,82 @@ def stackplot_scrap_demand(many, commodity='aluminum', hyperparam_set=0, scrap_s
     fig.tight_layout()
     return fig,ax,results
 
+def plot_future_line_and_hist_one_commodity(many, commodity, parameter, restrict=0.95, use_sns=False, plot_historical=False, color='tab:blue', fig=None, ax=None, dpi=50):
+    """
+    Plots the combined set of transparent lines for historical-future time
+    progression of the given parameter and commodity, with a histogram aligning
+    with the y axis that shows the 2040 value distribution.
+
+    --------
+    many: Many() object, must have multi_scenario_results object
+    commodity: str, lowercase commodity form
+    parameter: str, any column in many.multi_scenario_results
+    restrict: float or False, whether to restrict the y-axis limits to exclude
+        outliers, with float values corresponding to the percentile being
+        plotted (e.g. 0.95 causes the middle 95% of max/min values to be shown)
+    use_sns: bool, no functionality yet but figured it would be to have the
+        sns.lineplot shading functionality
+    plot_historical: bool, whether to show the historical values alongside the
+        simulated
+    color: str, matplotlib color for the lines and histogram
+    fig: figure on which to plot
+    ax: axes on which to plot, must be a list of length 2, as the histogram
+        plots on ax[1]
+    dpi: int, dots per square inch, controls figure resolution
+    ----------
+
+    Returns: comm (the data being plotted), fig
+    """
+    if ax is None:
+        fig,ax=easy_subplots(2,2,width_ratios=[4,1], sharey=False, width_scale=0.6)
+    comm = many.multi_scenario_results.loc[commodity][parameter].droplevel(0)
+    comm = comm.unstack().T.loc[2001:]
+    hist_data_dict = dict(zip(many.objective_results_map.values(), many.objective_results_map.keys()))
+    if parameter in hist_data_dict and plot_historical:
+        hist = many.historical_data.loc[commodity][hist_data_dict[parameter]].loc[2001:2019]
+        dicty = get_unit(comm, hist, parameter)
+        comm = dicty['simulated']
+        hist = dicty['historical']
+        unit = dicty['unit']
+    else:
+        dicty = get_unit(comm, comm, parameter)
+        comm = dicty['simulated']
+        unit = dicty['unit']
+
+    comm.plot(legend=False, alpha=0.05, linewidth=1, color=color,
+              ylabel=f'{parameter} ({unit})',
+              xlabel='Year',
+              ax=ax[0],
+             ).grid(axis='x')
+
+    if parameter in hist_data_dict and plot_historical:
+        hist.plot(
+                color='k',
+                alpha=0.5,
+                ax=ax[0],
+            ).grid(axis='x')
+    if restrict:
+        restrict = 1-(1-restrict)/2
+        booly = (comm.min()>-comm.min().quantile(1-restrict)) &\
+                (comm.max()<comm.max().quantile(restrict))
+        restricted = booly[booly].index
+    else: restricted = comm.columns
+    comm.loc[2040][restricted].plot.hist(orientation='horizontal', ax=ax[1],
+                             color=color
+                            ).grid(axis='x')
+    if restrict:
+        ax[0].set(ylim=(-comm.min().quantile(1-restrict), comm.max().quantile(restrict)))
+        ax[1].set(ylim=(-comm.min().quantile(1-restrict), comm.max().quantile(restrict)))
+
+    ax[1].set(xlabel='2040 Freq.', yticklabels=[])
+
+    fig.suptitle(f'{commodity.capitalize()} {parameter.lower()}',y=0.9, x=0.58, weight='bold')
+    fig.tight_layout()
+    fig.set_dpi(dpi)
+    plt.show()
+    plt.close()
+    return comm, fig
+
 def run_demand_pretuning():
     """
     Mostly for keeping track of things.
@@ -2965,41 +3251,33 @@ def run_demand_pretuning():
     future use, since we overwrite that file with every run.
     """
     mod = Many()
-    mod.run_all_demand(100, constrain_tuning_to_sign=True, filename_modifier='_constrain')
+    mod.run_all_demand(100, constrain_tuning_to_sign=True, filename_modifier='_constrain_mcpe0',n_parallel=5)
 
     mod = Many()
-    mod.run_all_demand(300, constrain_tuning_to_sign=True, filename_modifier='_constrain3')
+    mod.run_all_demand(300, constrain_tuning_to_sign=True, filename_modifier='_constrain3_mcpe0',n_parallel=5)
 
     mod = Many()
-    mod.run_all_demand(100, constrain_tuning_to_sign=False, filename_modifier='_unconstrain')
+    mod.run_all_demand(100, constrain_tuning_to_sign=False, filename_modifier='_unconstrain1_mcpe0',n_parallel=5)
 
     mod = Many()
-    mod.run_all_demand(300, constrain_tuning_to_sign=False, filename_modifier='_unconstrain1')
+    mod.run_all_demand(100, constrain_tuning_to_sign=False, filename_modifier='_unconstrain_mcpe0',n_parallel=5)
 
     mod = Many()
-    mod.run_all_demand(300, constrain_tuning_to_sign=False, filename_modifier='_unconstrain3')
-
-    # removing mine_cost_price_elas variable from the system (setting 0), run 22-11-14
-    mod = Many()
-    mod.run_all_demand(100, constrain_tuning_to_sign=True, filename_modifier='_constrain_mpce0')
+    mod.run_all_demand(300, constrain_tuning_to_sign=False, filename_modifier='_unconstrain3_mcpe0',n_parallel=5)
 
 def run_mining_pretuning():
     """
     Mostly for keeping track of everything
     """
+    mod = Many()
+    mod.run_all_mining(200,commodities=None, constrain_tuning_to_sign=False, filename_modifier='_unconstrain1_mcpe0', n_parallel=2)
 
     mod = Many()
-    mod.run_all_mining(200,commodities=None, constrain_tuning_to_sign=True, filename_modifier='_constrain')
-
-    mod = Many()
-    mod.run_all_mining(200,commodities=None, constrain_tuning_to_sign=False, filename_modifier='_unconstrain1')
-
-    mod = Many()
-    mod.run_all_mining(200,commodities=None, constrain_tuning_to_sign=False, filename_modifier='_unconstrain')
+    mod.run_all_mining(200,commodities=None, constrain_tuning_to_sign=False, filename_modifier='_unconstrain_mcpe0', n_parallel=2)
 
     # removing mine_cost_price_elas variable from the system (setting 0), run 22-11-14
     mod = Many()
-    mod.run_all_mining(200,commodities=to_run, constrain_tuning_to_sign=True, filename_modifier='_mcpe0')
+    mod.run_all_mining(200,commodities=to_run, constrain_tuning_to_sign=True, filename_modifier='_constrain_mcpe0', n_parallel=2)
 
 def run_integration_tuning():
     """
@@ -3012,33 +3290,61 @@ def run_integration_tuning():
     # to_run = ['Ag','Zn','Pb','Al','Au']
     # to_run = ['Ni','Cu','Sn','Steel']
 
-    mod.run_all_integration(200, tuned_rmse_df_out_append='2016',
+    mod = Many()
+    mod.run_all_integration(200, tuned_rmse_df_out_append='_mcpe0_2016',
         train_time=np.arange(2001,2016), simulation_time=np.arange(2001,2020),
         normalize_objectives=True, constrain_previously_tuned=True,
-        commodities=to_run, filename_modifier='_norm_test2016')
+        commodities=to_run, filename_modifier='_mcpe0_2016',
+        n_parallel=2)
 
-    mod.run_all_integration(200, tuned_rmse_df_out_append='2015',
+    mod = Many()
+    mod.run_all_integration(200, tuned_rmse_df_out_append='_mcpe0_2015',
         train_time=np.arange(2001,2015), simulation_time=np.arange(2001,2020),
         normalize_objectives=True, constrain_previously_tuned=True,
-        commodities=to_run, filename_modifier='_norm_test2015')
+        commodities=to_run, filename_modifier='_mcpe0_2015',
+        n_parallel=2)
 
-    # run 11/11, 8:15am
-    # mod.run_all_integration(200, tuned_rmse_df_out_append='_norm',
-    #     train_time=np.arange(2001,2020), simulation_time=np.arange(2001,2041),
-    #     normalize_objectives=True, constrain_previously_tuned=True,
-    #     commodities=to_run, filename_modifier='_norm')
-
-    mod.run_all_integration(200, tuned_rmse_df_out_append='_unconstrain',
+    mod = Many()
+    mod.run_all_integration(200, tuned_rmse_df_out_append='_mcpe0_unconstrain',
         train_time=np.arange(2001,2020), simulation_time=np.arange(2001,2041),
         normalize_objectives=True, constrain_previously_tuned=True,
         constrain_tuning_to_sign=False,
-        commodities=to_run, filename_modifier='_norm_unconstrain')
+        commodities=to_run, filename_modifier='_mcpe0_unconstrain',
+        n_parallel=2)
 
     # removing mine_cost_price_elas variable from the system (setting 0), run 22-11-14
+    mod = Many()
     mod.run_all_integration(200, tuned_rmse_df_out_append='_mcpe0',
         train_time=np.arange(2001,2020), simulation_time=np.arange(2001,2041),
         normalize_objectives=True, constrain_previously_tuned=True,
-        commodities=to_run, filename_modifier='_mcpe0')
+        commodities=to_run, filename_modifier='_mcpe0',
+        n_parallel=2)
+
+    # keeping mine cost price elas removed, and tuning only the remaining
+    # variables that were not pre-tuned, with historical primary commodity price
+    # rather than allowing price to be simulated
+    mod = Many()
+    mod.run_all_integration(n_runs=200, n_params=2, n_jobs=3,
+                            tuned_rmse_df_out_append='_mcpe0_histprice',
+                            train_time=np.arange(2001,2020),
+                            normalize_objectives=True,
+                            constrain_previously_tuned=True,
+                            commodities=to_run,
+                            force_integration_historical_price=True,
+                            filename_modifier='_mcpe0_histprice',
+                            n_parallel=2)
+
+    # tuning demand and mining, ignoring price tuning to see what we get
+    mod = Many()
+    mod.run_all_integration(n_runs=200, n_params=2, n_jobs=3,
+                            tuned_rmse_df_out_append='_mcpe0_noprice',
+                            train_time=np.arange(2001,2020),
+                            normalize_objectives=True,
+                            constrain_previously_tuned=True,
+                            commodities=to_run,
+                            force_integration_historical_price=False,
+                            filename_modifier='_mcpe0_noprice',
+                            n_parallel=2)
 
 def run_all_the_future_scenarios():
     """
@@ -3061,6 +3367,19 @@ def run_all_the_future_scenarios():
         simulation_time=np.arange(2001,2041), baseline_sampling='actual',
         n_best_scenarios=10,
         years_of_increase=np.arange(1,2))
+
+    run_future_scenarios(commodities=to_run,run_parallel=4,verbosity= -1,
+        scenario_name_base='_run_scenario_set_alt_hist_act',supply_or_demand='demand-alt',
+        simulation_time=np.arange(2001,2041), baseline_sampling='clustered',
+        years_of_increase=np.arange(1,2),tuned_rmse_df_out_append='_mcpe0',
+        n_best_scenarios=10,n_per_baseline=5
+    )
+    run_future_scenarios(commodities=to_run,run_parallel=4,verbosity= -1,
+        scenario_name_base='_run_scenario_set_alt_hist_act',supply_or_demand='supply',
+        simulation_time=np.arange(2001,2041), baseline_sampling='clustered',
+        years_of_increase=np.arange(1,2),tuned_rmse_df_out_append='_mcpe0',
+        n_best_scenarios=10,n_per_baseline=5
+    )
 
     # Looking at what happens if we tune without price
     mod.run_all_integration(200, n_params=2, tuned_rmse_df_out_append='_norm_noprice',

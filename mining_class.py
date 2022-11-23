@@ -360,8 +360,8 @@ class miningModel:
 
                 hyperparameters['mine_cu_margin_elas'] = 0.01
                 hyperparameters['mine_cost_og_elas'] = -0.113
-                hyperparameters['mine_cost_tech_improvements'] = 0.5
-                hyperparameter_notes['mine_cost_tech_improvements'] = 'Percent (%) improvement in mine cost reductions per year, default 0.5%'
+                hyperparameters['mine_cost_change_per_year'] = 0.5
+                hyperparameter_notes['mine_cost_change_per_year'] = 'Percent (%) change in mine cost reductions per year, default 0.5%'
                 hyperparameters['mine_cost_price_elas'] = 0.125
                 hyperparameters['mine_cu0'] = 0.7688729808870376
                 hyperparameters['mine_tcm0'] = 14.575211987093567
@@ -620,8 +620,8 @@ class miningModel:
                 hyperparameter_notes['demand_series'] = 'generated from demand_series_method and demand_series_pct_change in the update_operation_hyperparams function'
                 hyperparameters['initial_ore_grade_decline'] = -0.05
                 hyperparameter_notes['initial_ore_grade_decline'] = 'Initial ore grade for new mines, elasticity to cumulative ore treated'
-                hyperparameters['incentive_mine_cost_improvement'] = hyperparameters['mine_cost_tech_improvements']
-                hyperparameter_notes['incentive_mine_cost_improvement'] = 'rate of cost decline year-over-year for the incentive pool'
+                hyperparameters['incentive_mine_cost_change_per_year'] = hyperparameters['mine_cost_change_per_year']
+                hyperparameter_notes['incentive_mine_cost_change_per_year'] = 'rate of cost decline year-over-year for the incentive pool'
 
                 hyperparameters['incentive_tune_tcrc'] = True
                 hyperparameter_notes['incentive_tune_tcrc'] = 'True means that in the karan_generalization method of tuning opening, we tune TCRC. False means we tune Commodity price.'
@@ -2214,7 +2214,7 @@ class miningModel:
         if h['minesite_cost_response_to_grade_price']:
             minesite_cost_expect = minesite_cost_last * (grade / initial_grade) ** h['mine_cost_og_elas'] \
                                    * (price / initial_price) ** h['mine_cost_price_elas'] \
-                                   * (1 - h['mine_cost_tech_improvements'] / 100) ** (year_i - self.simulation_time[0]) \
+                                   * (1 + h['mine_cost_change_per_year'] / 100) ** (year_i - self.simulation_time[0]) \
                                    * (ore_treated / sim_start_ore_treated)
         else:
             minesite_cost_expect = minesite_cost_last
@@ -2584,7 +2584,7 @@ class miningModel:
 
         grade_decline = (self.cumulative_ore_treated[i] / self.cumulative_ore_treated[self.simulation_time[0]]) ** h[
             'initial_ore_grade_decline']
-        cost_improve = (1 - h['incentive_mine_cost_improvement'] / 100) ** (i - self.simulation_time[0])
+        cost_improve = (1 + h['incentive_mine_cost_change_per_year'] / 100) ** (i - self.simulation_time[0])
         incentive_mines['Ramp up flag'] = 1
         incentive_mines['Opening'] = i
         incentive_mines['Head grade (%)'] = incentive_mines['Initial head grade (%)'] * grade_decline
@@ -3435,7 +3435,7 @@ class miningModel:
             h.loc['primary_production'] = initial_demand;
 
         h.loc['initial_ore_grade_decline'] = 0
-        h.loc['mine_cost_tech_improvements'] = 0
+        h.loc['mine_cost_change_per_year'] = 0
         h.loc['incentive_tuning_option'] = self.incentive_tuning_option
         sh.incentive_tuning_option = self.incentive_tuning_option
 

@@ -362,7 +362,7 @@ class miningModel:
                 hyperparameters['mine_cost_og_elas'] = -0.113
                 hyperparameters['mine_cost_change_per_year'] = 0.5
                 hyperparameter_notes['mine_cost_change_per_year'] = 'Percent (%) change in mine cost reductions per year, default 0.5%'
-                hyperparameters['mine_cost_price_elas'] = 0.125
+                hyperparameters['mine_cost_price_elas'] = 0
                 hyperparameters['mine_cu0'] = 0.7688729808870376
                 hyperparameters['mine_tcm0'] = 14.575211987093567
                 hyperparameters['ramp_up_fraction'] = 0.02
@@ -599,7 +599,7 @@ class miningModel:
                 hyperparameter_notes['primary_price_resources_contained_elas'] = 'percent increase in the resources conatined/incentive pool size when price rises by 1%'
                 hyperparameters['byproduct_price_resources_contained_elas'] = 0.05
                 hyperparameter_notes['byproduct_price_resources_contained_elas'] = 'percent increase in the resources conatined/incentive pool size when price rises by 1%'
-                hyperparameters['reserves_ratio_price_lag'] = 7
+                hyperparameters['reserves_ratio_price_lag'] = 5
                 hyperparameter_notes['reserves_ratio_price_lag'] = 'lag on price change price(t-lag)/price(t-lag-1) used for informing incentive pool size change, paired with resources_contained_elas_primary_price (and byproduct if byproduct==True)'
                 hyperparameters['incentive_subsample_series'] = pd.Series(hyperparameters['incentive_subsample_init'], self.simulation_time)
                 hyperparameter_notes['incentive_subsample_series'] = 'series with number of mines to select for subsample used for the incentive pool'
@@ -2214,8 +2214,7 @@ class miningModel:
         if h['minesite_cost_response_to_grade_price']:
             minesite_cost_expect = minesite_cost_last * (grade / initial_grade) ** h['mine_cost_og_elas'] \
                                    * (price / initial_price) ** h['mine_cost_price_elas'] \
-                                   * (1 + h['mine_cost_change_per_year'] / 100) ** (year_i - self.simulation_time[0]) \
-                                   * (ore_treated / sim_start_ore_treated)
+                                   * (1 + h['mine_cost_change_per_year'] / 100) ** (year_i - self.simulation_time[0])
         else:
             minesite_cost_expect = minesite_cost_last
         return minesite_cost_expect
@@ -2671,6 +2670,10 @@ class miningModel:
 
         max_res = self.demand_series[self.simulation_time[0]] * h[
             'annual_reserves_ratio_with_initial_production_const'] * 100
+        if self.verbosity>4:
+            print(2673, max_res)
+            print(2674, self.demand_series)
+            print(2675, self.resources_contained_series)
         self.resources_contained_series.loc[self.resources_contained_series > max_res] = max_res
         self.reserves_ratio_with_demand_series = self.resources_contained_series / self.demand_series
 
@@ -2689,7 +2692,19 @@ class miningModel:
                     self.sxew_fraction_series > self.sxew_fraction_series[self.simulation_time[0]]).any():
                 print(
                     'WARNING: small SX-EW fraction coupled with increasing SX-EW fraction may lead to drawing from a very small incentive pool. If SX-EW starts at zero and increases, it will produce an error.')
-            n = int(resources_contained / incentive_mines['Production (kt)'].sum() * incentive_mines.shape[0] * 2)
+            try:
+                n = int(resources_contained / incentive_mines['Production (kt)'].sum() * incentive_mines.shape[0] * 2)
+            except Exception as e:
+                print(2694,resources_contained)
+                print(2695,incentive_mines['Production (kt)'])
+                print(2696,incentive_mines['Production (kt)'].sum())
+                print(2697,incentive_mines.shape[0])
+                import pickle
+                file = open('self.pkl', 'wb')
+                pickle.dump(self, file)
+                file.close()
+                pd.Series(self.hyperparam).to_pickle('the worst.pkl')
+                raise e
             n = 1 if n < 1 else n
             incentive_mines = incentive_mines.sample(n=n, replace=True, random_state=self.rs).reset_index(drop=True)
             sxew = incentive_mines.loc[incentive_mines['Payable percent (%)'] == 100]

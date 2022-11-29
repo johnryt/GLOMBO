@@ -1,7 +1,5 @@
-
+*.pkl
 *.pyc
-*.pkl
-*.pkl
 data/big_sensitivity_ss_no.pkl
 data/big_sensitivity_sd_no.pkl
 .DS_Store

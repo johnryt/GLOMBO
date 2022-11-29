@@ -44,7 +44,7 @@ class Integration():
         to see the actual methods
     '''
     def __init__(self, data_folder=None, simulation_time=np.arange(2019,2041), verbosity=0, byproduct=False, input_hyperparam=0, scenario_name='', commodity=None, price_to_use=None, historical_price_rolling_window=1, force_integration_historical_price=False):
-        self.version = '2022-09-19 18:03:44' # str(datetime.now())[:19]
+        self.version = '1.0' # str(datetime.now())[:19]
 
         self.price_to_use = 'log' if price_to_use==None else price_to_use
         self.element_commodity_map = {'Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungsten','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
@@ -178,6 +178,7 @@ class Integration():
         hyperparameters.loc['mine_cost_price_elas','Value'] = 0.125
         hyperparameters.loc['mine_cost_og_elas','Value'] = -0.113
         hyperparameters.loc['mine_cost_change_per_year','Value'] = 0.05
+        hyperparameters.loc['incentive_mine_cost_change_per_year','Value'] = 0.05
         hyperparameters.loc['primary_price_resources_contained_elas','Value'] = 0.5
         hyperparameters.loc['close_price_method','Value']='max'
         hyperparameters.loc['close_years_back','Value']=3
@@ -190,7 +191,7 @@ class Integration():
         hyperparameters.loc['primary_overhead_const','Value'] = 0
         hyperparameters.loc['ramp_up_fraction',['Value','Notes']] = np.array([0.02,'fraction of mines in the initial mine generation step that are in any of the ramp up stages (e.g. if ramp_up_year is 3 and ramp_up_fraction is 0.1, then 10% of the mines will have ramp up flag=1, 10% ramp up flag=2, etc.). Value is currently 0.02 based on an initial guess.'],dtype='object')
         hyperparameters.loc['demand_series_method',['Value','Notes']] = np.array(['','This is for setting up the so-called demand series, which is what the mining module tries to tune mine production to match when historical presimulation is done. This value is normally either yoy or target, and setting it to anything else allows us to ensure the demand_series used for mine tuning is the one from our historical data file.'],dtype='object')
-        hyperparameters.loc['reserves_ratio_price_lag',:] = 7, 'lag on price change price(t-lag)/price(t-lag-1) used for informing incentive pool size change, paired with resources_contained_elas_primary_price (and byproduct if byproduct==True)'
+        hyperparameters.loc['reserves_ratio_price_lag',:] = 5, 'lag on price change price(t-lag)/price(t-lag-1) used for informing incentive pool size change, paired with resources_contained_elas_primary_price (and byproduct if byproduct==True)'
 
         # demand
         hyperparameters.loc['demand only',:] = np.nan
@@ -286,6 +287,7 @@ class Integration():
 
         # initializing demand
         self.hyperparam_agreement()
+        self.demand.direct_melt_alt = self.direct_melt_alt
         self.demand.run()
 
         # initializing collection_rate (scenario modification is done in the demand class)
@@ -312,7 +314,7 @@ class Integration():
         self.direct_melt_demand = self.direct_melt_demand.apply(lambda x: x/self.scrap_to_cathode_eff,axis=1)
         self.additional_direct_melt = self.direct_melt_demand.copy()
         self.additional_direct_melt.loc[:] = 0
-        if self.scenario_type in ['scrap demand','scrap demand-alt','both']:
+        if self.scenario_type in ['scrap demand','scrap demand-alt','both','both-alt']:
             shock_start=2019 # shock start is the year the scenario would have started originally (first change in 2020 for 2019 shock_start)
             if not self.direct_melt_alt:# trying an alternative method, seems like adding more each year is not quite in line with how the market would work. Instead, it should be that once someone increases demand, their new demand is implicit within the rest of the market so we do not need to keep adding it each year
                 multiplier_array = np.append(np.repeat(1,shock_start-self.simulation_time[0]+1),np.append(
@@ -352,7 +354,7 @@ class Integration():
         self.secondary_refined_demand = self.secondary_refined_demand.apply(lambda x: x/self.scrap_to_cathode_eff,axis=1)
         self.additional_secondary_refined = self.direct_melt_demand.copy()
         self.additional_secondary_refined.loc[:] = 0
-        if self.scenario_type in ['scrap demand','scrap demand-alt','both']:
+        if self.scenario_type in ['scrap demand','scrap demand-alt','both','both-alt']:
             shock_start=2019 # shock start is the year the scenario would have started originally (first change in 2020 for 2019 shock_start)
             if not self.secondary_refined_alt:
                 multiplier_array = np.append(np.repeat(1,shock_start-self.simulation_time[0]+1),np.append(
@@ -463,6 +465,7 @@ class Integration():
         self.demand.collection_rate = self.collection_rate.copy()
         self.demand.run()
         self.additional_scrap = self.demand.additional_scrap.copy()
+        # print(self.additional_scrap.loc[2018:])
 
     def run_refine(self):
         self.refine.i = self.i
@@ -761,7 +764,7 @@ class Integration():
                 raise ValueError(error_string)
             scenario_type = name[0].replace('ss','scrap supply').replace('sd','scrap demand').replace('bo','both')
 
-            if scenario_type in ['scrap supply','both']:
+            if scenario_type in ['scrap supply','both','both-alt']:
                 collection_rate_duration= int(name[2].split('yr')[0])
                 collection_rate_pct_change_tot = float(name[3].split('%tot')[0])
                 collection_rate_pct_change_inc = float(name[4].split('%inc')[0])
@@ -770,7 +773,7 @@ class Integration():
                 elif name[1]=='no':
                     collection_rate_price_response=False
 
-            if scenario_type in ['scrap demand','both','scrap demand-alt']:
+            if scenario_type in ['scrap demand','both','scrap demand-alt','both-alt']:
                 if scenario_type=='both':
                     integ = 1
                     if name[2].split('yr')[1]=='' or name[3].split('%tot')[1]=='' or name[4].split('%inc')[1]=='':

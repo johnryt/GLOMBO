@@ -50,6 +50,7 @@ def create_result_df(self,integ):
               'Old mine margin','New mine margin',
               'Reserves','Reserves ratio with production'],axis=1).fillna(0)
 
+    # print(integ.additional_scrap)
     addl_scrap = integ.additional_scrap.sum(axis=1).unstack()
     addl_scrap.loc[:,'Global'] = addl_scrap.sum(axis=1)
     for reg in reg_results.index:
@@ -69,7 +70,7 @@ def create_result_df(self,integ):
                integ.refine.ref_stats[reg]['Secondary ratio'],
                integ.refine.ref_stats[reg]['Primary capacity'], integ.refine.ref_stats[reg]['Secondary capacity'],
                integ.refine.ref_stats[reg]['Primary production'], integ.refine.ref_stats[reg]['Secondary production'],
-               integ.additional_direct_melt[reg],integ.additional_secondary_refined[reg],addl_scrap[reg],
+               integ.additional_direct_melt[reg],integ.additional_secondary_refined[reg], addl_scrap[reg],
                integ.sxew_supply,integ.primary_supply[reg],integ.primary_demand[reg],integ.mine_production
               ],axis=1,
               keys=['Total demand','Scrap demand','Scrap supply',
@@ -250,7 +251,8 @@ class Sensitivity():
                  price_to_use='log',
                  timer=None,
                  save_mining_info=False,
-                 trim_result_df=True):
+                 trim_result_df=True,
+                 ):
         '''
         Initializing Sensitivity class.
 
@@ -441,6 +443,8 @@ class Sensitivity():
             ],columns=[])
             reg_results = create_result_df(self, self.mod)
             if not self.save_mining_info: ml = [0]
+            elif self.save_mining_info=='cost_curve':
+                ml = self.mod.mining.ml.copy()[['Commodity price (USD/t)','Minesite cost (USD/t)','Total cash margin (USD/t)','TCRC (USD/t)','Head grade (%)','Recovery rate (%)','Payable percent (%)','Production (kt)','Opening','Simulated closure']]
             else: ml = self.mod.mining.ml.copy()
             big_df.loc[:,0] = np.array([self.mod.version, self.notes, self.mod.hyperparam, self.mod.mining.hyperparam,
                                         self.mod.refine.hyperparam, self.mod.demand.hyperparam, reg_results, ml],dtype=object)
@@ -687,7 +691,7 @@ class Sensitivity():
             if self.changing_base_parameters_series.loc['Secondary refinery fraction of recycled content, Global']==1:
                 scenario_params_dont_change += ['direct_melt_elas_scrap_spread']
     #         params_to_change = [i for i in self.mod.hyperparam.dropna(how='all').index if ('elas' in i or 'response' in i or 'growth' in i or 'improvements' in i) and i not in scenario_params_dont_change]
-            params_to_change = [i for i in self.mod.hyperparam.dropna(how='all').index if np.any([j in i for j in sensitivity_parameters]) and i not in scenario_params_dont_change]
+            params_to_change = [i for i in self.mod.hyperparam.dropna(how='all').index if np.any([j == i for j in sensitivity_parameters]) and i not in scenario_params_dont_change]
             self.sensitivity_param = params_to_change
             if self.verbosity>-1:
                 print(params_to_change)
@@ -700,6 +704,7 @@ class Sensitivity():
         if given_hyperparam_df:
             self.rmse_df = pd.DataFrame()
 
+        notes_ph = self.notes
         for n in np.arange(1,n_scenarios):
             if self.timer is not None: self.timer.start_iter()
 
@@ -724,10 +729,7 @@ class Sensitivity():
                         print(f'\tSub-scenario {enum+1}/{len(self.scenarios)}: {scenario_name} checking if exists...')
                     self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct,scenario_name=scenario_name,commodity=self.material, price_to_use=self.price_to_use, historical_price_rolling_window=self.historical_price_rolling_window, force_integration_historical_price=self.force_integration_historical_price)
                     self.mod.historical_data = self.historical_data.copy()
-                    if enum>0:
-                        self.notes = self.notes.replace(self.scenarios[enum-1],scenario_name)
-                    else:
-                        self.notes += ' '+scenario_name
+                    self.notes = notes_ph+' '+scenario_name
 
                     ###### CHANGING BASE PARAMETERS ######
                     changing_base_parameters_series = self.changing_base_parameters_series.copy()
@@ -751,18 +753,16 @@ class Sensitivity():
                                 values = stats.uniform.rvs(loc=0,scale=1,size=len(params_to_change),random_state=rs)
                                 new_param_series = pd.Series(values, params_to_change)
 
+                            always_unconstrain = ['mine_cost_change_per_year','incentive_mine_cost_change_per_year',
+                                                  'sector_specific_dematerialization_tech_growth',
+                                                  'intensity_response_to_gdp']
+
                             if 'sector_specific_price_response' in params_to_change:
                                 new_param_series.loc['region_specific_price_response'] = new_param_series['sector_specific_price_response']
                             elif 'region_specific_price_response' in params_to_change:
                                 new_param_series.loc['sector_specific_price_response'] = new_param_series['region_specific_price_response']
                             if self.verbosity>0:
                                 print('Parameters getting changed via Monte Carlo random selection:\n',params_to_change)
-                            if 'sector_specific_dematerialization_tech_growth' in params_to_change and self.check_for_previously_tuned('sector_specific_dematerialization_tech_growth'):
-                                new_param_series.loc['sector_specific_dematerialization_tech_growth'] *= 0.15
-                            if 'sector_specific_price_response' in params_to_change and self.check_for_previously_tuned('sector_specific_price_response'):
-                                new_param_series.loc['sector_specific_price_response'] *= 0.15
-                            if 'region_specific_price_response' in params_to_change and self.check_for_previously_tuned('region_specific_price_response'):
-                                new_param_series.loc['region_specific_price_response'] *= 0.15
                             if 'incentive_opening_probability' in params_to_change and self.check_for_previously_tuned('incentive_opening_probability'):
                                 new_param_series.loc['incentive_opening_probability']*=0.5/(1-self.incentive_opening_probability_fraction_zero)
                                 if new_param_series['incentive_opening_probability']>0.5 and self.incentive_opening_probability_fraction_zero!=0:
@@ -785,23 +785,30 @@ class Sensitivity():
                             if all_three_here and np.all([self.check_for_previously_tuned(j) for j in ['close_probability_split_mean','close_probability_split_min','close_probability_split_max']]):
                                 new_param_series.loc[['close_probability_split_mean','close_probability_split_min','close_probability_split_max']] /=  new_param_series.loc[['close_probability_split_mean','close_probability_split_min','close_probability_split_max']].sum()
                             if 'mine_cost_change_per_year' in params_to_change and self.check_for_previously_tuned('mine_cost_change_per_year'):
-                                new_param_series.loc['mine_cost_change_per_year'] *= 5
+                                new_param_series.loc['mine_cost_change_per_year'] = new_param_series['mine_cost_change_per_year']*10-5
+                                if 'incentive_mine_cost_change_per_year' not in params_to_change:
+                                    new_param_series.loc['incentive_mine_cost_change_per_year'] = new_param_series['mine_cost_change_per_year']
                             if 'primary_overhead_const' in params_to_change and self.check_for_previously_tuned('primary_overhead_const'):
                                 new_param_series.loc['primary_overhead_const'] = (new_param_series['primary_overhead_const']-0.5)*1
-                            max_dict = dict(zip(['sector_specific_dematerialization_tech_growth','sector_specific_price_response','region_specific_price_response','intensity_response_to_gdp'],[0.08,0.6,0.6,1.5]))
-                            if 'sector_specific_price_response' in new_param_series.index:
+                            max_dict = dict(zip(['sector_specific_dematerialization_tech_growth','sector_specific_price_response','region_specific_price_response','intensity_response_to_gdp'],[0.2,0.6,0.6,1.5]))
+                            if 'sector_specific_price_response' in new_param_series.index and self.check_for_previously_tuned('sector_specific_price_response'):
                                 new_param_series.loc['sector_specific_price_response'] *= max_dict['sector_specific_price_response']
-                            if 'sector_specific_dematerialization_tech_growth' in params_to_change:
+                            if 'sector_specific_dematerialization_tech_growth' in params_to_change and self.check_for_previously_tuned('sector_specific_dematerialization_tech_growth'):
                                 new_param_series.loc['sector_specific_dematerialization_tech_growth'] *= max_dict['sector_specific_dematerialization_tech_growth']
-                            if 'region_specific_price_response' in new_param_series.index:
+                                new_param_series.loc['sector_specific_dematerialization_tech_growth'] -= max_dict['sector_specific_dematerialization_tech_growth']/2
+                            if 'region_specific_price_response' in new_param_series.index and self.check_for_previously_tuned('region_specific_price_response'):
                                 new_param_series.loc['region_specific_price_response'] *= max_dict['region_specific_price_response']
-                            if 'intensity_response_to_gdp' in params_to_change:
+                            if 'intensity_response_to_gdp' in params_to_change and self.check_for_previously_tuned('intensity_response_to_gdp'):
                                 new_param_series.loc['intensity_response_to_gdp'] *= max_dict['intensity_response_to_gdp']
+                                new_param_series.loc['intensity_response_to_gdp'] -= max_dict['intensity_response_to_gdp']/3
+                            if 'primary_oge_scale' in params_to_change and 'initial_ore_grade_decline' not in params_to_change:
+                                new_param_series.loc['initial_ore_grade_decline'] = new_param_series['primary_oge_scale']
+                            self.sensitivity_param = params_to_change
                             int_params = ['reserves_ratio_price_lag','close_years_back']
                             for j in int_params:
                                 if j in new_param_series.index: new_param_series.loc[j] = int(new_param_series[j])
-                            for param in params_to_change:
-                                if type(self.mod.hyperparam['Value'][param])!=bool and self.mod.hyperparam['Value'][param]!=np.nan and (self.constrain_tuning_to_sign or param in cannot_unconstrain):
+                            for param in new_param_series.index:
+                                if type(self.mod.hyperparam['Value'][param])!=bool and self.mod.hyperparam['Value'][param]!=np.nan and (self.constrain_tuning_to_sign or param in cannot_unconstrain) and param not in always_unconstrain:
                                     new_param_series.loc[param] = abs(new_param_series[param])*np.sign(self.mod.hyperparam.loc[param,'Value'])
                                     self.mod.hyperparam.loc[param,'Value'] = abs(new_param_series[param])*np.sign(self.mod.hyperparam.loc[param,'Value'])
                                 else:
@@ -838,6 +845,13 @@ class Sensitivity():
             self.save_bayesian_results(n_params=n_params)
 
     def check_for_previously_tuned(self,param):
+        """
+        returns True if we are not constraining to previously tuned, or if the
+        parameter is not in updated_commodity_inputs.pkl. Meaning that if we are
+        constraining previously tuned and the value is in the pickle file, we
+        will not do the scaling used for parameters generated from the Bayesian
+        optimization, and will use the value from the pickle instead.
+        """
         bool1 = not self.constrain_previously_tuned
         bool2 = param not in self.updated_commodity_inputs_sub.dropna().index
         return bool1 or bool2
@@ -882,8 +896,9 @@ class Sensitivity():
         lowerbound = 0.001 if lowerbound<=0 else lowerbound
         cannot_unconstrain = ['primary_oge_scale','incentive_opening_probability',
                       'close_years_back','reserves_ratio_price_lag','refinery_capacity_fraction_increase_mining']
-        default_bounds = dict([(_,(0.001,1)) if self.constrain_tuning_to_sign or _ in cannot_unconstrain else (_,(0.001,2))
-                          for _ in self.sensitivity_param])
+        default_bounds = dict([(_,(0.001,1)) if self.constrain_tuning_to_sign
+                                or _ in cannot_unconstrain else (_,(0.001,2))
+                                for _ in self.sensitivity_param])
         self.opt = Optimizer(
             dimensions=[default_bounds[_]
                         if (not self.constrain_previously_tuned or _ not in self.updated_commodity_inputs_sub.dropna().index)
@@ -1474,29 +1489,37 @@ class Sensitivity():
         self.random_state = random_state
         self.bayesian_tune = bayesian_tune
         updated_commodity_inputs = 'updated_commodity_inputs'
-        if not self.constrain_tuning_to_sign:
-            updated_commodity_inputs += '_unconstrained'
-        if 'mine_cost_price_elas' in self.additional_base_parameters.index:
-            updated_commodity_inputs += '_mcpe0'
-        if os.path.exists(f'data/{updated_commodity_inputs}.pkl'):
-            self.updated_commodity_inputs = pd.read_pickle(f'data/{updated_commodity_inputs}.pkl')
-            if self.verbosity>-1: print(f'{updated_commodity_inputs} source: data/{updated_commodity_inputs}.pkl')
-        elif os.path.exists(f'{updated_commodity_inputs}.pkl'):
-            self.updated_commodity_inputs = pd.read_pickle(f'{updated_commodity_inputs}.pkl')
-            if self.verbosity>-1: print(f'{updated_commodity_inputs} source: {updated_commodity_inputs}.pkl')
-        elif os.path.exists(f'{self.data_folder}/{updated_commodity_inputs}.pkl'):
-            self.updated_commodity_inputs = pd.read_pickle(f'{self.data_folder}/{updated_commodity_inputs}.pkl')
-            if self.verbosity>-1: print(f'{updated_commodity_inputs} source: {self.data_folder}/{updated_commodity_inputs}.pkl')
-        elif hasattr(self,'updated_commodity_inputs'):
-            pass
+        if self.constrain_previously_tuned:
+            if not self.constrain_tuning_to_sign:
+                updated_commodity_inputs += '_unconstrained'
+            if 'mine_cost_price_elas' in self.additional_base_parameters.index:
+                updated_commodity_inputs += '_mcpe0'
+            if os.path.exists(f'data/{updated_commodity_inputs}.pkl'):
+                self.updated_commodity_inputs = pd.read_pickle(f'data/{updated_commodity_inputs}.pkl')
+                if self.verbosity>-1: print(f'{updated_commodity_inputs} source: data/{updated_commodity_inputs}.pkl')
+            elif os.path.exists(f'{updated_commodity_inputs}.pkl'):
+                self.updated_commodity_inputs = pd.read_pickle(f'{updated_commodity_inputs}.pkl')
+                if self.verbosity>-1: print(f'{updated_commodity_inputs} source: {updated_commodity_inputs}.pkl')
+            elif os.path.exists(f'{self.data_folder}/{updated_commodity_inputs}.pkl'):
+                self.updated_commodity_inputs = pd.read_pickle(f'{self.data_folder}/{updated_commodity_inputs}.pkl')
+                if self.verbosity>-1: print(f'{updated_commodity_inputs} source: {self.data_folder}/{updated_commodity_inputs}.pkl')
+            elif hasattr(self,'updated_commodity_inputs'):
+                pass
+            else:
+                raise ValueError(f'{updated_commodity_inputs}.pkl does not exist in the expected locations (in this directory, in data folder, as attribute of Sensitivity). Need to run the historical_sim_check_demand() function to create an initialization of updated_commodity_inputs.pkl')
         else:
-            raise ValueError(f'{updated_commodity_inputs}.pkl does not exist in the expected locations (in this directory, in data folder, as attribute of Sensitivity). Need to run the historical_sim_check_demand() function to create an initialization of updated_commodity_inputs.pkl')
-
+            self.updated_commodity_inputs = pd.DataFrame()
         if hasattr(self,'material') and self.material!='':
-            best_params = self.updated_commodity_inputs[self.material].copy().dropna()
-            self.updated_commodity_inputs_sub = best_params.copy()
-            for q in self.demand_params:
-                if q in self.updated_commodity_inputs_sub.index and self.dont_constrain_demand: self.updated_commodity_inputs_sub.drop(q,inplace=True)
+            if self.constrain_previously_tuned:
+                best_params = self.updated_commodity_inputs[self.material].copy().dropna()
+                self.updated_commodity_inputs_sub = best_params.copy()
+                for q in self.demand_params:
+                    if q in self.updated_commodity_inputs_sub.index and self.dont_constrain_demand: self.updated_commodity_inputs_sub.drop(q,inplace=True)
+            else:
+                best_params = pd.Series(dtype=float)
+                best_params.loc['reserves_ratio_price_lag'] = 5
+                best_params.loc['close_years_back'] = 3
+                self.updated_commodity_inputs_sub = pd.Series(dtype=float)
         else:
             raise ValueError('need to use a string input to changing_base_parameters_series in Sensitivity initialization to run this method')
 
@@ -1549,6 +1572,8 @@ class Sensitivity():
                 refine = deepcopy([mod.refine])[0]
                 demand = deepcopy([mod.demand])[0]
             if not self.save_mining_info: ml = [0]
+            elif self.save_mining_info=='cost_curve':
+                ml = mining.ml.copy()[['Commodity price (USD/t)','Minesite cost (USD/t)','Total cash margin (USD/t)','TCRC (USD/t)','Head grade (%)','Recovery rate (%)','Payable percent (%)','Production (kt)','Opening','Simulated closure']]
             else: ml = mining.ml.copy()
             potential_append = pd.DataFrame(np.array([mod.version, notes, mod.hyperparam, mining.hyperparam,
                                 refine.hyperparam, demand.hyperparam, reg_results, ml, self.rmse_df],dtype=object)

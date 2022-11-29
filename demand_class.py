@@ -365,24 +365,39 @@ class demandModel():
     def initialize_collection_scenario(self):
         self.additional_scrap = self.demand.copy().stack(0)
         self.additional_scrap.loc[:] = 0
-        multiplier_array = np.append(
-            np.linspace(1,self.collection_rate_pct_change_tot,self.collection_rate_duration+1),
-            [self.collection_rate_pct_change_tot*self.collection_rate_pct_change_inc**j for j in np.arange(0,len(self.simulation_time)-self.collection_rate_duration-1)])
-        if self.scenario_type in ['scrap supply','both'] and self.collection_rate_duration>0:
+
+        self.total_demand = pd.concat([self.demand.sum(axis=1),
+                                       self.demand['China'].sum(axis=1),
+                                       self.demand['RoW'].sum(axis=1)],
+                                      axis=1,keys=['Global','China','RoW'])
+        demand_ph = self.total_demand.copy()
+
+        if self.scenario_type in ['scrap supply','both','both-alt'] and self.collection_rate_duration>0:
+            shock_start=2019 # shock start is the year the scenario would have started originally (first change in 2020 for 2019 shock_start)
+            if not self.direct_melt_alt:# trying an alternative method, seems like adding more each year is not quite in line with how the market would work. Instead, it should be that once someone increases demand, their new demand is implicit within the rest of the market so we do not need to keep adding it each year
+                multiplier_array = np.append(np.repeat(1,shock_start-self.simulation_time[0]+1),np.append(
+                    np.repeat(1+(self.collection_rate_pct_change_tot-1)/self.collection_rate_duration,self.collection_rate_duration),
+                    [self.collection_rate_pct_change_inc for j in np.arange(1,np.sum(self.simulation_time>=shock_start)-self.collection_rate_duration)]))
+            else:
+                multiplier_array = np.append(np.repeat(1,shock_start-self.simulation_time[0]),np.append(
+                    np.linspace(1,self.collection_rate_pct_change_tot,self.collection_rate_duration+1),
+                    [self.collection_rate_pct_change_tot*self.collection_rate_pct_change_inc**j for j in np.arange(1,np.sum(self.simulation_time>=shock_start)-self.collection_rate_duration)]))
+            self.multiplier_array = multiplier_array
             if self.collection_rate_price_response==False:
                 for yr,mul in zip(self.simulation_time,multiplier_array):
                     self.collection_rate.loc[idx[yr,:],:]*=mul
             else:
                 multiplier_array-=1
                 start = self.simulation_time[0]
-                ph = self.eol.stack().unstack(1).unstack()
-                ph2 = self.scrap_collected.stack().unstack(1).unstack()
-                demand_adj = self.demand.apply(lambda x: x.sum()*ph.loc[start]/ph.loc[start].sum(),axis=1)
-        #         demand_adj = self.eol.stack().unstack(1).unstack() * self.demand.loc[start,:].sum().sum() / self.eol.loc[start].sum().sum()
-                self.additional_scrap = demand_adj.loc[self.simulation_time[0]:].apply(lambda x: ph2.loc[self.simulation_time[0]]*multiplier_array[x.name-self.simulation_time[0]],axis=1)
-                self.additional_scrap.loc[self.simulation_time[0]-1,:] = 0
-                self.additional_scrap = self.additional_scrap.sort_index()
-                self.additional_scrap = self.additional_scrap.stack(0)
+                max_cr = self.hyperparam['Value']['maximum_collection_rate']
+                one_minus = max_cr-self.collection_rate.loc[self.i]
+                eol_fraction = one_minus.div(one_minus.sum(axis=1),axis=0).T
+                additional_scrap = pd.concat([(self.total_demand[['China','RoW']].loc[start]*eol_fraction).T
+                                              for i in self.total_demand.index],
+                          keys=self.total_demand.index)
+                additional_scrap.loc[:start] = 0
+                additional_scrap.loc[start:] = additional_scrap.loc[start:].unstack().apply(lambda x: x*multiplier_array).stack()
+                self.additional_scrap = additional_scrap.sort_index()
 
     def initialize_fabrication_efficiency(self):
         h = self.hyperparam['Value'].copy()
@@ -414,15 +429,17 @@ class demandModel():
 
         eol = pd.concat([eol],keys=[i])
         self.eol = pd.concat([self.eol,eol])
-        self.old_scrap_collected = pd.concat([self.old_scrap_collected,old_scrap_collected])
+        if np.all(old_scrap_collected.index.isin(self.old_scrap_collected.index)):
+            self.old_scrap_collected.drop(old_scrap_collected.index, inplace=True)
+        self.old_scrap_collected = pd.concat([self.old_scrap_collected,old_scrap_collected]).sort_index()
 
         if self.collection_rate_price_response and i>self.simulation_time[0]:
             if not hasattr(self,'additional_scrap'):
                 print('WARNING: additional_scrap variable did not exist and is now being initialized and set to zero')
-                self.additional_scrap = pd.DataFrame(2,
+                self.additional_scrap = pd.DataFrame(0,
                                                     pd.MultiIndex.from_product([self.simulation_time,['China','RoW']]),
                                                     self.eol.columns)
-            temp_old_scrap = self.old_scrap_collected.copy()
+            temp_old_scrap = self.old_scrap_collected.copy().sort_index().T.sort_index().T
             temp_old_scrap.loc[idx[:i-1,:],:] -= self.additional_scrap.loc[idx[:i-1,:],:]
             temp_collection_rate = temp_old_scrap/self.eol
             self.old_scrap_collected.loc[idx[i-1,:],:] -= self.additional_scrap.loc[idx[i-1,:],:]
@@ -445,11 +462,23 @@ class demandModel():
             max_cr = h['maximum_collection_rate']
             temp_collection_rate[temp_collection_rate>max_cr] = max_cr
             self.temp_collection_rate = temp_collection_rate.copy()
-            self.old_scrap_collected.loc[idx[i,:],:] = self.eol.loc[idx[i,:],:]*temp_collection_rate.loc[idx[i,:],:].rename({i-1:i})
+            self.old_scrap_collected.loc[idx[i,:],:] = self.eol.loc[idx[i,:],:]*temp_collection_rate.loc[idx[i,:],:]#.rename({i-1:i})
             self.old_scrap_collected.loc[idx[i-1:i,:],:] += self.additional_scrap.loc[idx[i-1:i,:],:]
             self.collection_rate.loc[idx[:i,:],:] = self.old_scrap_collected.loc[idx[:i,:],:]/self.eol.loc[idx[:i,:],:]
-            if (self.collection_rate.loc[i]>max_cr).any().any() and self.verbosity>0:
-                print('WARNING {}: {}/10 sector-region collection rates (max. {:.3f}) exceed maximum allowable ({:.3f})'.format(i,(self.collection_rate.loc[i]>max_cr).sum().sum(),self.collection_rate.loc[i].max().max(), max_cr))
+            if (self.collection_rate.loc[i]>max_cr+1e-6).any().any():
+                self.collection_rate[self.collection_rate>max_cr+1e-6] = max_cr
+                old_old_scrap = self.old_scrap_collected.copy().dropna()
+                self.old_scrap_collected = self.collection_rate*self.eol
+                print(self.additional_scrap.loc[old_old_scrap.index])
+                print((old_old_scrap-self.old_scrap_collected))
+                self.additional_scrap.loc[old_old_scrap.index] = self.additional_scrap.loc[old_old_scrap.index] - (old_old_scrap-self.old_scrap_collected)
+                self.additional_scrap[self.additional_scrap<0] = 0
+            #     self.additional_scrap = pd.concat([
+            #         self.additional_scrap.drop(self.additional_scrap.loc[idx[i:,:],:].index),
+            #         pd.concat([self.additional_scrap.loc[i] for j in self.additional_scrap.loc[i:].index.get_level_values(0).unique()], keys=self.additional_scrap.loc[i:].index.get_level_values(0).unique())
+            #         ])
+                if self.verbosity>0:
+                    print('WARNING {}: {}/10 sector-region collection rates (max. {:.3f}) exceed maximum allowable ({:.3f})'.format(i,(self.collection_rate.loc[i]>max_cr).sum().sum(),self.collection_rate.loc[i].max().max(), max_cr))
 
         self.new_scrap_collected = self.demand*self.new_scrap_fraction
         self.new_scrap_collected = self.new_scrap_collected.loc[self.old_scrap_collected.index.get_level_values(0).unique()].stack(0)

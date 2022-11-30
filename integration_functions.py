@@ -1573,7 +1573,10 @@ class Sensitivity():
                 demand = deepcopy([mod.demand])[0]
             if not self.save_mining_info: ml = [0]
             elif self.save_mining_info=='cost_curve':
-                ml = mining.ml.copy()[['Commodity price (USD/t)','Minesite cost (USD/t)','Total cash margin (USD/t)','TCRC (USD/t)','Head grade (%)','Recovery rate (%)','Payable percent (%)','Production (kt)','Opening','Simulated closure']]
+                if mining.ml.shape[0]>0:
+                    ml = mining.ml.copy()[['Commodity price (USD/t)','Minesite cost (USD/t)','Total cash margin (USD/t)','TCRC (USD/t)','Head grade (%)','Recovery rate (%)','Payable percent (%)','Production (kt)','Opening','Simulated closure']]
+                else:
+                    ml = [0]
             else: ml = mining.ml.copy()
             potential_append = pd.DataFrame(np.array([mod.version, notes, mod.hyperparam, mining.hyperparam,
                                 refine.hyperparam, demand.hyperparam, reg_results, ml, self.rmse_df],dtype=object)

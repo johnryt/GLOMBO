@@ -376,10 +376,12 @@ class Many():
                 'incentive_opening_probability',
                 'mine_cu_margin_elas',
                 'mine_cost_change_per_year',
+                'mine_cost_og_elas',
                 'primary_oge_scale',
                 'sector_specific_dematerialization_tech_growth',
                 'intensity_response_to_gdp',
                 'sector_specific_price_response',
+                'primary_price_resources_contained_elas',
             ]
             if force_integration_historical_price:
                 sensitivity_parameters = [
@@ -417,7 +419,7 @@ class Many():
         print(f'time elapsed: {str(datetime.now()-t1)}')
         # add 'response','growth' to sensitivity_parameters input to allow demand parameters to change again
 
-    def get_variables(self, demand_mining_all='demand',filename_base='_run_hist',filename_modifier='',tuned_rmse_df_out_append=None):
+    def get_variables(self, demand_mining_all='demand',filename_base='_run_hist',filename_modifier='',tuned_rmse_df_out_append=None, commodities=None):
         '''
         loads the data from the output pkl files and concatenates the dataframes
         for each commodity. Main variable names are results, hyperparam, and
@@ -434,11 +436,12 @@ class Many():
         filename_modifier: str, filename modifier, comes after the `_mining`/
             `_DEM`/`_all` but before `.pkl`
         '''
+        commodities = commodities if commodities is not None else self.ready_commodities
         self.filename_base = filename_base
         self.filename_modifier = filename_modifier
         self.tuned_rmse_df_out_append = tuned_rmse_df_out_append if tuned_rmse_df_out_append!=None else filename_modifier
         if demand_mining_all=='all':
-            self.tuned_rmse_df_out = pd.read_pickle(f'data/tuned_rmse_df_out{filename_modifier}.pkl')
+            self.tuned_rmse_df_out = pd.read_pickle(f'data/tuned_rmse_df_out{self.tuned_rmse_df_out_append}.pkl')
 
         for df_name in ['rmse_df','hyperparam','simulated_demand','results','historical_data','mine_supply']:
             df_outer = pd.DataFrame()
@@ -448,7 +451,7 @@ class Many():
         if pkl_folder=='data' or pkl_folder.split('/')[-1]=='data':
             pkl_folder = pkl_folder.replace('data','data/Historical tuning')
 
-        for material in self.ready_commodities:
+        for material in commodities:
             material = self.element_commodity_map[material].lower()
             if demand_mining_all=='demand':
                 indiv = Individual(filename=f'{pkl_folder}/{material}{filename_base}{filename_modifier}_DEM.pkl',rmse_not_mae=False,dpi=50)
@@ -520,7 +523,7 @@ class Many():
         self.changing_hyperparam = self.hyperparam.loc[types].copy()
         self.changing_hyperparam = self.changing_hyperparam.loc[~(self.changing_hyperparam.apply(lambda x: x-x.mean(),axis=1)<1e-6).all(axis=1)]
 
-    def get_multiple(self, demand=True, mining=True, integ=False, reinitialize=False, filename_base='_run_hist', filename_modifier='', filename_modify_non_integ=False, noninteg_modifier=''):
+    def get_multiple(self, demand=True, mining=True, integ=False, reinitialize=False, filename_base='_run_hist', filename_modifier='', filename_modify_non_integ=False, noninteg_modifier='', tuned_rmse_df_out_append=None, commodities=None):
         '''
         Runs the get_variables command on each type of model run, which are
         then accessible through self.mining, self.demand, and self.integ, each
@@ -544,17 +547,17 @@ class Many():
 
         if demand and (not hasattr(self,'demand') or reinitialize):
             self.demand = Many()
-            self.demand.get_variables('demand', filename_base=filename_base, filename_modifier=filename_modifier if filename_modify_non_integ else noninteg_modifier)
+            self.demand.get_variables('demand', filename_base=filename_base, filename_modifier=filename_modifier if filename_modify_non_integ else noninteg_modifier, commodities=commodities)
             feature_importance(self.demand,plot=False,objective='RMSE')
 
         if mining and (not hasattr(self,'mining') or reinitialize):
             self.mining = Many()
-            self.mining.get_variables('mining', filename_base=filename_base, filename_modifier=filename_modifier if filename_modify_non_integ else noninteg_modifier)
+            self.mining.get_variables('mining', filename_base=filename_base, filename_modifier=filename_modifier if filename_modify_non_integ else noninteg_modifier, commodities=commodities)
             feature_importance(self.mining,plot=False,objective='score')
 
         if integ and (not hasattr(self,'integ') or reinitialize):
             self.integ = Many()
-            self.integ.get_variables('all', filename_base=filename_base, filename_modifier=filename_modifier)
+            self.integ.get_variables('all', filename_base=filename_base, filename_modifier=filename_modifier, tuned_rmse_df_out_append=tuned_rmse_df_out_append, commodities=commodities)
             feature_importance(self.integ,plot=False,objective='score')
 
     def add_primary_commodity_price_elas_sd_tuned(self):
@@ -1262,18 +1265,21 @@ def prep_for_snsplots(self,demand_mining_integ='demand',percentile=25,n_most_imp
         - most_important: list of most important parameters as well?
           only returned for `integ` or `mining`, unsure if there is a difference
     """
-    if demand_mining_integ=='mining':
+    if demand_mining_integ=='mining' and hasattr(self,'mining'):
         df = self.mining.rmse_df_sorted.copy()
         most_important = self.mining.importances_df['Mean no dummies'].sort_values(ascending=False).head(n_most_important).index
         df = df.loc[idx[:,most_important],:].copy()
-    elif demand_mining_integ=='integ':
+    elif demand_mining_integ=='integ' and hasattr(self,'integ'):
         df = self.integ.rmse_df_sorted.copy()
         most_important = self.integ.importances_df['Mean no dummies'].sort_values(ascending=False).head(n_most_important).index
         df = df.loc[idx[:,most_important],:].copy()
-    elif demand_mining_integ=='demand':
+    elif demand_mining_integ=='demand' and hasattr(self,'demand'):
         df = self.demand.rmse_df_sorted.copy()
     else:
         df = self.rmse_df_sorted.copy()
+        if demand_mining_integ=='integ':
+            most_important = self.importances_df['Mean no dummies'].sort_values(ascending=False).head(n_most_important).index
+            df = df.loc[idx[:,most_important],:].copy()
     percentile_converted = int(percentile/100*df.shape[1])
     df.rename(dict(zip(df.index.levels[0],[i.capitalize() for i in df.index.levels[0]])),inplace=True,level=0)
     for i in ['RMSE','R2']:
@@ -1372,14 +1378,20 @@ def plot_important_parameter_scatter(self, mining_or_integ='mining', percentile=
     if mining_or_integ=='demand':
         demand_params = ['Intensity elasticity to GDP', 'Intensity elasticity to time', 'Mine cost change per year']
         df2 = df2.loc[[i in demand_params for i in df2['Parameter']]]
-    order = df2['Parameter'].unique()
 
     if normalize:
-        n = df2.groupby(['Commodity','Parameter']).apply(lambda x: max(abs(max(x['Value'])),abs(min(x['Value']))))
-        df2.loc[:,'Value'] = df2.apply(lambda x: x['Value']/n.loc[idx[x['Commodity'],x['Parameter']]],axis=1)
+#         n = df2.groupby(['Commodity','Parameter']).apply(lambda x: max(abs(max(x['Value'])),abs(min(x['Value']))))
+#         df2.loc[:,'Value'] = df2.apply(lambda x: x['Value']/n.loc[idx[x['Commodity'],x['Parameter']]],axis=1)
+        df2.loc[(df2['Parameter']=='Incentive mine cost change per year')|(df2['Parameter']=='Mine cost change per year'),'Value']/=5
+        df2.loc[(df2['Parameter']=='Intensity elasticity to time'),'Value']*=10
+#         df2.loc[df2['Parameter']=='Incentive mine cost change per year','Parameter'] = r'$\frac{Incentive\:mine\:cost\:change\:per\:year}{5}$'
+#         df2.loc[df2['Parameter']=='Mine cost change per year','Parameter'] = r'$\frac{Mine\:cost\:change\:per\:year}{5}$'
+#         df2.loc[df2['Parameter']=='Intensity elasticity to time','Parameter'] = '10 x Intensity elasticity to time'
+
     else:
         df2.loc[df2['Parameter']=='Mine cost reduction per year','Value'] /= 10
-    # df2a = df2.copy().loc[df2['Parameter']!='Mine cost reduction per year']
+         # df2a = df2.copy().loc[df2['Parameter']!='Mine cost reduction per year']
+    order = df2['Parameter'].unique()
     if split_params:
         outer = df2.loc[((df2['Value']<0)|(df2['Value']>1))]['Parameter'].unique()
         if len(outer)==len(order):
@@ -3191,14 +3203,15 @@ def plot_all_sri_matrices(many, commodities=None, standard_scaler=True, dummies=
         plt.show()
         plt.close()
 
-def plot_best_scenario_sd(self, commodity='aluminum', plot_supply_demand_stack=True, best=0, scrap_scenario=2, legend=True, end_year=2040):
+def plot_best_scenario_sd(self, commodity='aluminum', plot_supply_demand_stack=True, best=0, scrap_scenario=0, legend=True, end_year=2040):
     """
     Plots the many different variables and SD imbalances for
     a given scenario number (or several). Can be run on either
-    future runs or historical tuning runs. If doing historical
-    tuning, can set best = -1 to have it pick the best-score
-    scenario for you; scrap scenario will have no effect for
-    historical tuning.
+    future runs or historical tuning runs (if the Many object
+    you pass has a multi_scenario_results object, it will do
+    future runs). If doing historical tuning, can set
+    best = -1 to have it pick the best-score scenario for you;
+    scrap scenario will have no effect for historical tuning.
 
     e.g. looking at how well the historical part of the runs went:
     plot_best_scenario_sd(many_act_hist,commodity='nickel',
@@ -3206,7 +3219,7 @@ def plot_best_scenario_sd(self, commodity='aluminum', plot_supply_demand_stack=T
         plot_supply_demand_stack=False,legend=False,end_year=2019);
 
     self: Many object that must have a multi_scenario_results
-        variable
+        variable or rmse_df and results variables
     commodity: str, lowercase full name of commodity as in
         multi_scenario_results index level 0
     plot_supply_demand_stack: bool, whether to plot the stackplot
@@ -3214,13 +3227,16 @@ def plot_best_scenario_sd(self, commodity='aluminum', plot_supply_demand_stack=T
     best: int or list, corresponding to the scenario number/hyperparameter
         set in multi_scenario_results (level 1 of multi_scenario_results index)
     scrap_scenario: numerical representation of which scrap scenario to select
-        (level 2 of multi_scenario_results index)
+        (level 2 of multi_scenario_results index), doesn`t get used if doing
+        the historical tuning version.
     end_year: int, typically either 2019 or 2040
     """
     if hasattr(self,'multi_scenario_results'):
         if type(best)!=int:
             best = self.multi_scenario_results.index.get_level_values(1).unique()[self.multi_scenario_results.index.get_level_values(1).unique().isin(best)]
-        results = self.multi_scenario_results.loc[commodity].loc[idx[best,scrap_scenario],:].copy().dropna(how='all')
+        results = self.multi_scenario_results.loc[commodity].loc[idx[best,scrap_scenario,:],:].copy().dropna(how='all')
+        while results.index.nlevels>1:
+            results = results.droplevel(0)
     else:
         if type(best)!=int:
             best = self.rmse_df.columns[self.rmse_df.columns.isin(best)]

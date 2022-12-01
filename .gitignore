@@ -1,3 +1,4 @@
+*.zip
 *.pkl
 *.pyc
 data/big_sensitivity_ss_no.pkl

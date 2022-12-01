@@ -151,7 +151,7 @@ class Integration():
         hyperparameters.loc['determining model structure',:] = np.nan
         hyperparameters.loc['scrap_trade_simplistic',:] = True,'if True, sets scrap supply in each region equal to the demand scaled by the global supply/demand ratio. If False, we should set up a price-informed trade algorithm, but have not done that yet so this should stay True for now'
         hyperparameters.loc['presimulate_mining',:] = True, 'True means we simulate mining production for presimulate_n_years before the simulation starts, theoretically to force alignment with simulation start time mine production'
-        hyperparameters.loc['presimulate_n_years',:] = 10, 'int, number of years in the past to simulate mining to establish baseline'
+        hyperparameters.loc['presimulate_n_years',:] = 20, 'int, number of years in the past to simulate mining to establish baseline'
         hyperparameters.loc['collection_rate_price_response',:] = True,'bool, whether or not this parameter responds to price'
         hyperparameters.loc['direct_melt_price_response',:] = True,'bool, whether or not this parameter responds to price'
         hyperparameters.loc['refinery_capacity_fraction_increase_mining'] = 0.001,'0 means refinery capacity growth is determined by demand growth alone; 1 means refinery capacity growth is determined by mining production growth alone. Values in between allow for a weighted mixture.'
@@ -168,14 +168,14 @@ class Integration():
         hyperparameters.loc['primary_production_var','Value'] = 0.5
         hyperparameters.loc['primary_ore_grade_var','Value'] = 1
         hyperparameters.loc['incentive_opening_probability','Value'] = 0.05
-        hyperparameters.loc['incentive_require_tune_years',:] = 10,'requires incentive tuning for however many years such that supply=demand, with no requirements on incentive_opening_probability and allowing the given incentive_opening_probability to be used'
+        hyperparameters.loc['incentive_require_tune_years',:] = 20,'requires incentive tuning for however many years such that supply=demand, with no requirements on incentive_opening_probability and allowing the given incentive_opening_probability to be used'
         hyperparameters.loc['demand_series_method','Value'] = 'none'
-        hyperparameters.loc['end_calibrate_years','Value'] = 10
+        hyperparameters.loc['end_calibrate_years','Value'] = 20
         hyperparameters.loc['start_calibrate_years','Value'] = 5
         hyperparameters.loc['ramp_up_cu','Value'] = 0.4
         hyperparameters.loc['ml_accelerate_initialize_years','Value'] = max(hyperparameters['Value'][['ml_accelerate_initialize_years','end_calibrate_years']])
         hyperparameters.loc['mine_cu_margin_elas','Value'] = 0.8
-        hyperparameters.loc['mine_cost_price_elas','Value'] = 0.125
+        hyperparameters.loc['mine_cost_price_elas','Value'] = 0
         hyperparameters.loc['mine_cost_og_elas','Value'] = -0.113
         hyperparameters.loc['mine_cost_change_per_year','Value'] = 0.05
         hyperparameters.loc['incentive_mine_cost_change_per_year','Value'] = 0.05

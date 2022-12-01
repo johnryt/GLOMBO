@@ -1215,7 +1215,7 @@ class Sensitivity():
                                             mod.primary_price_series]).sort_index()
                     mod.demand_series = self.historical_data['Total demand']
 
-                mod.version = '220620'
+                mod.version = '1.0'
 
                 ###### CHANGING BASE PARAMETERS ######
                 changing_base_parameters_series = self.changing_base_parameters_series.copy()

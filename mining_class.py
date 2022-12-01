@@ -402,8 +402,6 @@ class miningModel:
                 hyperparameter_notes['reinitialize_incentive_mines'] = 'bool, default False and True is not set up yet. Whether to create a new  incentive pool of mines or to use the pre-generated one, passing True requires supplying incentive_mine_hyperparameters, which can be accessed by calling self.output_incentive_mine_hyperparameters()'
                 hyperparameters['continuous_incentive'] = False
                 hyperparameter_notes['continuous_incentive'] = 'bool, if True, maintains the same set of incentive pool mines the entire time, dropping them from the incentive pool and adding them to the operating pool as they open. Hopefully this will eventually also include adding new mines to the incentive as reserves expand. If False, does not drop & samples from incentive pool each time; recommend changing incentive_mine_hyperparameters and setting reinitialize_incentive_mines=True if that is the case. Current default is False'
-                hyperparameters['years_for_roi'] = 10
-                hyperparameter_notes['years_for_roi'] = 'int, default 10, number of years simulated in simulate_incentive_mines() to determine NPV of incentive mines'
                 hyperparameters['follow_copper_opening_method'] = True
                 hyperparameter_notes['follow_copper_opening_method'] = 'bool, if True, generates an incentive pool for each year of the simulation, creates alterable subsample_series to track how many from the pool are sampled in each year'
                 hyperparameters['calibrate_copper_opening_method'] = True
@@ -730,7 +728,6 @@ class miningModel:
                 hyperparameter_notes['ramp_up_years'] = 'number of years allotted for ramp up (currently use total dCAPEX distributed among those years, so shortening would make each year of dCAPEX more expensive), int default 3'
                 hyperparameter_notes['close_price_method'] = 'method used for price expected used for mine closing - mean, max, alonso-ayuso, or probabilistic are supported - if using probabilistic you can adjust the close_probability_split variables'
                 hyperparameter_notes['close_years_back'] = 'number of years to use for rolling mean/max/min values when evaluating mine closing'
-                hyperparameter_notes['years_for_roi'] = 'years for return on investment when evaluating mine opening - number of years of mine life to simulate for IRR calculation'
                 hyperparameter_notes['close_probability_split_max'] = 'for the probabilistic closing method, probability given to the rolling close_years_back max'
                 hyperparameter_notes['close_probability_split_mean'] = 'for the probabilistic closing method, probability given to the rolling close_years_back mean'
                 hyperparameter_notes['close_probability_split_min'] = 'for the probabilistic closing method, probability given to the rolling close_years_back min - make sure these three sum to 1'
@@ -1156,6 +1153,8 @@ class miningModel:
         self.mines['Risk indicator'] = self.values_from_dist('primary_minerisk').round(0)
         self.mines['Head grade (%)'] = self.values_from_dist('primary_ore_grade')
         self.mines.loc[self.mines['Head grade (%)'] > 80, 'Head grade (%)'] = 80
+        while (self.mines['Head grade (%)']>100*h['primary_ore_grade_mean']).any():
+            self.mines.loc[self.mines['Head grade (%)']>100*h['primary_ore_grade_mean']] /= 100
         self.mines['Commodity price (USD/t)'] = float(h['primary_commodity_price'])
 
         mines = self.mines.copy()

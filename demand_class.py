@@ -42,6 +42,7 @@ class demandModel():
         self.collection_rate_duration = 0
         self.collection_rate_pct_change_tot = 1
         self.collection_rate_pct_change_inc = 1
+        self.scrap_shock_start = 2019
 
     def init_hyperparams(self):
         hyperparameters = pd.DataFrame()
@@ -373,7 +374,7 @@ class demandModel():
         demand_ph = self.total_demand.copy()
 
         if self.scenario_type in ['scrap supply','both','both-alt'] and self.collection_rate_duration>0:
-            shock_start=2019 # shock start is the year the scenario would have started originally (first change in 2020 for 2019 shock_start)
+            shock_start=self.scrap_shock_start # shock start is the year the scenario would have started originally (first change in 2020 for 2019 shock_start)
             if not self.direct_melt_alt:# trying an alternative method, seems like adding more each year is not quite in line with how the market would work. Instead, it should be that once someone increases demand, their new demand is implicit within the rest of the market so we do not need to keep adding it each year
                 multiplier_array = np.append(np.repeat(1,shock_start-self.simulation_time[0]+1),np.append(
                     np.repeat(1+(self.collection_rate_pct_change_tot-1)/self.collection_rate_duration,self.collection_rate_duration),

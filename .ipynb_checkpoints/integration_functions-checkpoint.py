@@ -266,7 +266,7 @@ class Sensitivity():
         param_scale: float, used in conjunction with params_to_change and n_per_param in the run() simple
             sensitivity function, where whichever parameter is selected will be scaled by +/- param_scale
         scenarios: list or array, including only strings. The contents of each string determine the scrap
-            supply or demand changes that will be implemented. See the decode_scrap_scenario_name() function
+            supply or demand changes that will be implemented. See the decode_scenario_name() function
             in integration.py (Integration class) for more detail, but some are given here:
                 takes the form 00_11_22_33_44
                 where:

@@ -6,6 +6,7 @@ from matplotlib import pyplot as plt
 import seaborn as sns
 from cycler import cycler
 from datetime import datetime
+import matplotlib as mpl
 
 def get_sheet_details(file_path):
     sheets = []

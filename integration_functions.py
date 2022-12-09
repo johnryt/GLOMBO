@@ -7,6 +7,7 @@ from integration import Integration
 from random import seed, sample, shuffle
 from demand_class import demandModel
 from mining_class import miningModel
+from scenario_parser import *
 import os
 from useful_functions import easy_subplots, do_a_regress
 import statsmodels.api as sm
@@ -26,7 +27,6 @@ def create_result_df(self,integ):
     takes Integration object, returns regional results. Used within the sensitivity
     function to convert the individual model run to results we can interpret later.
     '''
-    reg = 'Global'
     reg_results = pd.Series(np.nan,['Global','China','RoW'],dtype=object)
 
     if type(integ.mining.ml)!=pd.core.frame.DataFrame:
@@ -63,6 +63,8 @@ def create_result_df(self,integ):
                old_new_mines['Old mine grade'],old_new_mines['New mine grade'],
                old_new_mines['Old mine cost'],old_new_mines['New mine cost'],
                old_new_mines['Old mine margin'],old_new_mines['New mine margin'],
+               (integ.mining.ml['Production (kt)']>0).groupby(level=0).sum(),
+               integ.mining.n_mines_opening, integ.mining.n_mines_closing,
                integ.refined_demand.loc[:,reg],integ.refined_supply[reg],
                integ.secondary_refined_demand.loc[:,reg],integ.direct_melt_demand.loc[:,reg],
                integ.scrap_spread[reg],integ.tcrc,integ.primary_commodity_price,
@@ -80,6 +82,8 @@ def create_result_df(self,integ):
                     'Old mine grade','New mine grade',
                     'Old mine cost','New mine cost',
                     'Old mine margin','New mine margin',
+                    'Number of operating mines',
+                    'Number of mines opening','Number of mines closing',
                     'Ref. demand','Ref. supply',
                     'Sec. ref. cons.','Direct melt',
                     'Spread','TCRC','Refined price',
@@ -249,6 +253,7 @@ class Sensitivity():
                  constrain_previously_tuned=False,
                  dont_constrain_demand=True,
                  price_to_use='log',
+                 use_historical_price_for_mine_initialization=True,
                  timer=None,
                  save_mining_info=False,
                  trim_result_df=True,
@@ -287,7 +292,7 @@ class Sensitivity():
         param_scale: float, used in conjunction with params_to_change and n_per_param in the run() simple
             sensitivity function, where whichever parameter is selected will be scaled by +/- param_scale
         scenarios: list or array, including only strings. The contents of each string determine the scrap
-            supply or demand changes that will be implemented. See the decode_scrap_scenario_name() function
+            supply or demand changes that will be implemented. See the decode_scenario_name() function
             in integration.py (Integration class) for more detail, but some are given here:
                 takes the form 00_11_22_33_44
                 where:
@@ -355,6 +360,7 @@ class Sensitivity():
         self.save_mining_info = save_mining_info
         self.trim_result_df = trim_result_df
         self.simulation_time = simulation_time
+        self.use_historical_price_for_mine_initialization = use_historical_price_for_mine_initialization
         self.train_time = train_time
         self.changing_base_parameters_series = changing_base_parameters_series
         self.additional_base_parameters = additional_base_parameters
@@ -429,14 +435,30 @@ class Sensitivity():
         if os.path.exists(self.pkl_filename) and not self.overwrite:
             big_df = pd.read_pickle(self.pkl_filename)
         else:
-            self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct,scenario_name='',commodity=self.material, price_to_use=self.price_to_use, historical_price_rolling_window=self.historical_price_rolling_window, force_integration_historical_price=self.force_integration_historical_price)
+            self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,
+                                   verbosity=self.verbosity,byproduct=self.byproduct,scenario_name='',
+                                   commodity=self.material, price_to_use=self.price_to_use,
+                                   historical_price_rolling_window=self.historical_price_rolling_window,
+                                   force_integration_historical_price=self.force_integration_historical_price,
+                                   use_historical_price_for_mine_initialization=self.use_historical_price_for_mine_initialization)
             for base in self.changing_base_parameters_series.index:
                 if base in self.demand_params:
                     self.mod.hyperparam.loc[base,'Value'] = abs(self.changing_base_parameters_series[base])*np.sign(self.mod.hyperparam.loc[base,'Value'])
                 else:
                     self.mod.hyperparam.loc[base,'Value'] = self.changing_base_parameters_series[base]
 
-            self.mod.historical_data = self.historical_data.copy()
+            if self.bayesian_tune or (
+                    hasattr(self, 'historical_data') and 'Primary commodity price' in self.historical_data.columns):
+                self.mod.primary_commodity_price = self.historical_data['Primary commodity price'].dropna()
+                self.mod.primary_commodity_price = pd.concat([pd.Series(self.mod.primary_commodity_price.iloc[0],
+                                                                        np.arange(1900,
+                                                                                  self.mod.primary_commodity_price.dropna().index[
+                                                                                      0])),
+                                                              self.mod.primary_commodity_price]).sort_index()
+            if hasattr(self,'historical_data'):
+                self.mod.historical_data = self.historical_data.copy()
+
+
             self.mod.run()
             big_df = pd.DataFrame(np.nan,index=[
                 'version','notes','hyperparam','mining.hyperparam','refine.hyperparam','demand.hyperparam','results','mine_data'
@@ -452,7 +474,7 @@ class Sensitivity():
         self.big_df = big_df.copy()
 
     def update_changing_base_parameters_series(self):
-        '''
+        """
         This function is called within the __init__() method and updates the hyperparameters
         using default changes (setting incentive_require_tune_years, presimulate_n_years,
         and end_calibrate_years hyperparameter values to 10, and start_calibrate_years to 5.
@@ -468,7 +490,7 @@ class Sensitivity():
         to initialization can be a string or pandas series of hyperparameters and their values.
         If it is a string, the function gets the values from the case study data excel file that
         match the string.
-        '''
+        """
         changing_base_parameters_series = self.changing_base_parameters_series
         simulation_time = self.simulation_time
         if type(changing_base_parameters_series)==str:
@@ -493,6 +515,9 @@ class Sensitivity():
                     cap_mat = self.element_commodity_map[self.material]
                     price_map = {'log':'log('+cap_mat+')',  'diff':'∆'+cap_mat,  'original':cap_mat+' original'}
                     historical_price = price_update_file[price_map[self.price_to_use]].astype(float)
+                    if not self.use_historical_price_for_mine_initialization:
+                        historical_price = historical_price.loc[
+                            [i for i in historical_price.index if i in self.simulation_time]]
                     historical_price.name = 'Primary commodity price'
                     historical_price.index = historical_price.index.astype(int)
                     if 'Primary commodity price' in historical_data.columns:
@@ -576,8 +601,24 @@ class Sensitivity():
         Integration class hyperparam dataframe
         '''
         if type(self.params_to_change)==int:
-            self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct, commodity=self.material, price_to_use=self.price_to_use, historical_price_rolling_window=self.historical_price_rolling_window, force_integration_historical_price=self.force_integration_historical_price)
-            self.mod.historical_data = self.historical_data
+            self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,
+                                   verbosity=self.verbosity,byproduct=self.byproduct, commodity=self.material,
+                                   price_to_use=self.price_to_use,
+                                   historical_price_rolling_window=self.historical_price_rolling_window,
+                                   force_integration_historical_price=self.force_integration_historical_price,
+                                   use_historical_price_for_mine_initialization=self.use_historical_price_for_mine_initialization)
+            if self.bayesian_tune or (
+                    hasattr(self, 'historical_data') and 'Primary commodity price' in self.historical_data.columns):
+                self.mod.primary_commodity_price = self.historical_data['Primary commodity price'].dropna()
+                self.mod.primary_commodity_price = pd.concat([pd.Series(self.mod.primary_commodity_price.iloc[0],
+                                                                        np.arange(1900,
+                                                                                  self.mod.primary_commodity_price.dropna().index[
+                                                                                      0])),
+                                                              self.mod.primary_commodity_price]).sort_index()
+            if hasattr(self, 'historical_data'):
+                self.mod.historical_data = self.historical_data.copy()
+
+
             for base in self.changing_base_parameters_series.index:
                 if base in self.demand_params:
                     self.mod.hyperparam.loc[base,'Value'] = abs(self.changing_base_parameters_series[base])*np.sign(self.mod.hyperparam.loc[base,'Value'])
@@ -618,8 +659,23 @@ class Sensitivity():
                 if val!=0:
                     val = round(val, n_sig_dig-1 - int(np.floor(np.log10(abs(val)))))
                 self.val = val
-                self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct,commodity=self.material, price_to_use=self.price_to_use, historical_price_rolling_window=self.historical_price_rolling_window, force_integration_historical_price=self.force_integration_historical_price)
-                self.mod.historical_data = self.historical_data.copy()
+                self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,
+                                       verbosity=self.verbosity,byproduct=self.byproduct,commodity=self.material,
+                                       price_to_use=self.price_to_use,
+                                       historical_price_rolling_window=self.historical_price_rolling_window,
+                                       force_integration_historical_price=self.force_integration_historical_price,
+                                       use_historical_price_for_mine_initialization=self.use_historical_price_for_mine_initialization)
+                if self.bayesian_tune or (
+                        hasattr(self, 'historical_data') and 'Primary commodity price' in self.historical_data.columns):
+                    self.mod.primary_commodity_price = self.historical_data['Primary commodity price'].dropna()
+                    self.mod.primary_commodity_price = pd.concat([pd.Series(self.mod.primary_commodity_price.iloc[0],
+                                                                            np.arange(1900,
+                                                                                      self.mod.primary_commodity_price.dropna().index[
+                                                                                          0])),
+                                                                  self.mod.primary_commodity_price]).sort_index()
+                if hasattr(self, 'historical_data'):
+                    self.mod.historical_data = self.historical_data.copy()
+
                 self.hyperparam_copy = self.mod.hyperparam.copy()
 
                 ###### CHANGING BASE PARAMETERS ######
@@ -677,11 +733,21 @@ class Sensitivity():
         else:
             self.big_df=pd.DataFrame()
             # self.big_df.to_pickle(self.pkl_filename)
-        self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct,commodity=self.material, price_to_use=self.price_to_use, historical_price_rolling_window=self.historical_price_rolling_window, force_integration_historical_price=self.force_integration_historical_price)
-        if bayesian_tune:
+        self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,
+                               verbosity=self.verbosity,byproduct=self.byproduct,commodity=self.material,
+                               price_to_use=self.price_to_use,
+                               historical_price_rolling_window=self.historical_price_rolling_window,
+                               force_integration_historical_price=self.force_integration_historical_price,
+                               use_historical_price_for_mine_initialization=self.use_historical_price_for_mine_initialization)
+        if self.bayesian_tune or (
+                hasattr(self, 'historical_data') and 'Primary commodity price' in self.historical_data.columns):
             self.mod.primary_commodity_price = self.historical_data['Primary commodity price'].dropna()
-            self.mod.primary_commodity_price = pd.concat([pd.Series(self.mod.primary_commodity_price.iloc[0],np.arange(1900,self.mod.primary_commodity_price.dropna().index[0])),
-                                        self.mod.primary_commodity_price]).sort_index()
+            self.mod.primary_commodity_price = pd.concat([pd.Series(self.mod.primary_commodity_price.iloc[0],
+                                                                    np.arange(1900,
+                                                                              self.mod.primary_commodity_price.dropna().index[
+                                                                                  0])),
+                                                          self.mod.primary_commodity_price]).sort_index()
+        if hasattr(self, 'historical_data'):
             self.mod.historical_data = self.historical_data.copy()
 
         if not given_hyperparam_df:
@@ -722,13 +788,40 @@ class Sensitivity():
             else:
                 self.n_jobs = 1
 
+            if len(self.scenarios)>1:
+                if '++' in self.scenarios[1]:
+                    self.scenario_frame = get_scenario_dataframe(
+                        file_path_for_scenario_setup=self.scenarios[1].split('++')[0],
+                        default_year=2019)
             for i in range(self.n_jobs):
                 for enum,scenario_name in enumerate(self.scenarios):
+                    if len(self.scenarios)>1:
+                        if '++' in scenario_name:
+                            scenario_name = self.scenario_frame.loc[scenario_name.split('++')[1]]
+
                     self.last_scenario_flag = (n==n_scenarios-1) and (i==self.n_jobs-1) and (scenario_name==self.scenarios[-1])
                     if self.verbosity>-1:
                         print(f'\tSub-scenario {enum+1}/{len(self.scenarios)}: {scenario_name} checking if exists...')
-                    self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct,scenario_name=scenario_name,commodity=self.material, price_to_use=self.price_to_use, historical_price_rolling_window=self.historical_price_rolling_window, force_integration_historical_price=self.force_integration_historical_price)
-                    self.mod.historical_data = self.historical_data.copy()
+                    self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,
+                                           verbosity=self.verbosity,byproduct=self.byproduct,
+                                           scenario_name=scenario_name,commodity=self.material,
+                                           price_to_use=self.price_to_use,
+                                           historical_price_rolling_window=self.historical_price_rolling_window,
+                                           force_integration_historical_price=self.force_integration_historical_price,
+                                           use_historical_price_for_mine_initialization=self.use_historical_price_for_mine_initialization)
+                    if self.bayesian_tune or (
+                            hasattr(self,
+                                    'historical_data') and 'Primary commodity price' in self.historical_data.columns):
+                        self.mod.primary_commodity_price = self.historical_data['Primary commodity price'].dropna()
+                        self.mod.primary_commodity_price = pd.concat(
+                            [pd.Series(self.mod.primary_commodity_price.iloc[0],
+                                       np.arange(1900,
+                                                 self.mod.primary_commodity_price.dropna().index[
+                                                     0])),
+                             self.mod.primary_commodity_price]).sort_index()
+                    if hasattr(self, 'historical_data'):
+                        self.mod.historical_data = self.historical_data.copy()
+
                     self.notes = notes_ph+' '+scenario_name
 
                     ###### CHANGING BASE PARAMETERS ######
@@ -805,6 +898,10 @@ class Sensitivity():
                                 new_param_series.loc['initial_ore_grade_decline'] = new_param_series['primary_oge_scale']
                             self.sensitivity_param = params_to_change
                             int_params = ['reserves_ratio_price_lag','close_years_back']
+                            cannot_unconstrain = ['primary_oge_scale', 'incentive_opening_probability',
+                                                  'close_years_back', 'reserves_ratio_price_lag',
+                                                  'refinery_capacity_fraction_increase_mining']
+
                             for j in int_params:
                                 if j in new_param_series.index: new_param_series.loc[j] = int(new_param_series[j])
                             for param in new_param_series.index:
@@ -1161,8 +1258,23 @@ class Sensitivity():
             dimensions = [default_bounds if i not in cannot_unconstrain else (0.001,1) for i in params_to_change]
         else:
             # self.mod = miningModel(verbosity=self.verbosity, simulation_time=self.simulation_time,byproduct=self.byproduct)
-            self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct,commodity=self.material, price_to_use=self.price_to_use, historical_price_rolling_window=self.historical_price_rolling_window, force_integration_historical_price=self.force_integration_historical_price)
-            self.mod.historical_data = self.historical_data.copy()
+            self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,
+                                   verbosity=self.verbosity,byproduct=self.byproduct,commodity=self.material,
+                                   price_to_use=self.price_to_use,
+                                   historical_price_rolling_window=self.historical_price_rolling_window,
+                                   force_integration_historical_price=self.force_integration_historical_price,
+                                   use_historical_price_for_mine_initialization=self.use_historical_price_for_mine_initialization)
+            if self.bayesian_tune or (
+                    hasattr(self, 'historical_data') and 'Primary commodity price' in self.historical_data.columns):
+                self.mod.primary_commodity_price = self.historical_data['Primary commodity price'].dropna()
+                self.mod.primary_commodity_price = pd.concat([pd.Series(self.mod.primary_commodity_price.iloc[0],
+                                                                        np.arange(1900,
+                                                                                  self.mod.primary_commodity_price.dropna().index[
+                                                                                      0])),
+                                                              self.mod.primary_commodity_price]).sort_index()
+            if hasattr(self, 'historical_data'):
+                self.mod.historical_data = self.historical_data.copy()
+
             params_to_change = ['primary_oge_scale','mine_cu_margin_elas','mine_cost_og_elas','mine_cost_change_per_year','mine_cost_price_elas','initial_ore_grade_decline','primary_price_resources_contained_elas','incentive_opening_probability','close_years_back','reserves_ratio_price_lag']
             checker = np.intersect1d(params_to_change,self.additional_base_parameters.index)
             if len(checker)>0 and self.verbosity>-1:
@@ -1207,13 +1319,24 @@ class Sensitivity():
                                                             mod.commodity_price_series]).sort_index()
                 else:
                     # mod = miningModel(verbosity=self.verbosity, simulation_time=self.simulation_time,byproduct=self.byproduct)
-                    mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,verbosity=self.verbosity,byproduct=self.byproduct,commodity=self.material, price_to_use=self.price_to_use, historical_price_rolling_window=self.historical_price_rolling_window, force_integration_historical_price=self.force_integration_historical_price)
-                    mod.historical_data = self.historical_data.copy()
-                    mod.primary_price_series = self.historical_data['Primary commodity price'].dropna()
-                    mod.primary_tcrc_series = pd.Series(np.nan,self.simulation_time)
-                    mod.primary_price_series = pd.concat([pd.Series(mod.primary_price_series.iloc[0],np.arange(1900,mod.primary_price_series.dropna().index[0])),
-                                            mod.primary_price_series]).sort_index()
-                    mod.demand_series = self.historical_data['Total demand']
+                    mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,
+                                      verbosity=self.verbosity,byproduct=self.byproduct,commodity=self.material,
+                                      price_to_use=self.price_to_use,
+                                      historical_price_rolling_window=self.historical_price_rolling_window,
+                                      force_integration_historical_price=self.force_integration_historical_price,
+                                      use_historical_price_for_mine_initialization=self.use_historical_price_for_mine_initialization)
+                    if self.bayesian_tune or (
+                            hasattr(self,
+                                    'historical_data') and 'Primary commodity price' in self.historical_data.columns):
+                        self.mod.primary_commodity_price = self.historical_data['Primary commodity price'].dropna()
+                        self.mod.primary_commodity_price = pd.concat(
+                            [pd.Series(self.mod.primary_commodity_price.iloc[0],
+                                       np.arange(1900,
+                                                 self.mod.primary_commodity_price.dropna().index[
+                                                     0])),
+                             self.mod.primary_commodity_price]).sort_index()
+                    if hasattr(self, 'historical_data'):
+                        self.mod.historical_data = self.historical_data.copy()
 
                 mod.version = '1.0'
 
@@ -1317,9 +1440,9 @@ class Sensitivity():
                     else:
                         #r2 is [-inf, 4] so we change it to [1, inf] to use in log to that it becomes [0, inf]
                         #+4 intead of +5 would have made it into [-inf, inf]; not good
-                        if log: opt.tell(parameters, np.log(-r2+5))
+                        if log: opt.tell(new_parameters[0], np.log(-r2+5))
                         #we flip the sign because skopt only minimises
-                        else: opt.tell(parameters, -r2)
+                        else: opt.tell(new_parameters[0], -r2)
 
                     big_df = pd.read_pickle(self.pkl_filename)
                     if potential_append is None:

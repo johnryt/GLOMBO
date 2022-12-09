@@ -120,6 +120,8 @@ def intensity_prediction(year_i, price_series, gdp_growth_prediction, intensity_
     pooled_intensity_growth_prediction = pd.DataFrame(0, index=[year_i], columns=pd.MultiIndex.from_product([regions, sectors]))
 
     p_growth = (price_series.loc[year_i-price_lag]+price_series.loc[year_i-price_lag-1])/(price_series.loc[year_i-price_lag-1]+price_series.loc[year_i-price_lag-2])
+    if p_growth > 1e12:
+        p_growth = 1e12
 
     for reg in regions:
         gdp_growth = gdp_growth_prediction.loc[year_i, reg]+1

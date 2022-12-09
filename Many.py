@@ -1,5 +1,6 @@
 import warnings
 from integration_functions import Sensitivity
+from scenario_parser import *
 import numpy as np
 import pandas as pd
 from useful_functions import *
@@ -252,7 +253,12 @@ class Many():
 
         Parallel(n_jobs=n_parallel)(delayed(run_individual_mining)(material) for material in commodities)
 
-    def run_all_integration(self, n_runs=200, n_params=3, n_jobs=3, tuned_rmse_df_out_append=None, commodities=None, train_time=np.arange(2001,2020), simulation_time=np.arange(2001,2020), normalize_objectives=False, force_integration_historical_price=False, constrain_previously_tuned=False, verbosity=0, save_mining_info=False, trim_result_df=True, constrain_tuning_to_sign=True, filename_base='_run_hist', filename_modifier='', n_parallel=1):
+    def run_all_integration(self, n_runs=200, n_params=3, n_jobs=3, tuned_rmse_df_out_append=None, commodities=None,
+                            train_time=np.arange(2001,2020), simulation_time=np.arange(2001,2020),
+                            normalize_objectives=False, force_integration_historical_price=False,
+                            constrain_previously_tuned=False, verbosity=0, save_mining_info=False, trim_result_df=True,
+                            constrain_tuning_to_sign=True, use_historical_price_for_mine_initialization=True,
+                            filename_base='_run_hist', filename_modifier='', n_parallel=1):
         """
         Runs parameter tuning, trying to match to historical demand, price, and
         mine production. Tuning uses Bayesian optimization. Saves all results in
@@ -347,6 +353,7 @@ class Many():
             filename=f'{self.pkl_folder}/{mat}{filename_base}_all{filename_modifier}.pkl'
             print('--'*15+filename+'-'*15)
             additional_base_parameters = pd.Series(1,['refinery_capacity_growth_lag'])
+            additional_base_parameters.loc['primary_overhead_regression2use'] = 'None' # TODO determine if overhead is good to include or not
             if 'mcpe0' in filename_modifier:
                 additional_base_parameters.loc['mine_cost_price_elas'] = 0
             self.s = Sensitivity(pkl_filename=filename, data_folder=self.data_folder,changing_base_parameters_series=material,notes=f'{filename}: Monte Carlo {material} run',
@@ -356,6 +363,7 @@ class Many():
                             force_integration_historical_price=force_integration_historical_price,
                             constrain_tuning_to_sign=constrain_tuning_to_sign,
                             constrain_previously_tuned=constrain_previously_tuned, normalize_objectives=normalize_objectives,
+                            use_historical_price_for_mine_initialization=use_historical_price_for_mine_initialization,
                             save_mining_info=save_mining_info, trim_result_df=trim_result_df)
 
             sensitivity_parameters = [
@@ -411,11 +419,12 @@ class Many():
 
         if len(commodities)>1:
             output = Parallel(n_jobs=n_parallel)(delayed(run_individual_integration)(self, material) for material in commodities)
+            rmse_df_out = pd.concat([rmse_df_out, pd.concat(output)]).fillna(0)
+            rmse_df_out.to_pickle(f'data/tuned_rmse_df_out{tuned_rmse_df_out_append}.pkl')
         else:
             output = run_individual_integration(self, commodities[0])
+            print(f'commodity info not updated in data/tuned_rmse_df_out{tuned_rmse_df_out_append}.pkl')
 
-        rmse_df_out = pd.concat([rmse_df_out, pd.concat(output)]).fillna(0)
-        rmse_df_out.to_pickle(f'data/tuned_rmse_df_out{tuned_rmse_df_out_append}.pkl')
         print(f'time elapsed: {str(datetime.now()-t1)}')
         # add 'response','growth' to sensitivity_parameters input to allow demand parameters to change again
 
@@ -1623,7 +1632,7 @@ def nice_plot_pretuning(demand_or_mining='mining',dpi=50,pkl_folder='data',filen
     fig.tight_layout()
     return fig,ax
 
-def run_future_scenarios(data_folder='data', run_parallel=3, supply_or_demand='demand', n_best_scenarios=25, n_per_baseline=25, price_response=True, commodities=None, years_of_increase=np.arange(1,2),scenario_name_base='_run_scenario_set', simulation_time=np.arange(2019,2041), baseline_sampling='grouped', tuned_rmse_df_out_append='', save_mining_info=False, trim_result_df=True, notes='Scenario run!', random_state=None, verbosity=2):
+def run_future_scenarios(data_folder='data', run_parallel=3, scenario_sheet_file_path=None, supply_or_demand='demand', n_best_scenarios=25, n_per_baseline=25, price_response=True, commodities=None, years_of_increase=np.arange(1,2),scenario_name_base='_run_scenario_set', simulation_time=np.arange(2019,2041), baseline_sampling='clustered', tuned_rmse_df_out_append='', save_mining_info=False, trim_result_df=True, notes='Scenario run!', random_state=None, verbosity=2):
     """
     Runs scrap demand scenarios, for 0.01 to 20% of the market switching from
     refined consumption to scrap consumption, for years given (default is just
@@ -1644,6 +1653,9 @@ def run_future_scenarios(data_folder='data', run_parallel=3, supply_or_demand='d
     - run_parallel: int, 0 to not use parallel function (op_run_future_scenarios)
       and any other number will be used as input for parallelization in
       op_run_future_scenarios_parallel
+    - scenario_sheet_file_path: str or None, if str, should be absolute or
+      relative file path for a properly formatted scenario sheet excel file.
+      See documentation for more details on formatting.
     - supply_or_demand: str, can be `supply`, `demand`, None, for running a scrap
       supply-side or demand-side set of scenarios, or just baseline
     - n_best_scenarios: int, number of different baseline scenarios to run
@@ -1700,8 +1712,12 @@ def run_future_scenarios(data_folder='data', run_parallel=3, supply_or_demand='d
 
     if verbosity>-2:
         print(f'using tuned_rmse_df_out_append={tuned_rmse_df_out_append}')
-    if supply_or_demand is None:
+    if supply_or_demand is None and scenario_sheet_file_path is None:
         scenarios = ['']
+    elif supply_or_demand is None:
+        scenario_frame = get_scenario_dataframe(file_path_for_scenario_setup=scenario_sheet_file_path, default_year=2019)
+        scenarios = ['']+['++'.join([scenario_sheet_file_path,q])
+                          for q in scenario_frame.index.get_level_values(0).unique()]
     else:
         if supply_or_demand=='supply': s = 'ss'
         elif supply_or_demand=='demand': s = 'sd'
@@ -1740,13 +1756,16 @@ def run_future_scenarios(data_folder='data', run_parallel=3, supply_or_demand='d
         # getting 100 hyperparameters for run from resulting distributions
         notes += f' baseline_sampling={baseline_sampling}'
         if baseline_sampling=='random':
-            hyp_sample = pd.DataFrame(np.nan, np.arange(0,n_baselines), param_samp.columns)
+            hyp_sample = pd.DataFrame(np.nan, np.arange(0,n_best_scenarios), param_samp.columns)
             rs = 1017
             for i in hyp_sample.index:
                 for j in hyp_sample.columns:
                     hyp_sample.loc[i,j] = param_samp[j].sample(random_state=rs).values[0]
                     rs += 1
+                hyp_sample.loc[:,'hyperparam_set_number'] = i
+                hyp_sample.loc[:,'hyperparam_set_group'] = 0
             hyp_sample = hyp_sample.T
+
         elif baseline_sampling=='grouped':
             df = pd.DataFrame(np.nan, params.index, np.arange(0,n_per_baseline))
             stds = params[weights.sort_values(ascending=False).head(n_best_scenarios).index].std(axis=1)
@@ -1754,7 +1773,7 @@ def run_future_scenarios(data_folder='data', run_parallel=3, supply_or_demand='d
             rs = 0
             hyp_sample = pd.DataFrame()
             for n in np.arange(0,n_best_scenarios):
-                for i in params.index:
+                for ix,i in enumerate(params.index):
                     sign = np.sign(params[best10[n]][i].mean())
                     mean = abs(params[best10[n]][i])
                     std = stds[i]
@@ -1763,10 +1782,13 @@ def run_future_scenarios(data_folder='data', run_parallel=3, supply_or_demand='d
                     for _ in np.arange(0,3):
                         generated += mean-np.mean(generated)
                         generated = generated[generated>0]
-                        if i!= 'mine_cost_change_per_year':
+#                         if i!= 'mine_cost_change_per_year':
+                        if abs(params.loc[i]).max()<=1:
                             generated = generated[generated<1]
                     df.loc[i] = generated[:n_per_baseline]*sign
                     rs+=1
+                df.loc['hyperparam_set_number'] = np.arange(0,n_per_baseline)
+                df.loc['hyperparam_set_group'] = n
                 hyp_sample = pd.concat([hyp_sample,df],axis=1)
             hyp_sample = hyp_sample.T.reset_index(drop=True).T
         elif baseline_sampling=='clustered':
@@ -1774,7 +1796,9 @@ def run_future_scenarios(data_folder='data', run_parallel=3, supply_or_demand='d
                                                           n_per_baseline=n_per_baseline, plot=False);
         elif baseline_sampling=='actual':
             best_n = weights.sort_values(ascending=False).head(n_best_scenarios).index
-            hyp_sample = params[best_n]
+            hyp_sample = params.copy()[best_n]
+            hyp_sample.loc['hyperparam_set_number'] = np.arange(0,len(best_n))
+            hyp_sample.loc['hyperparam_set_group'] = 0
             hyp_sample = hyp_sample.T.reset_index(drop=True).T
 
         # this is now redundant since we save updated_commodity_inputs in rmse_df
@@ -2166,7 +2190,8 @@ def generate_clustered_hyperparam(rmse_df, commodity, n_best_scenarios=25, n_per
 
     hyperparam_ph = pd.DataFrame(np.nan,np.arange(0,n_best_scenarios*n_per_baseline),rmse_ph.columns)
     for ei,i in enumerate(rmse_ph.index[:n_best_scenarios]):
-        for ef,f in enumerate(hyperparam_ph.columns):
+        ind = hyperparam_ph.index[ei*n_per_baseline:(ei+1)*n_per_baseline]
+        for ef,f in enumerate(rmse_ph.columns):
             sign = np.sign(rmse_ph[f][i])
             if n_per_baseline>1:
                 data = np.append(abs(rmse_ph[f][i]),
@@ -2177,7 +2202,9 @@ def generate_clustered_hyperparam(rmse_df, commodity, n_best_scenarios=25, n_per
             if abs(rmse_ph[f]).max()<=1:
                 data[data>1] = 2-data[data>1]
             data = sign*data
-            hyperparam_ph.iloc[ei*n_per_baseline:(ei+1)*n_per_baseline,ef]=data
+            hyperparam_ph.loc[ind,f]=data
+        hyperparam_ph.loc[ind,'hyperparam_set_number'] = np.arange(0,n_per_baseline)
+        hyperparam_ph.loc[ind,'hyperparam_set_group'] = ei
 
     if plot:
         fig,ax=easy_subplots(hyperparam_ph.columns)
@@ -2186,7 +2213,7 @@ def generate_clustered_hyperparam(rmse_df, commodity, n_best_scenarios=25, n_per
         return hyperparam_ph.T, fig,ax
     return hyperparam_ph.T
 
-def plot_given_columns(many, commodity, columns, column_name=None, ax=None, column_subset=None, end_year=2019, dpi=50):
+def plot_given_columns(many, commodity, columns, column_name=None, ax=None, column_subset=None, start_year=None, end_year=2019, dpi=50):
     """
     Plots historical vs simulated demand, mining,
     and primary commodity price for a given commodity
@@ -2214,7 +2241,7 @@ def plot_given_columns(many, commodity, columns, column_name=None, ax=None, colu
     column_subset: list, allows you to select a subset of the
         passed columns to highlight, or to just plot two groups
         of parameter sets simultaneously, since column_subset
-        and columns do not have to intesect. Pass a list or
+        and columns do not have to intersect. Pass a list or
         array of numbers corresponding to rmse_df columns.
     dpi: dots per inch, controls resolution. Only functions if
         the ax input is None.
@@ -2230,7 +2257,9 @@ def plot_given_columns(many, commodity, columns, column_name=None, ax=None, colu
         results = many.results.copy()[objective_results_map[i]].sort_index()\
             .loc[idx[commodity,:,2001:end_year]].droplevel(0).unstack(0)
         if 'SD' not in i:
-            historical_data = many.historical_data.copy()[i].loc[commodity].loc[2001:2019]
+            historical_data = many.historical_data.copy()[i].loc[commodity].loc[:2019]
+            if start_year is not None:
+                historical_data = historical_data.loc[start_year:]
         else:
             historical_data = pd.Series(results.min(),[0])
         results_ph = results.copy()
@@ -2794,6 +2823,7 @@ class SHAP():
         self.test_prescale.loc[:,'predicted '+self.objective] = self.test['predicted '+self.objective]
 
     def initialize_shap(self):
+        from copy import deepcopy
         self.explainer = shap.TreeExplainer(self.regr)
         explainer_copy = deepcopy([self.explainer])[0]
         data = self.X_df.copy() if self.use_train_data else self.X_df_test.copy()
@@ -2933,7 +2963,7 @@ class SHAP():
                 n_plots = kwargs['n_plots'] if 'n_plots' in kwargs.keys() else None
                 fig = self.shap_vs_param_plot(highlight_best=highlight_best, n_plots=n_plots)
             if figsize!=None:
-                fig.set_size_inches(size[s][0],size[s][1])
+                fig.set_size_inches(figsize[s][0],figsize[s][1])
             fig.set_dpi(dpi)
             self.fig_list += [fig]
             plt.show()
@@ -3527,6 +3557,7 @@ def run_mining_pretuning():
     """
     Mostly for keeping track of everything
     """
+    to_run = ['Au','Al','Ag','Zn','Pb','Sn','Cu','Ni','Steel']
     mod = Many()
     mod.run_all_mining(200,commodities=None, constrain_tuning_to_sign=False, filename_modifier='_unconstrain1_mcpe0', n_parallel=2)
 
@@ -3640,12 +3671,14 @@ def run_all_the_future_scenarios():
     )
 
     # Looking at what happens if we tune without price
+    mod = Many()
     mod.run_all_integration(200, n_params=2, tuned_rmse_df_out_append='_norm_noprice',
         train_time=np.arange(2001,2020), simulation_time=np.arange(2001,2040),
         normalize_objectives=True, constrain_previously_tuned=True,
         commodities=to_run, filename_modifier='_norm_noprice')
 
     # Looking at what happens when we tune integration with forced historical price
+    mod = Many()
     mod.run_all_integration(200, n_params=2, tuned_rmse_df_out_append='_norm_histprice',
         train_time=np.arange(2001,2020), simulation_time=np.arange(2001,2020),
         normalize_objectives=True, constrain_previously_tuned=True,

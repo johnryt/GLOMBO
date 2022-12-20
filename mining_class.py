@@ -138,10 +138,10 @@ class miningModel:
         self.price_change_yoy = price_change_yoy
         self.i = self.simulation_time[0]
 
-        self.concentrate_supply_series = pd.Series(np.nan, self.simulation_time)
-        self.sxew_supply_series = pd.Series(np.nan, self.simulation_time)
-        self.n_mines_opening = pd.Series(np.nan, self.simulation_time)
-        self.n_mines_closing = pd.Series(np.nan, self.simulation_time)
+        self.concentrate_supply_series = pd.Series(0, self.simulation_time)
+        self.sxew_supply_series = pd.Series(0, self.simulation_time)
+        self.n_mines_opening = pd.Series(0, self.simulation_time)
+        self.n_mines_closing = pd.Series(0, self.simulation_time)
         self.rs_add = 0
         self.grade_decline = pd.Series(1, np.arange(1900,2101))
         self.cost_improve = pd.Series(1, np.arange(1900,2101))
@@ -1035,6 +1035,7 @@ class miningModel:
         self.subsample_series = hyperparameters['incentive_subsample_series']
 
         self.hyperparam = hyperparameters
+        self.initial_hyperparam = hyperparameters
 
     def generate_production_region(self):
         '''updates self.mines, first function called.'''
@@ -1790,7 +1791,8 @@ class miningModel:
                 self.generate_byproduct_mines()
                 # out: self.mines
             else:
-                self.recalculate_hyperparams()
+                if self.i == self.simulation_time[0]:
+                    self.recalculate_hyperparams()
                 self.generate_production_region()
                 self.generate_grade_and_masses()
                 self.generate_total_cash_margin()
@@ -1815,8 +1817,8 @@ class miningModel:
                 except:
                     raise Exception(
                         'Save an initialized mine file as data/mine_life_init_primary.pkl or set hyperparam[\'reinitialize\',\'Value\'] to True')
-
-        self.update_operation_hyperparams()
+        if self.i == self.simulation_time[0]:
+            self.update_operation_hyperparams()
 
     def op_initialize_prices(self):
         '''
@@ -1860,8 +1862,9 @@ class miningModel:
 
     def op_initialize_mine_life(self):
         self.initialize_mines()
-        self.cumulative_ore_treated = pd.Series(np.nan, self.simulation_time)
-        self.supply_series = pd.Series(np.nan, self.simulation_time)
+        if self.i == self.simulation_time[0]:
+            self.cumulative_ore_treated = pd.Series(np.nan, self.simulation_time)
+            self.supply_series = pd.Series(np.nan, self.simulation_time)
         h = self.hyperparam
         if h['reinitialize']:
             mine_life_init = self.mine_life_init.copy()
@@ -1902,9 +1905,10 @@ class miningModel:
                 mine_life_init.drop(columns=j, inplace=True)
             self.mine_life_init = mine_life_init.copy()
 
-        self.ml_yr = OneMine(name=self.i, df=self.mine_life_init)
-        self.ml = AllMines()
-        self.ml.add_mines(self.ml_yr)
+        if self.i == self.simulation_time[0]:
+            self.ml_yr = OneMine(name=self.i, df=self.mine_life_init)
+            self.ml = AllMines()
+            self.ml.add_mines(self.ml_yr)
 
         if h['forever_sim']:
             self.simulation_end = self.primary_price_series.index[-1]
@@ -1980,11 +1984,12 @@ class miningModel:
             if self.byproduct:
                 ml_yr.primary_tcrc_usdpt[self.sxew_mines] = 0
             closing_mines = ml_last.index[ml_last.ramp_down_flag.astype(bool)]
-            opening_mines = ml_yr.index[(ml_yr.ramp_up_flag != 0)&(ml_yr.ramp_up_flag!=np.nan)]
-            not_new_opening = ml_yr.index[ml_yr.ramp_up_flag!=2] if i>self.simulation_time[1] else ml_yr.index
+            opening_mines = ml_yr.index[(ml_yr.ramp_up_flag != 0)&(~np.isnan(ml_yr.ramp_up_flag.astype(float)))]
+            not_new_opening = ml_yr.index[(ml_yr.ramp_up_flag!=2)&(~np.isnan(ml_yr.ramp_up_flag.astype(float)))] if i>self.simulation_time[1] else ml_yr.index
+
             # print(2014,len(not_new_opening),len(ml_yr.index))
-            govt_mines = ml_yr.index[(ml_yr.operate_with_negative_cash_flow==True) & (ml_yr.operate_with_negative_cash_flow!=np.nan)]
-            #             end_ramp_up = ml_yr.loc[(opening_mines)&(ml_yr['Opening']+h['ramp_up_years']<=i)&(ml_yr['Opening']>simulation_time[0]-1)].index
+            govt_mines = ml_yr.index[(ml_yr.operate_with_negative_cash_flow==True) & (~np.isnan(ml_yr.operate_with_negative_cash_flow.astype(float)))]
+                #             end_ramp_up = ml_yr.loc[(opening_mines)&(ml_yr['Opening']+h['ramp_up_years']<=i)&(ml_yr['Opening']>simulation_time[0]-1)].index
             end_ramp_up = ml_yr.index[ml_yr.ramp_up_flag == h['ramp_up_years'] + 1]
             if len(opening_mines) > 0:
                 ml_yr.opening[np.intersect1d(opening_mines, ml_yr.index[np.isnan(ml_yr.opening.astype(float))])] = i
@@ -2011,7 +2016,9 @@ class miningModel:
                 else:
                     ml_yr.capacity_utilization[opening_mines] = h['ramp_up_cu']
                 ml_yr.ramp_up_flag[opening_mines] = ml_yr.ramp_up_flag[opening_mines] + 1
-
+                if hasattr(self,'inc') and self.i>2001:
+                    if self.verbosity>5:
+                        print('stop')
             if len(end_ramp_up) > 0:
                 ml_yr.capacity_utilization[end_ramp_up] = self.calculate_cu(h['mine_cu0'],
                                                                             ml_last.total_cash_margin_usdpt[
@@ -2087,7 +2094,7 @@ class miningModel:
             ml_yr.closed_flag[closing_mines] = True
             ml_yr.simulated_closure[closing_mines] = i
             # 2 == NPV following
-            ml_yr.ramp_down_flag[[q == 2 for q in ml_yr.close_method]] = True
+            # ml_yr.ramp_down_flag[[q == 2 for q in ml_yr.close_method]] = True
 
             self.ml_yr1 = ml_yr.copy()
             self.ml_last1 = ml_last.copy()
@@ -2157,6 +2164,11 @@ class miningModel:
         ml_last.index = ml_last.real_index
         self.ml_yr = ml_yr.copy()
         self.ml.add_mines(ml_yr.copy())
+
+        # TODO DELETE
+        if i>2024 and hasattr(self,'inc'):
+            if self.verbosity>5:
+                print('value')
         if i > self.simulation_time[0]:
             self.cumulative_ore_treated.loc[i] = self.cumulative_ore_treated.loc[i - 1] + np.nansum(ml_yr.ore_treated_kt)
         else:
@@ -2195,11 +2207,19 @@ class miningModel:
             self.primary_tcrc_series.loc[i] = np.nanmean(ml_yr_ph.primary_tcrc_usdpt)
             self.byproduct_price_series.loc[i] = np.nanmean(ml_yr_ph.commodity_price_usdpt)
             self.byproduct_tcrc_series.loc[i] = np.nanmean(ml_yr_ph.tcrc_usdpt)
+            if np.isnan(self.byproduct_price_series[i]):
+                self.byproduct_price_series.loc[i] = self.byproduct_price_series[i - 1]
+            if np.isnan(self.byproduct_tcrc_series[i]):
+                self.byproduct_tcrc_series.loc[i] = self.byproduct_tcrc_series[i - 1]
         else:
             self.primary_price_series.loc[i] = np.nanmean(ml_yr_ph.commodity_price_usdpt)
             # print(2225,ml_yr_ph.tcrc_usdpt)
             ml_yr_ph.tcrc_usdpt = ml_yr_ph.tcrc_usdpt.astype(float)
             self.primary_tcrc_series.loc[i] = np.nanmean(ml_yr_ph.tcrc_usdpt)
+        if np.isnan(self.primary_price_series[i]):
+            self.primary_price_series.loc[i] = self.primary_price_series[i-1]
+        if np.isnan(self.primary_tcrc_series[i]):
+            self.primary_tcrc_series.loc[i] = self.primary_tcrc_series[i-1]
 
         self.supply_series.loc[i] = np.nansum(ml_yr_ph.production_kt)
         self.concentrate_supply_series.loc[i] = np.nansum(ml_yr_ph.production_kt[ml_yr_ph.payable_percent_pct != 100])
@@ -2338,7 +2358,9 @@ class miningModel:
             pri_tcrc_expect = self.calculate_price_expect(self.primary_tcrc_series.copy(), i)
         else:
             pri_initial_price, pri_price_expect, pri_tcrc_expect = 0, 0, 0
-
+        if hasattr(self,'inc') and self.i>2001:
+            if self.verbosity>5:
+                print('2376 stop')
         cash_flow_expect, by_cash_flow_expect, tcm_expect, by_tcm_expect, ml_yr = self.get_cash_flow(ml_yr,
                                                                                                      cumu_ot_expect,
                                                                                                      ot_expect,
@@ -2366,7 +2388,8 @@ class miningModel:
 
         exclude_this_yr_reserves = ml_yr.index[ml_yr.reserves_kt < ot_expect]
         exclude_already_ramping = ml_yr.index[ml_yr.ramp_down_flag.astype(bool)]
-        exclude_ramp_up = ml_yr.index[ml_yr.ramp_up_flag != 0]
+        exclude_ramp_up = ml_yr.index[(ml_yr.ramp_up_flag != 0) & (~np.isnan(ml_yr.ramp_up_flag.astype(float)))]
+
         neg_cash_flow = ml_yr.index[ml_yr.cash_flow_expect_usdm < 0]
         if use_reserves_for_closure:
             exclude = list(exclude_this_yr_reserves) + list(exclude_already_ramping) + list(exclude_ramp_up)
@@ -2380,6 +2403,7 @@ class miningModel:
         ml_yr.ore_treat_expect_kt = ot_expect
         ml_yr.npv_ramp_next_usdm = np.repeat(np.nan, len(ml_yr.index))
         ml_yr.npv_ramp_following_usdm = np.repeat(np.nan, len(ml_yr.index))
+        ml_yr.close_method = np.repeat(np.nan, len(ml_yr.index))
 
         if len(neg_cash_flow) > 0:
             if self.verbosity > 1:
@@ -2424,7 +2448,9 @@ class miningModel:
             #                                                                                                  len(overhead),
             #                                                                                                  len(sustaining_capex),
             #                                                                                                  len(development_capex))
-
+            if self.i>2023 and hasattr(self,'inc'):
+                if self.verbosity>5:
+                    print('2432, delete thing')
             cash_flow_ramp_following, by_cash_flow_ramp_following, tcm_rf, by_tcm_rf, _ = self.get_cash_flow(ml_yr,
                                                                                                              cumu_ot_ramp_following,
                                                                                                              ot_ramp_following,
@@ -2501,8 +2527,11 @@ class miningModel:
         by_tcm_expect = 0
         ml_yr = ml_yr_.copy()
         h = self.hyperparam
-        grade_expect = self.calculate_grade(initial_grade, cumu_ot_expect, initial_ore_treated,
-                                            ml_yr.oge[neg_cash_flow])
+        if type(neg_cash_flow)!=int:
+            oge = ml_yr.oge[neg_cash_flow]
+        else:
+            oge = ml_yr.oge
+        grade_expect = self.calculate_grade(initial_grade, cumu_ot_expect, initial_ore_treated, oge=oge)
         sxew_index = ml_yr.index[ml_yr.payable_percent_pct == 100]
 
         if self.byproduct:
@@ -2524,15 +2553,29 @@ class miningModel:
         # print(2529,neg_cash_flow)
         # print(2530, len(grade_expect), len(price_expect),
         #                                                     len(initial_price), len(ot_expect))
-        minesite_cost_expect = self.calculate_minesite_cost(ml_yr.minesite_cost_usdpt[neg_cash_flow], grade_expect,
-                                                            ml_yr.head_grade_pct[neg_cash_flow], price_expect,
+        if type(neg_cash_flow)!=int:
+            minesite_cost = ml_yr.minesite_cost_usdpt[neg_cash_flow]
+            grade = ml_yr.head_grade_pct[neg_cash_flow]
+            sim_start_ot = ml_yr.simulation_start_ore_treated_kt[neg_cash_flow]
+        else:
+            minesite_cost = ml_yr.minesite_cost_usdpt
+            grade = ml_yr.head_grade_pct
+            sim_start_ot = ml_yr.simulation_start_ore_treated_kt
+        minesite_cost_expect = self.calculate_minesite_cost(minesite_cost, grade_expect,
+                                                            grade, price_expect,
                                                             initial_price, ot_expect,
-                                                            ml_yr.simulation_start_ore_treated_kt[neg_cash_flow],
+                                                            sim_start_ot,
                                                             self.i + 1)
         #         ml_yr['Minesite cost expect (USD/t)'] = minesite_cost_expect
         #         ml_yr['Price expect (USD/t)'] = price_expect
-        paid_metal_expect = ot_expect * grade_expect * ml_yr.recovery_rate_pct[neg_cash_flow] * \
-                            ml_yr.payable_percent_pct[neg_cash_flow] * 1e-6
+        if type(neg_cash_flow)!=int:
+            recovery_rate = ml_yr.recovery_rate_pct[neg_cash_flow]
+            payable_pct = ml_yr.payable_percent_pct[neg_cash_flow]
+        else:
+            recovery_rate = ml_yr.recovery_rate_pct
+            payable_pct = ml_yr.payable_percent_pct
+        paid_metal_expect = ot_expect * grade_expect * recovery_rate * \
+                            payable_pct * 1e-6
         tcm_expect = price_expect - minesite_cost_expect - tcrc_expect
         cash_flow_expect = 1e-3 * paid_metal_expect * tcm_expect - overhead - sustaining_capex - development_capex
 
@@ -2647,8 +2690,13 @@ class miningModel:
                     'Primary TCRC (USD/t)'].mean()
 
         inc.mine_life_init = incentive_mines.copy()
-        if hasattr(self,'primary_price_series'): inc.primary_price_series = self.primary_price_series.copy()
-        if hasattr(self,'byproduct_price_series'): inc.byproduct_price_series = self.byproduct_price_series.copy()
+        if hasattr(self,'primary_price_series'):
+            inc.primary_price_series = self.primary_price_series.copy()
+            # inc.primary_price_series.loc[i:] = inc.hyperparam['primary_commodity_price']
+            # TODO consider whether we should implement this change to incentive price series, or if it is necessary,
+            #  and make sure the incentive price series goes beyond end of simulation
+        if hasattr(self,'byproduct_price_series'):
+            inc.byproduct_price_series = self.byproduct_price_series.copy()
         inc.op_initialize_prices()
         inc.incentive_mines = incentive_mines.copy()
         self.incentive_mines = incentive_mines.copy()
@@ -3479,10 +3527,10 @@ class miningModel:
                             setattr(self.ml.loc[i], alt_select, getattr(year_i_mines, alt_select) * new_price / np.nanmean(
                                 getattr(year_i_mines, alt_select)[conc_mines]))
                         if len(opening.index)>0:
-                            conc_mines = (opening.payable_percent_pct!=100)&(~np.isnan(opening.payable_percent_pct.astype(float)))
+                            conc_mines = (opening.payable_percent_pct != 100) & (~np.isnan(opening.payable_percent_pct.astype(float)))
                             if np.sum(conc_mines)>0:
                                 setattr(opening, alt_select,
-                                    getattr(opening, alt_select) * new_price / np.nanmean(getattr(opening, alt_select).astype(float)[conc_mines]))
+                                        getattr(opening, alt_select) * new_price / np.nanmean(getattr(opening, alt_select).astype(float)[conc_mines]))
                     else:
                         setattr(self.ml.loc[i], alt_select, new_price)
                         setattr(opening, alt_select, new_price)
@@ -3582,8 +3630,49 @@ class miningModel:
             self.priceVsample = priceVsample.copy()
 
     def run(self):
+        if self.i==self.simulation_time[0]:
+            self.initial_hyperparam = self.hyperparam
+        self.update_if_hyperparam_changes()
         self.simulate_mine_life_one_year()
 
+    def update_if_hyperparam_changes(self):
+        """
+        Checks if the hyperparam variable has changed due to scenario file inputs, and if so,
+        runs the requisite updates
+        """
+        if not hasattr(self, 'initial_hyperparam'):
+            return None
+        if len(self.hyperparam)==len(self.initial_hyperparam) and np.all([self.hyperparam[j]==self.initial_hyperparam[j] for j in self.hyperparam if type(self.hyperparam[j]) in [str,int,float,bool,np.float64]]):
+            return None
+        changed_params = [j for j in self.hyperparam if
+                          type(self.hyperparam[j]) in [str,int,float,bool,np.float64] and
+                          self.hyperparam[j]!=self.initial_hyperparam[j]]
+        if '' in changed_params:
+            pass
+        if np.any(['frac' in j for j in changed_params]):
+            self.hyperparam['production_frac_region5'] = 1 - np.sum([self.hyperparam[i] for i in
+                                                                     ['production_frac_region1',
+                                                                      'production_frac_region2',
+                                                                      'production_frac_region3',
+                                                                      'production_frac_region4']])
+            self.hyperparam['minetype_prod_frac_placer'] = 1 - np.sum([self.hyperparam[i] for i in
+                                                                       ['minetype_prod_frac_underground',
+                                                                        'minetype_prod_frac_openpit',
+                                                                        'minetype_prod_frac_tailings',
+                                                                        'minetype_prod_frac_stockpile']])
+            if self.byproduct:
+                self.hyperparam['byproduct_host1_production_fraction'] = 1 - np.sum([self.hyperparam[i] for i in [
+                    'byproduct_pri_production_fraction', 'byproduct_host3_production_fraction',
+                    'byproduct_host2_production_fraction']])
+        if np.any(['regression2use' in j for j in changed_params]):
+            self.hyperparam = self.add_minesite_cost_regression_params(self.hyperparam)
+            self.hyperparam['primary_tcm_flag'] = 'tcm' in self.hyperparam[
+                'primary_minesite_cost_regression2use']
+            self.hyperparam['primary_rr_negative'] = False
+        if np.any(['primary_' in j or 'byproduct_' in j or 'mine_cu' in j for j in changed_params]):
+            self.op_initialize_mine_life()        # reinitialize mine_life_init?
+
+        self.initial_hyperparam = self.hyperparam
 
 # Attempts to use Bayesian regression, these fit in with the bayesian_tune() and run_karan_generalization() functions
 def surrogate(model, X):

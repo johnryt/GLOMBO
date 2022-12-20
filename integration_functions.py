@@ -36,12 +36,12 @@ def create_result_df(self,integ):
     old_new_mines = pd.concat([
         old.loc[:,'Production (kt)'].groupby(level=0).sum(),
         new.loc[:,'Production (kt)'].groupby(level=0).sum(),
-        old.loc[:,['Production (kt)','Head grade (%)']].product(axis=1).groupby(level=0).sum()/old.loc[:,'Production (kt)'].groupby(level=0).sum().replace(0,np.nan),
-        new.loc[:,['Production (kt)','Head grade (%)']].product(axis=1).groupby(level=0).sum()/new.loc[:,'Production (kt)'].groupby(level=0).sum().replace(0,np.nan),
-        old.loc[:,['Production (kt)','Minesite cost (USD/t)']].product(axis=1).groupby(level=0).sum()/old.loc[:,'Production (kt)'].groupby(level=0).sum().replace(0,np.nan),
-        new.loc[:,['Production (kt)','Minesite cost (USD/t)']].product(axis=1).groupby(level=0).sum()/new.loc[:,'Production (kt)'].groupby(level=0).sum().replace(0,np.nan),
-        old.loc[:,['Production (kt)','Total cash margin (USD/t)']].product(axis=1).groupby(level=0).sum()/old.loc[:,'Production (kt)'].groupby(level=0).sum().replace(0,np.nan),
-        new.loc[:,['Production (kt)','Total cash margin (USD/t)']].product(axis=1).groupby(level=0).sum()/new.loc[:,'Production (kt)'].groupby(level=0).sum().replace(0,np.nan),
+        (old['Production (kt)']*old['Head grade (%)']).groupby(level=0).sum()/old.loc[:,'Production (kt)'].groupby(level=0).sum().replace(0,np.nan),
+        (new['Production (kt)']*new['Head grade (%)']).groupby(level=0).sum()/new.loc[:,'Production (kt)'].groupby(level=0).sum().replace(0,np.nan),
+        (old['Production (kt)']*old['Minesite cost (USD/t)']).groupby(level=0).sum()/old.loc[:,'Production (kt)'].groupby(level=0).sum().replace(0,np.nan),
+        (new['Production (kt)']*new['Minesite cost (USD/t)']).groupby(level=0).sum()/new.loc[:,'Production (kt)'].groupby(level=0).sum().replace(0,np.nan),
+        (old['Production (kt)']*old['Total cash margin (USD/t)']).groupby(level=0).sum()/old.loc[:,'Production (kt)'].groupby(level=0).sum().replace(0,np.nan),
+        (new['Production (kt)']*new['Total cash margin (USD/t)']).groupby(level=0).sum()/new.loc[:,'Production (kt)'].groupby(level=0).sum().replace(0,np.nan),
         integ.mining.resources_contained_series, integ.mining.reserves_ratio_with_demand_series
         ],
         keys=['Old mine prod.','New mine prod.',
@@ -56,9 +56,9 @@ def create_result_df(self,integ):
     for reg in reg_results.index:
         results = pd.concat([integ.total_demand.loc[:,reg],integ.scrap_demand.loc[:,reg],integ.scrap_supply[reg],
                integ.concentrate_demand[reg],integ.concentrate_supply,
-               integ.mining.ml.loc[:,['Production (kt)','Head grade (%)']].product(axis=1).groupby(level=0).sum()/integ.mining.ml.loc[:,'Production (kt)'].groupby(level=0).sum().replace(0,np.nan),
-               integ.mining.ml.loc[:,['Production (kt)','Minesite cost (USD/t)']].product(axis=1).groupby(level=0).sum()/integ.mining.ml.loc[:,'Production (kt)'].groupby(level=0).sum().replace(0,np.nan),
-               integ.mining.ml.loc[:,['Production (kt)','Total cash margin (USD/t)']].product(axis=1).groupby(level=0).sum()/integ.mining.ml.loc[:,'Production (kt)'].groupby(level=0).sum().replace(0,np.nan),
+               (integ.mining.ml['Production (kt)']*integ.mining.ml['Head grade (%)']).groupby(level=0).sum()/integ.mining.ml.loc[:,'Production (kt)'].groupby(level=0).sum().replace(0,np.nan),
+               (integ.mining.ml['Production (kt)']*integ.mining.ml['Minesite cost (USD/t)']).groupby(level=0).sum()/integ.mining.ml.loc[:,'Production (kt)'].groupby(level=0).sum().replace(0,np.nan),
+               (integ.mining.ml['Production (kt)']*integ.mining.ml['Total cash margin (USD/t)']).groupby(level=0).sum()/integ.mining.ml.loc[:,'Production (kt)'].groupby(level=0).sum().replace(0,np.nan),
                old_new_mines['Old mine prod.'],old_new_mines['New mine prod.'],
                old_new_mines['Old mine grade'],old_new_mines['New mine grade'],
                old_new_mines['Old mine cost'],old_new_mines['New mine cost'],
@@ -733,22 +733,23 @@ class Sensitivity():
         else:
             self.big_df=pd.DataFrame()
             # self.big_df.to_pickle(self.pkl_filename)
-        self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,
-                               verbosity=self.verbosity,byproduct=self.byproduct,commodity=self.material,
-                               price_to_use=self.price_to_use,
-                               historical_price_rolling_window=self.historical_price_rolling_window,
-                               force_integration_historical_price=self.force_integration_historical_price,
-                               use_historical_price_for_mine_initialization=self.use_historical_price_for_mine_initialization)
-        if self.bayesian_tune or (
-                hasattr(self, 'historical_data') and 'Primary commodity price' in self.historical_data.columns):
-            self.mod.primary_commodity_price = self.historical_data['Primary commodity price'].dropna()
-            self.mod.primary_commodity_price = pd.concat([pd.Series(self.mod.primary_commodity_price.iloc[0],
-                                                                    np.arange(1900,
-                                                                              self.mod.primary_commodity_price.dropna().index[
-                                                                                  0])),
-                                                          self.mod.primary_commodity_price]).sort_index()
-        if hasattr(self, 'historical_data'):
-            self.mod.historical_data = self.historical_data.copy()
+        if np.all(['++' not in q for q in self.scenarios]):
+            self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,
+                                   verbosity=self.verbosity,byproduct=self.byproduct,commodity=self.material,
+                                   price_to_use=self.price_to_use,
+                                   historical_price_rolling_window=self.historical_price_rolling_window,
+                                   force_integration_historical_price=self.force_integration_historical_price,
+                                   use_historical_price_for_mine_initialization=self.use_historical_price_for_mine_initialization)
+            if self.bayesian_tune or (
+                    hasattr(self, 'historical_data') and 'Primary commodity price' in self.historical_data.columns):
+                self.mod.primary_commodity_price = self.historical_data['Primary commodity price'].dropna()
+                self.mod.primary_commodity_price = pd.concat([pd.Series(self.mod.primary_commodity_price.iloc[0],
+                                                                        np.arange(1900,
+                                                                                  self.mod.primary_commodity_price.dropna().index[
+                                                                                      0])),
+                                                              self.mod.primary_commodity_price]).sort_index()
+            if hasattr(self, 'historical_data'):
+                self.mod.historical_data = self.historical_data.copy()
 
         if not given_hyperparam_df:
             scenario_params_dont_change = ['collection_rate_price_response','direct_melt_price_response','secondary_refined_price_response','refinery_capacity_growth_lag','region_specific_price_response']
@@ -797,18 +798,24 @@ class Sensitivity():
                 for enum,scenario_name in enumerate(self.scenarios):
                     if len(self.scenarios)>1:
                         if '++' in scenario_name:
-                            scenario_name = self.scenario_frame.loc[scenario_name.split('++')[1]]
+                            original_scenario_name = scenario_name
+                            pass_scenario_name = self.scenario_frame.loc[scenario_name.split('++')[1]]
+                        else:
+                            pass_scenario_name = scenario_name
+                    else:
+                        pass_scenario_name = scenario_name
 
                     self.last_scenario_flag = (n==n_scenarios-1) and (i==self.n_jobs-1) and (scenario_name==self.scenarios[-1])
                     if self.verbosity>-1:
                         print(f'\tSub-scenario {enum+1}/{len(self.scenarios)}: {scenario_name} checking if exists...')
                     self.mod = Integration(data_folder=self.data_folder, simulation_time=self.simulation_time,
                                            verbosity=self.verbosity,byproduct=self.byproduct,
-                                           scenario_name=scenario_name,commodity=self.material,
+                                           scenario_name=pass_scenario_name,commodity=self.material,
                                            price_to_use=self.price_to_use,
                                            historical_price_rolling_window=self.historical_price_rolling_window,
                                            force_integration_historical_price=self.force_integration_historical_price,
                                            use_historical_price_for_mine_initialization=self.use_historical_price_for_mine_initialization)
+
                     if self.bayesian_tune or (
                             hasattr(self,
                                     'historical_data') and 'Primary commodity price' in self.historical_data.columns):

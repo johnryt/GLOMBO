@@ -1,5 +1,24 @@
 import pandas as pd
+import numpy as np
+import warnings
 
+scrap_parameters = ['scenario_type',
+                    'collection_rate_price_response',
+                    'direct_melt_price_response',
+                    'secondary_refined_price_response',
+                    'collection_rate_duration',
+                    'collection_rate_pct_change_tot',
+                    'collection_rate_pct_change_inc',
+                    'scrap_demand_duration',
+                    'scrap_demand_pct_change_tot',
+                    'scrap_demand_pct_change_inc',
+                    'direct_melt_duration',
+                    'direct_melt_pct_change_tot',
+                    'direct_melt_pct_change_inc',
+                    'secondary_refined_duration',
+                    'secondary_refined_pct_change_tot',
+                    'secondary_refined_pct_change_inc',
+                    ]
 
 def get_scenario_ids(scen_cols):
     """
@@ -70,40 +89,153 @@ def get_scenario_dataframe(file_path_for_scenario_setup=None, default_year=None)
     scenarios.index = scenarios.index.set_names([file_path_for_scenario_setup, file_path_for_scenario_setup, 'Year'])
     return scenarios
 
+# TODO ensure that demand volume growth rates get updated correctly, mine generation parameters too, since probably need to regenerate incentive pool depending on what we change
 
-# TODO move this function to integration where it's commented out
 def scenario_update_scrap_handling(self):
     update = self.scenario_update_df.copy()
+    self.scenario_type = ''
+    self.collection_rate_price_response = self.hyperparam['Value']['collection_rate_price_response']
+    self.direct_melt_price_response = self.hyperparam['Value']['direct_melt_price_response']
+    self.secondary_refined_price_response = self.hyperparam['Value']['direct_melt_price_response']
+    self.collection_rate_duration = 0
+    self.collection_rate_pct_change_tot = 0
+    self.collection_rate_pct_change_inc = 0
+    self.direct_melt_duration = 0
+    self.direct_melt_pct_change_tot = 0
+    self.direct_melt_pct_change_inc = 0
+    self.secondary_refined_duration = 0
+    self.secondary_refined_pct_change_tot = 0
+    self.secondary_refined_pct_change_inc = 0
+    self.secondary_refined_alt = False
+    self.direct_melt_alt = False
+
+    update = check_year_consistency(self, update)
+    update = check_duration_variables(self, update)
+    update = check_scrap_demand_overlap(update)
+    update = update_from_scrap_demand(self, update)
+    update = update_percent_values(self, update)
+    self.scenario_update_df = update.copy()
+    update_scenario_type(self)
+
+def check_year_consistency(self, update):
     filename = update.index.names[0]
-    scrap_parameters = ['scenario_type',
-                        'collection_rate_price_response',
-                        'direct_melt_price_response',
-                        'secondary_refined_price_response',
-                        'collection_rate_duration',
-                        'collection_rate_pct_change_tot',
-                        'collection_rate_pct_change_inc',
-                        'direct_melt_duration',
-                        'direct_melt_pct_change_tot',
-                        'direct_melt_pct_change_inc',
-                        'secondary_refined_duration',
-                        'secondary_refined_pct_change_tot',
-                        'secondary_refined_pct_change_inc',
-                        ]
-    update_index_level0 = update.index.get_level_values(0).unique()
-    intersect = np.intersect1d(update_index_level0, scrap_parameters)
+    update_ind = update.index.get_level_values(0).unique()
+    intersect = np.intersect1d(update_ind, scrap_parameters)
     scrap_param_in_update = update.loc[intersect].index.get_level_values(0)
     if len(scrap_param_in_update.unique()) != len(scrap_param_in_update):
         warnings.warn(
-            f'Can only accept one row for each Scrap scenario in {filename}; other parameter categories are ok to have duplicates for different years. Only the first row will be implemented.')
+            f'\nCan only accept one row for each Scrap scenario in {filename}; other parameter categories are ok to have duplicates for different years. Only the first row will be implemented.')
     years = update.loc[intersect].index.get_level_values(1).unique()
-    if np.any(years != years[0]):
-        warnings.warn(
-            'using 2019 for integ.scrap_shock_year since there are discrepancies on scrap year coming from the scenario input file: ' + filename)
+    if len(years)>0 and np.any(years != years[0]):
+        warnings.warn('''\nUsing 2019 for integ.scrap_shock_year since there are discrepancies on scrap year
+coming from the scenario input file:\n''' + filename +
+                      '''\nTo use a different year, ensure all values are matching in the Year column.
+                      **This includes any values in the Year column left blank; please ensure that no 
+                      Scrap scenario variables have blank Year columns if you want to change the year of the
+                      scrap supply/demand change**''')
         self.scrap_shock_year = 2019
+        update_ph = update.loc[intersect]
+        update_ph.index = pd.MultiIndex.from_tuples([(k[0], self.scrap_shock_year) for k in update_ph.index])
+        update = pd.concat([
+            update.drop(intersect, level=0),
+            update_ph
+        ])
     else:
-        self.scrap_shock_year = int(years[0])
+        self.scrap_shock_year = 2019 if len(years)==0 else int(years[0])
+    return update
+
+
+def check_duration_variables(self, update):
+    """
+    making sure the _duration variables are set correctly
+    """
+    update_ind = update.index.get_level_values(0).unique()
+    intersect = np.intersect1d(update_ind, scrap_parameters)
+    for q in ['collection_rate', 'scrap_demand']:
+        if np.any([q in i for i in intersect]) \
+                and q + '_duration' not in intersect:
+            warnings.warn('\n' + q + '_duration not set, using default value 1')
+            update = pd.concat([
+                update,
+                pd.Series(1, pd.MultiIndex.from_tuples([(q + '_duration', self.scrap_shock_year)])),
+            ])
+    return update
+
+
+def check_scrap_demand_overlap(update):
+    """
+    checking that we don't have overlap between scrap_demand, direct_melt, and secondary_refined variables
+    """
+    update_ind = update.index.get_level_values(0).unique()
+    intersect = np.intersect1d(update_ind, scrap_parameters)
+    if np.any(['direct_melt' in k or 'secondary_refined' in k for k in intersect]) and \
+            np.any(['scrap_demand' in k for k in intersect]):
+        warnings.warn('''\nIncluding variables starting with direct_melt or secondary_refined
+        alongside variables starting with scrap_demand means that the scrap_demand variable will
+        supercede the others. If you want to specify the direct_melt and secondary_refined behavior 
+        separately, set those variables and leave scrap_demand variables blank.
+        ''')
+        for k in [k for k in intersect if 'direct_melt' in k or 'secondary_refined' in k]:
+            update = update.drop(k, level=0)
+    return update
+
+
+def update_from_scrap_demand(self, update):
+    """
+    updating the secondary refining and direct melt variables from scrap demand input
+    """
+    update_ind = update.index.get_level_values(0).unique()
+    intersect = np.intersect1d(update_ind, scrap_parameters)
+
+    for k in [i for i in intersect if 'scrap_demand' in i]:
+        value = update.loc[k].iloc[0]
+        if 'duration' in k:
+            refine_val, direct_val = value, value
+        else:
+            refine_val = value * 0.4
+            direct_val = value * 0.6
+        refine_str = 'secondary_refined' + k.split('scrap_demand')[1]
+        direct_str = 'direct_melt' + k.split('scrap_demand')[1]
+        update = pd.concat([
+            update,
+            pd.Series(refine_val, pd.MultiIndex.from_tuples([(refine_str, self.scrap_shock_year)])),
+            pd.Series(direct_val, pd.MultiIndex.from_tuples([(direct_str, self.scrap_shock_year)]))
+        ])
+    return update
+
+
+def update_percent_values(self, update):
+    """
+    updating percentage values
+    """
+    update_ind = update.index.get_level_values(0).unique()
+    intersect = np.intersect1d(update_ind, scrap_parameters)
 
     for k in intersect:
         value = update.loc[k].iloc[0]
+        if '_pct_' in k:
+            update.loc[k] = update.loc[[k]] / 100 + 1
+            value = value / 100 + 1
         setattr(self, k, value)
-        self.hyperparam.loc[k, 'Value'] = value
+    return update
+
+
+def update_scenario_type(self):
+    update = self.scenario_update_df.copy()
+    update_ind = update.index.get_level_values(0).unique()
+    intersect = np.intersect1d(update_ind, scrap_parameters)
+    initial_scenario_type = self.scenario_type
+    if np.any(['collection' in j for j in intersect]) and \
+            np.any(['scrap_demand' in j for j in intersect]):
+        self.scenario_type = 'both-alt'
+    elif np.any(['collection' in j for j in intersect]):
+        self.scenario_type = 'scrap supply'
+    elif np.any(['scrap_demand' in j for j in intersect]):
+        self.scenario_type = 'scrap demand-alt'
+    if 'scenario_type' in intersect and initial_scenario_type != self.scenario_type:
+        warnings.warn("""
+        Giving a scenario_type input means there can be discrepancy between the
+        other variables given and the scenario_type; ensure this variable is one of
+        `scrap supply`, `scrap demand`, `scrap demand-alt`, `both`, or `both-alt`.
+
+        """)

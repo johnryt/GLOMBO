@@ -783,13 +783,14 @@ class Integration():
             print(433, 'did this one')
         self.mining.demand_series.loc[self.i - 1] = self.concentrate_demand['Global'][
                                                         self.i-1]+self.sxew_supply[self.i-1]
-        try:
-            self.mining.run()
-        except Exception as e:
-            import pickle
-            file = open('self.pkl', 'wb')
-            pickle.dump(self, file)
-            file.close()
+        # try:
+        self.mining.run()
+        # except Exception as e:
+        #     import pickle
+        #     file = open('self.pkl', 'wb')
+        #     pickle.dump(self, file)
+        #     file.close()
+        #     raise e
         # concentrate_supply
         self.concentrate_supply.loc[self.i] = self.mining.concentrate_supply_series[self.i]
         self.sxew_supply.loc[self.i] = self.mining.sxew_supply_series[self.i]
@@ -987,9 +988,11 @@ class Integration():
             self.i = year
             if self.i == self.simulation_time[0]:
                 self.decode_scenario_name()
+                self.update_hyperparam_scenario_input()
                 self.initialize_integration()
                 self.initialize_price()
             else:
+                self.update_hyperparam_scenario_input()
                 self.price_evolution()
                 self.run_demand()
                 self.update_integration_variables_post_demand()
@@ -1050,6 +1053,10 @@ class Integration():
         to see the actual methods
         '''
         scenario_name = self.scenario_name
+        if type(scenario_name) != str:
+            scenario_name_str = scenario_name.index.names[0]
+        else:
+            scenario_name_str = scenario_name
         error_string = 'improper format for scenario_name. Takes the form of 00_11_22_33_44 where:' + \
                        '\n\t00: ss, sd, bo (scrap supply, scrap demand, both)' + \
                        '\n\t11: pr or no (price response included or no)' + \
@@ -1057,7 +1064,7 @@ class Integration():
                        '\n\t33: X%tot, where X is any float/int and is the increase/decrease in scrap supply or demand relative\n\t\tto the initial year total demand' + \
                        '\n\t44: X%inc, where X is any float/int and is the increase/decrease in the %tot value per year' + \
                        '\n\n\tfor 22-44, an additional X should be placed at the end when 00==bo, describing the sd values' + \
-                       '\n\n\tscenario_name: ' + scenario_name + \
+                       '\n\n\tscenario_name: ' + scenario_name_str + \
                        '\n\tproper format: 00_11_Xyr_X%tot_X%inc or 00_11_XyrX_X%totX_X%incX if 00=bo'
         collection_rate_price_response = self.hyperparam['Value']['collection_rate_price_response']
         direct_melt_price_response = self.hyperparam['Value']['direct_melt_price_response']
@@ -1075,7 +1082,7 @@ class Integration():
 
         if type(scenario_name) != str:
             self.scenario_update_df = scenario_name.copy()
-            self.scenario_update_scrap_handling()
+            scenario_update_scrap_handling(self)
         elif scenario_name == '':
             scenario_type = scenario_name
         elif '++' in scenario_name:
@@ -1084,7 +1091,8 @@ class Integration():
                 default_year=2019)
             scenario_name = self.scenario_frame.loc[scenario_name.split('++')[1]]
             self.scenario_update_df = self.scenario_frame.loc[scenario_name]
-            self.scenario_update_scrap_handling()
+            scenario_update_scrap_handling(self)
+
         else:
             if '_' in scenario_name:
                 name = scenario_name.split('_')
@@ -1108,7 +1116,7 @@ class Integration():
                     collection_rate_price_response = False
 
             if scenario_type in ['scrap demand', 'both', 'scrap demand-alt', 'both-alt']:
-                if scenario_type == 'both':
+                if scenario_type == 'both' or scenario_type == 'both-alt':
                     integ = 1
                     if name[2].split('yr')[1] == '' or name[3].split('%tot')[1] == '' or name[4].split('%inc')[1] == '':
                         print(
@@ -1151,19 +1159,20 @@ class Integration():
                     1 - self.hyperparam['Value']['Secondary refinery fraction of recycled content, Global']) / 100
             direct_melt_pct_change_inc = 1 + direct_melt_pct_change_inc / 100
 
-        self.scenario_type = scenario_type
-        self.collection_rate_price_response = collection_rate_price_response
-        self.direct_melt_price_response = direct_melt_price_response
-        self.secondary_refined_price_response = direct_melt_price_response
-        self.collection_rate_duration = collection_rate_duration
-        self.collection_rate_pct_change_tot = 1 + collection_rate_pct_change_tot / 100
-        self.collection_rate_pct_change_inc = 1 + collection_rate_pct_change_inc / 100
-        self.direct_melt_duration = direct_melt_duration
-        self.direct_melt_pct_change_tot = direct_melt_pct_change_tot
-        self.direct_melt_pct_change_inc = direct_melt_pct_change_inc
-        self.secondary_refined_duration = secondary_refined_duration
-        self.secondary_refined_pct_change_tot = secondary_refined_pct_change_tot
-        self.secondary_refined_pct_change_inc = secondary_refined_pct_change_inc
+        if type(scenario_name)==str and '++' not in scenario_name:
+            self.scenario_type = scenario_type
+            self.collection_rate_price_response = collection_rate_price_response
+            self.direct_melt_price_response = direct_melt_price_response
+            self.secondary_refined_price_response = direct_melt_price_response
+            self.collection_rate_duration = collection_rate_duration
+            self.collection_rate_pct_change_tot = 1 + collection_rate_pct_change_tot / 100
+            self.collection_rate_pct_change_inc = 1 + collection_rate_pct_change_inc / 100
+            self.direct_melt_duration = direct_melt_duration
+            self.direct_melt_pct_change_tot = direct_melt_pct_change_tot
+            self.direct_melt_pct_change_inc = direct_melt_pct_change_inc
+            self.secondary_refined_duration = secondary_refined_duration
+            self.secondary_refined_pct_change_tot = secondary_refined_pct_change_tot
+            self.secondary_refined_pct_change_inc = secondary_refined_pct_change_inc
 
         self.hyperparam.loc['scenario_type', 'Value'] = self.scenario_type
         self.hyperparam.loc['scenario_type', 'Notes'] = 'empty string, scrap supply, scrap demand, or both'
@@ -1206,27 +1215,30 @@ class Integration():
         self.hyperparam.loc[
             'secondary_refined_pct_change_inc', 'Notes'] = 'once the direct_melt_pct_change_tot is reached, the direct melt fraction will then increase by this value per year. Given as 1+%change/100'
 
-    # def scenario_update_scrap_handling(self):
-    #     update = self.scenario_update_df.copy()
-    #     scrap_parameters = ['scenario_type',
-    #                         'collection_rate_price_response',
-    #                         'direct_melt_price_response',
-    #                         'secondary_refined_price_response',
-    #                         'collection_rate_duration',
-    #                         'collection_rate_pct_change_tot',
-    #                         'collection_rate_pct_change_inc',
-    #                         'direct_melt_duration',
-    #                         'direct_melt_pct_change_tot',
-    #                         'direct_melt_pct_change_inc',
-    #                         'secondary_refined_duration',
-    #                         'secondary_refined_pct_change_tot',
-    #                         'secondary_refined_pct_change_inc',
-    #                         ]
-    #     update_index_level0 = update.index.get_level_values(0).unique()
-    #     intersect = np.intersect1d(update_index_level0, scrap_parameters)
-    #     if len(intersect>0):
-    #         ph = update.loc[intersect].index.get_level_values(1).unique()
-    #         if np.any(ph!=ph[0]):
-    #         for k in intersect:
+    def update_hyperparam_scenario_input(self):
+        """
+        Run within any year to update hyperparameters from the scenario input excel file
+        """
+        if not hasattr(self,'scenario_update_df'):
+            return None
+        intersect = np.intersect1d(self.i, self.scenario_update_df.index.get_level_values(1).unique())
+        if len(intersect) > 0:
+            update_this_year = self.scenario_update_df.loc[idx[:, self.i]]
+            if update_this_year.index.duplicated().any():
+                ind = update_this_year.loc[update_this_year.index.duplicated()].index
+                update_this_year = update_this_year.loc[~update_this_year.index.duplicated()]
+                warnings.warn(
+                    f'\nMultiple entries for the same year: {list(ind)}, {self.i}  |  Only the first row will be implemented.')
+            for v in update_this_year.index.get_level_values(0).unique():
+                value = update_this_year.loc[v] if update_this_year.index.nlevels == 1 \
+                    else update_this_year.loc[v].loc[self.i]
+                for q in [self.hyperparam, self.mining.hyperparam, self.refine.hyperparam, self.demand.hyperparam]:
+                    if type(q) == dict:
+                        if v in q:
+                            q[v] = value
+                    else:
+                        if v in q.index:
+                            q.loc[v, 'Value'] = value
 
-    # self.scrap_shock_start
+                if self.verbosity>-10:
+                    print(self.i, v, value) # TODO remove this after confirmed working

@@ -1,6 +1,6 @@
 import warnings
 from integration_functions import Sensitivity
-from scenario_parser import *
+from scenario_parser import get_scenario_dataframe
 import numpy as np
 import pandas as pd
 from useful_functions import *
@@ -1276,18 +1276,30 @@ def prep_for_snsplots(self,demand_mining_integ='demand',percentile=25,n_most_imp
     """
     if demand_mining_integ=='mining' and hasattr(self,'mining'):
         df = self.mining.rmse_df_sorted.copy()
-        most_important = self.mining.importances_df['Mean no dummies'].sort_values(ascending=False).head(n_most_important).index
+        most_important = self.mining.importances_df['Mean no dummies'].sort_values(ascending=False)
+        if n_most_important>0:
+            most_important = most_important.head(n_most_important).index
+        else:
+            most_important = most_important.tail(-n_most_important).index
         df = df.loc[idx[:,most_important],:].copy()
     elif demand_mining_integ=='integ' and hasattr(self,'integ'):
         df = self.integ.rmse_df_sorted.copy()
-        most_important = self.integ.importances_df['Mean no dummies'].sort_values(ascending=False).head(n_most_important).index
+        most_important = self.integ.importances_df['Mean no dummies'].sort_values(ascending=False)
+        if n_most_important>0:
+            most_important = most_important.head(n_most_important).index
+        else:
+            most_important = most_important.tail(-n_most_important).index
         df = df.loc[idx[:,most_important],:].copy()
     elif demand_mining_integ=='demand' and hasattr(self,'demand'):
         df = self.demand.rmse_df_sorted.copy()
     else:
         df = self.rmse_df_sorted.copy()
         if demand_mining_integ=='integ':
-            most_important = self.importances_df['Mean no dummies'].sort_values(ascending=False).head(n_most_important).index
+            most_important = self.importances_df['Mean no dummies'].sort_values(ascending=False)
+            if n_most_important>0:
+                most_important = most_important.head(n_most_important).index
+            else:
+                most_important = most_important.tail(-n_most_important).index
             df = df.loc[idx[:,most_important],:].copy()
     percentile_converted = int(percentile/100*df.shape[1])
     df.rename(dict(zip(df.index.levels[0],[i.capitalize() for i in df.index.levels[0]])),inplace=True,level=0)
@@ -1716,8 +1728,9 @@ def run_future_scenarios(data_folder='data', run_parallel=3, scenario_sheet_file
         scenarios = ['']
     elif supply_or_demand is None:
         scenario_frame = get_scenario_dataframe(file_path_for_scenario_setup=scenario_sheet_file_path, default_year=2019)
-        scenarios = ['']+['++'.join([scenario_sheet_file_path,q])
-                          for q in scenario_frame.index.get_level_values(0).unique()]
+        scenarios = ['++'.join([scenario_sheet_file_path,q])
+                          for q in scenario_frame.index.get_level_values(0).unique()]+['']
+        # TODO implementation to run a baseline somehow, whether to just always have baseline be the first
     else:
         if supply_or_demand=='supply': s = 'ss'
         elif supply_or_demand=='demand': s = 'sd'
@@ -2281,7 +2294,7 @@ def plot_given_columns(many, commodity, columns, column_name=None, ax=None, colu
         mse = round(m.mse_resid**0.5,2)
         mse = round(m.rsquared,2)
         if column_name is not None:
-            title=f'Best {i}, {column_name} {commodity},\nR2={mse}, {columns[0]}'
+            title=f'Best {i}, {column_name} {commodity},\n'+r'$R^2$'+f'={mse}, scenario {columns[0]}'
         else:
             title=f'Best {i}, {commodity}\nR2={mse}, {columns[0]}'
         a.set(title=title,
@@ -2814,12 +2827,12 @@ class SHAP():
         self.regr = Regressor(random_state=0)
         if type(self.y_df)==pd.core.frame.DataFrame:
             self.y_df = self.y_df.iloc[:,0]
-        self.regr.fit(self.X_df,self.y_df)
+        self.regr.fit(self.X_df.fillna(0),self.y_df)
 
         if self.objective is None: self.objective='RMSE'
         self.test = pd.concat([self.X_df_test,self.y_df_test.rename(columns={self.y_df_test.columns[0]:self.objective})],axis=1)
         self.test_prescale = pd.concat([self.X_df_prescale_test,self.y_df_prescale_test.rename(columns={self.y_df_prescale_test.columns[0]:self.objective})],axis=1)
-        self.test.loc[:,'predicted '+self.objective] = self.regr.predict(self.X_df_test)
+        self.test.loc[:,'predicted '+self.objective] = self.regr.predict(self.X_df_test.fillna(0))
         self.test_prescale.loc[:,'predicted '+self.objective] = self.test['predicted '+self.objective]
 
     def initialize_shap(self):
@@ -2836,7 +2849,7 @@ class SHAP():
         # self.shap_interaction_values = alt_explainer.shap_interaction_values(data)
         self.shap_interaction_values = explainer_copy.shap_interaction_values(data)
         x = self.shap_interaction_values
-        data_ph = data.stack()
+        data_ph = data.fillna(0).stack()
         if self.commodity!=None:
             self.shap_interaction_df = pd.DataFrame(x.reshape(x.shape[0]*x.shape[1],x.shape[2]), data_ph.index, data.columns)
         else:
@@ -3436,6 +3449,12 @@ def plot_future_line_and_hist_one_commodity(many, commodity, parameter, restrict
     plt.close()
     return comm, fig
 
+def array_to_star(array, no_star_cut=0.1, period_cut=0.05, one_star_cut=0.01, two_star_cut=0.001):
+    pval = stats.ttest_1samp(array, popmean=0)[1]
+    pval_str = '***' if pval < two_star_cut else '**' if pval < one_star_cut else '*' if \
+        pval < no_star_cut else '(.)' if pval < period_cut else ''
+    return pval_str
+
 def make_parameter_mean_std_table(many, n_best, value_in_parentheses='standard error'):
     """
     many: Many instance, from tuning, either the integ object or full thing is has integ
@@ -3444,49 +3463,51 @@ def make_parameter_mean_std_table(many, n_best, value_in_parentheses='standard e
         std dev / variance
     value_in_parentheses: str, can be `standard error`, `standard deviation`, or `variance`
     """
-    if hasattr(many,'integ'):
+    if hasattr(many, 'integ'):
         rmse_df = many.integ.rmse_df_sorted.copy()
     else:
         rmse_df = many.rmse_df_sorted.copy()
     r = [i for i in rmse_df.index.get_level_values(1).unique()
-         if np.any([j in i for j in ['score','R2','RMSE','region_specific_price_response']])]
-    rmse_df.drop(r,inplace=True,level=1)
-    best_n = rmse_df.loc[:,:n_best]
+         if np.any([j in i for j in ['score', 'R2', 'RMSE', 'region_specific_price_response']])]
+    rmse_df.drop(r, inplace=True, level=1)
+    best_n = rmse_df.loc[:, :n_best]
     means = best_n.mean(axis=1).unstack(0).fillna('')
-    if value_in_parentheses=='standard error':
+    if value_in_parentheses == 'standard error':
         stds = best_n.sem(axis=1).unstack(0).fillna('')
-    elif value_in_parentheses=='standard deviation':
+    elif value_in_parentheses == 'standard deviation':
         stds = best_n.std(axis=1).unstack(0).fillna('')
-    elif value_in_parentheses=='variance':
+    elif value_in_parentheses == 'variance':
         stds = best_n.var(axis=1).unstack(0).fillna('')
+    stars = best_n.apply(array_to_star, axis=1)
 
-    demand_pretune = ['sector_specific_dematerialization_tech_growth','sector_specific_price_response',
+    demand_pretune = ['sector_specific_dematerialization_tech_growth', 'sector_specific_price_response',
                       'intensity_response_to_gdp']
-    mining_pretune = ['primary_oge_scale','mine_cu_margin_elas','mine_cost_og_elas',
-                      'mine_cost_tech_improvements','mine_cost_price_elas','initial_ore_grade_decline',
-                      'primary_price_resources_contained_elas','incentive_opening_probability','close_years_back',
-                      'reserves_ratio_price_lag','mine_cost_change_per_year','incentive_mine_cost_change_per_year']
-    mean_std = pd.DataFrame(np.nan,means.index,means.columns)
+    mining_pretune = ['primary_oge_scale', 'mine_cu_margin_elas', 'mine_cost_og_elas',
+                      'mine_cost_tech_improvements', 'mine_cost_price_elas', 'initial_ore_grade_decline',
+                      'primary_price_resources_contained_elas', 'incentive_opening_probability', 'close_years_back',
+                      'reserves_ratio_price_lag', 'mine_cost_change_per_year', 'incentive_mine_cost_change_per_year']
+    mean_std = pd.DataFrame(np.nan, means.index, means.columns)
     for i in mean_std.index:
         for c in mean_std.columns:
-            if means[c][i]!='':
-                mean_std.loc[i,c] = '{:.3f} ({:.3f})'.format(means[c][i],stds[c][i])
+            if means[c][i] != '':
+                mean_std.loc[i, c] = '{:.3f}{:s} ({:.3f})'.format(means[c][i], stars[c][i], stds[c][i])
             else:
-                mean_std.loc[i,c] = ' '
+                mean_std.loc[i, c] = ' '
     mean_std = mean_std.T
     params_nice = make_parameter_names_nice(mean_std.columns)
 
     def convert_param_names(v):
         if v in mining_pretune:
-            return ('Mining parameters',params_nice[v])
+            return ('Mining parameters', params_nice[v])
         elif v in demand_pretune:
-            return ('Demand parameters',params_nice[v])
+            return ('Demand parameters', params_nice[v])
         else:
-            return ('Integration parameters',params_nice[v])
+            return ('Integration parameters', params_nice[v])
+
     mean_std = mean_std.rename(columns=dict(zip(mean_std.columns,
                                                 [convert_param_names(i) for i in mean_std.columns])))
-    mean_std = mean_std.rename(dict(zip(mean_std.index,[many.commodity_element_map[i.capitalize()]
-                                                        for i in mean_std.index])))
+    mean_std = mean_std.rename(dict(zip(mean_std.index, [many.commodity_element_map[i.capitalize()]
+                                                         for i in mean_std.index])))
     mean_std.columns = pd.MultiIndex.from_tuples(mean_std.columns)
     return mean_std.T.sort_index().T
 

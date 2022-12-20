@@ -98,6 +98,7 @@ class demandModel():
         hyperparameters.loc['commodity',:] = 'notAu','used to allow for other volumes to be substituted in the case of materials that need it, e.g. Au (set to Au to allow Au volume substitution)'
         hyperparameters.loc['gold_rolling_window',:] = 5, 'number of years to use in the rolling mean for gold volume drivers'
         self.hyperparam = hyperparameters.copy()
+        self.initial_hyperparam = self.hyperparam.copy()
 
     def load_demand_data(self):
         file = f'{self.data_folder}/Demand prediction data-copper.xlsx'
@@ -120,11 +121,31 @@ class demandModel():
             self.volumes.loc[:,idx[:,'Industrial']] = self.volumes.loc[:,idx[:,'Industrial']].apply(lambda x: x/x.sum(), axis=1).apply(lambda x: x*gold_vols2['Global cash reserves (USD$2021)'])#['US circulating coin production (million coins)'])
             self.volumes.loc[:,idx[:,'Transport']] = self.volumes.loc[:,idx[:,'Transport']].apply(lambda x: x/x.sum(), axis=1).apply(lambda x: x*gold_vols1['Diamond demand ($B)'])
 
-            gold_dem = pd.read_excel(f'{self.data_folder}/case study data.xlsx',sheet_name='Au',index_col=0).loc[2001:,'Total demand'].astype(float)
+            gold_dem = pd.read_excel(f'{self.data_folder}/case study data.xlsx',sheet_name=self.hyperparam['Value']['commodity'],index_col=0).loc[2001:,'Total demand'].astype(float)
             ad = self.alt_demand.copy()
             sectors = ['Construction','Electrical','Industrial','Transport','Other']
             ad.loc[2001:,sectors] = ad.loc[2001:,sectors].apply(lambda x: x/x.sum(),axis=1).apply(lambda x: x*gold_dem.loc[:2019])
             ad.loc[:2000,sectors] *= ad.loc[2001,sectors].sum()/ad.loc[2000,sectors].sum()**2*self.alt_demand.loc[2001,sectors].sum()
+            self.alt_demand = ad.copy()
+        elif self.hyperparam['Value']['commodity'] in ['Pt']:
+            gold_vols = pd.read_excel(f'{self.data_folder}/Gold demand volume indicators.xlsx',
+                                      sheet_name='Volume drivers', index_col=0).loc[2001:]
+            gold_vols1 = gold_vols.loc[2001:2019].rolling(self.hyperparam['Value']['gold_rolling_window'],
+                                                          min_periods=1, center=True).mean()
+            gold_vols1 = pd.concat([gold_vols1, gold_vols.rolling(5, min_periods=1, center=True).mean().loc[2020:]])
+            gold_vols2 = gold_vols.rolling(self.hyperparam['Value']['gold_rolling_window'] + 2, min_periods=1,
+                                           center=True).mean()
+            self.volumes.loc[:, idx[:, 'Other']] = self.volumes.loc[:, idx[:, 'Other']].apply(
+                lambda x: x / x.sum(), axis=1).apply(lambda x: x * gold_vols1['Diamond demand ($B)'])
+            gold_dem = pd.read_excel(f'{self.data_folder}/case study data.xlsx',
+                                     sheet_name=self.hyperparam['Value']['commodity'], index_col=0).loc[2001:,
+                       'Total demand'].astype(float)
+            ad = self.alt_demand.copy()
+            sectors = ['Construction', 'Electrical', 'Industrial', 'Transport', 'Other']
+            ad.loc[2001:, sectors] = ad.loc[2001:, sectors].apply(lambda x: x / x.sum(), axis=1).apply(
+                lambda x: x * gold_dem.loc[:2019])
+            ad.loc[:2000, sectors] *= ad.loc[2001, sectors].sum() / ad.loc[2000, sectors].sum() ** 2 * \
+                                      self.alt_demand.loc[2001, sectors].sum()
             self.alt_demand = ad.copy()
 
     def update_volumes(self):
@@ -470,8 +491,9 @@ class demandModel():
                 self.collection_rate[self.collection_rate>max_cr+1e-6] = max_cr
                 old_old_scrap = self.old_scrap_collected.copy().dropna()
                 self.old_scrap_collected = self.collection_rate*self.eol
-                print(self.additional_scrap.loc[old_old_scrap.index])
-                print((old_old_scrap-self.old_scrap_collected))
+                if self.verbosity>3:
+                    print('demand 475',self.additional_scrap.loc[old_old_scrap.index])
+                    print('demand 476',(old_old_scrap-self.old_scrap_collected))
                 self.additional_scrap.loc[old_old_scrap.index] = self.additional_scrap.loc[old_old_scrap.index] - (old_old_scrap-self.old_scrap_collected)
                 self.additional_scrap[self.additional_scrap<0] = 0
             #     self.additional_scrap = pd.concat([
@@ -494,6 +516,7 @@ class demandModel():
 
     def run(self):
         if self.i==self.simulation_time[0]:
+            self.initial_hyperparam = self.hyperparam.copy()
             simulation_time = self.simulation_time
             self.load_demand_data()
             self.all_time = np.sort(np.union1d(self.volumes.index,self.simulation_time))
@@ -505,6 +528,8 @@ class demandModel():
 
             self.row = [i for i in self.volumes.columns.levels[0] if i!='China']
 
+            self.update_if_hyperparam_changes()  # TODO make sure hyperparameter updates go smoothly
+
             self.initialize_demand()
             self.initialize_lifetimes()
             self.initialize_fabrication_efficiency()
@@ -512,7 +537,26 @@ class demandModel():
             self.initialize_collection()
             self.initialize_collection_scenario()
         else:
+            self.update_if_hyperparam_changes()  # TODO make sure hyperparameter updates go smoothly
             self.run_intensity_prediction()
             self.scrap_generation_collection()
         self.scrap_supply = self.scrap_collected.unstack().groupby(level=1,axis=1).sum()
         self.scrap_supply.loc[:,'Global'] = self.scrap_supply['China']+self.scrap_supply['RoW']
+
+    def update_if_hyperparam_changes(self):
+        """
+        Checks if the hyperparam variable has changed due to scenario file inputs, and if so,
+        runs the requisite updates
+        """
+        if not hasattr(self, 'initial_hyperparam'):
+            return None
+        if self.hyperparam.shape[0]==self.initial_hyperparam.shape[0] and (self.hyperparam['Value']==self.initial_hyperparam['Value']).all():
+            return None
+        changed_params = [j for j in self.hyperparam.index if
+                          self.hyperparam['Value'][j]!=self.initial_hyperparam['Value'][j]]
+        if 'volume_growth_rate' in changed_params:
+            actual_simulation_time = self.simulation_time
+            self.simulation_time = np.arange(self.i,self.simulation_time[-1]+1)
+            self.update_volumes()
+            self.simulation_time = actual_simulation_time
+        self.initial_hyperparam = self.hyperparam.copy()

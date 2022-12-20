@@ -3090,7 +3090,7 @@ class SHAP():
         self.facet_data = self.facet_data.drop(columns=r)
 
         # creating the sample object
-        sample = Sample(observations=self.facet_data,
+        sample = Sample(observations=self.facet_data.fillna(0),
                         feature_names=self.facet_data.drop(columns=self.objective).columns,
                         target_name=self.objective,)
 

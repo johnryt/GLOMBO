@@ -128,6 +128,8 @@ def intensity_prediction(year_i, price_series, gdp_growth_prediction, intensity_
 
         for sec in sectors:
             int_growth = intensity_growth_sec_reg_specified_pooled(elas_mat, reg, sec, gdp_growth, p_growth)
+            if int_growth>1e4: int_growth=1e4
+            elif int_growth<-1e4: int_growth=-1e4
             pooled_intensity_growth_prediction.loc[year_i, idx[reg, sec]] = int_growth
 
     intensity_prediction = pooled_intensity_growth_prediction.mul(intensity_last)

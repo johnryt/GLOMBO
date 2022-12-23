@@ -93,16 +93,19 @@ def create_result_df(self,integ):
                     'Additional direct melt','Additional secondary refined','Additional scrap',
                     'SX-EW supply','Primary supply','Primary demand','Mine production'])
         if reg=='Global':
+            scrap_collected = integ.demand.old_scrap_collected.groupby(level=0).sum()
             collection = integ.demand.old_scrap_collected.groupby(level=0).sum()/integ.demand.eol.groupby(level=0).sum().replace(0,np.nan)
             old_scrap = integ.demand.old_scrap_collected.groupby(level=0).sum().sum(axis=1)
             new_scrap = integ.demand.new_scrap_collected.groupby(level=0).sum().sum(axis=1)
         else:
+            scrap_collected = integ.demand.old_scrap_collected.loc[idx[:,reg],:].droplevel(1)
             collection = integ.collection_rate.loc[idx[:,reg],:].droplevel(1).fillna(0)
             old_scrap = integ.demand.old_scrap_collected.loc[idx[:,reg],:].droplevel(1).sum(axis=1)
             new_scrap = integ.demand.new_scrap_collected.loc[idx[:,reg],:].droplevel(1).sum(axis=1)
+        scrap_collected = scrap_collected.rename(columns=dict(zip(scrap_collected.columns,['Old scrap '+j.lower() for j in scrap_collected.columns])))
         collection = collection.rename(columns=dict(zip(collection.columns,['Collection rate '+j.lower() for j in collection.columns])))
         scraps = pd.concat([old_scrap,new_scrap],axis=1,keys=['Old scrap collection','New scrap collection'])
-        results = pd.concat([results,collection,scraps],axis=1)
+        results = pd.concat([results,collection,scrap_collected,scraps],axis=1)
         time_index = np.arange(self.simulation_time[0]-self.changing_base_parameters_series['presimulate_n_years'],self.simulation_time[-1]+1)
         time_index = [i for i in results.index if i in time_index]
         if self.trim_result_df: results = results.loc[time_index]

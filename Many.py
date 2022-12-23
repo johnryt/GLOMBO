@@ -386,6 +386,7 @@ class Many():
                 'mine_cost_change_per_year',
                 'mine_cost_og_elas',
                 'primary_oge_scale',
+                'initial_ore_grade_decline',
                 'sector_specific_dematerialization_tech_growth',
                 'intensity_response_to_gdp',
                 'sector_specific_price_response',
@@ -1034,7 +1035,7 @@ def feature_importance(self,plot=None,recalculate=False, standard_scaler=True, p
                 test.loc[:,'predicted '+objective] = regr.predict(X_test)
 
                 if not plot_commodity_importances:
-                    importances = pd.Series(regr.feature_importances_, X_df.columns).drop([i for i in X_df.columns if 'commodity' in i]).sort_values(ascending=False)
+                    importances = pd.Series(regr.feature_importances_, X_df.columns).drop([i for i in X_df.columns if 'commodity =' in i]).sort_values(ascending=False)
                 else:
                     importances = pd.Series(regr.feature_importances_, X_df.columns).sort_values(ascending=False)
                 importances.name =  name + (' w/ dummies' if dummies else ' no dummies')
@@ -1232,16 +1233,16 @@ def make_parameter_names_nice(ind):
     updated = [i.replace('_',' ').replace('sector specific ','').replace('dematerialization tech growth','Intensity elasticity to time').replace(
         'price response','intensity response to price').capitalize().replace('gdp','GDP').replace(
         ' cu ',' CU ').replace(' og ',' OG ').replace('Primary price resources contained elas','Incentive tonnage response to price').replace(
-        'OG elas','elasticity to ore grade decline').replace('Initial','Incentive').replace('Primary oge scale','Ore grade elasticity distribution mean').replace(
+        'OG elas','elasticity to ore grade').replace('Initial','Incentive').replace('Primary oge scale','Ore grade elasticity to COT distribution mean').replace(
         'Mine CU margin elas','Mine CU elasticity to TCM').replace('Mine cost tech improvements','Mine cost reduction per year').replace(
         'Incentive opening','Incentive pool opening').replace('Mine cost price elas','Mine cost elasticity to commodity price').replace(
         'Close years back','Prior years used for price prediction').replace('Reserves ratio price lag','Price lag used for incentive pool tonnage').replace(
-        'Incentive pool ore grade decline','Incentive pool ore grade decline per year').replace('response','elasticity').replace('Tcrc','TCRC').replace('tcrc','TCRC').replace(
+        'Incentive ore grade decline','Incentive ore grade elasticity to COT').replace('response','elasticity').replace('Tcrc','TCRC').replace('tcrc','TCRC').replace(
         'sd','SD').replace(' elas ',' elasticity to ').replace('Direct melt elas','Direct melt fraction elas').replace('CU price elas','CU elasticity to price').replace(
         'ratio TCRC elas','ratio elasticity to TCRC').replace('ratio scrap spread elas','ratio elasticity to scrap spread').replace(
         'Refinery capacity fraction increase mining','Ref. cap. growth frac. from mine prod. growth').replace('Pri ','Primary refinery ').replace(
         'Sec CU','Secondary refinery CU').replace('Sec ratio','Refinery SR').replace('primary commodity ','').replace('Primary commodity','Refined').replace(
-        'tcm','TCM').replace(' sr',' SR')
+        'tcm','TCM').replace(' sr',' SR').replace('CU TCRC elas','CU elasticity to TCRC')
                                        for i in ind]
     return dict(zip(ind,updated))
 
@@ -1277,7 +1278,9 @@ def prep_for_snsplots(self,demand_mining_integ='demand',percentile=25,n_most_imp
     if demand_mining_integ=='mining' and hasattr(self,'mining'):
         df = self.mining.rmse_df_sorted.copy()
         most_important = self.mining.importances_df['Mean no dummies'].sort_values(ascending=False)
-        if n_most_important>0:
+        if type(n_most_important)!=int:
+            most_important = most_important.index[n_most_important[0]:n_most_important[1]]
+        elif n_most_important>0:
             most_important = most_important.head(n_most_important).index
         else:
             most_important = most_important.tail(-n_most_important).index
@@ -1285,7 +1288,9 @@ def prep_for_snsplots(self,demand_mining_integ='demand',percentile=25,n_most_imp
     elif demand_mining_integ=='integ' and hasattr(self,'integ'):
         df = self.integ.rmse_df_sorted.copy()
         most_important = self.integ.importances_df['Mean no dummies'].sort_values(ascending=False)
-        if n_most_important>0:
+        if type(n_most_important)!=int:
+            most_important = most_important.index[n_most_important[0]:n_most_important[1]]
+        elif n_most_important>0:
             most_important = most_important.head(n_most_important).index
         else:
             most_important = most_important.tail(-n_most_important).index
@@ -1296,7 +1301,9 @@ def prep_for_snsplots(self,demand_mining_integ='demand',percentile=25,n_most_imp
         df = self.rmse_df_sorted.copy()
         if demand_mining_integ=='integ':
             most_important = self.importances_df['Mean no dummies'].sort_values(ascending=False)
-            if n_most_important>0:
+            if type(n_most_important)!=int:
+                most_important = most_important.index[n_most_important[0]:n_most_important[1]]
+            elif n_most_important>0:
                 most_important = most_important.head(n_most_important).index
             else:
                 most_important = most_important.tail(-n_most_important).index
@@ -1394,6 +1401,8 @@ def plot_important_parameter_scatter(self, mining_or_integ='mining', percentile=
         mining_or_integ_ph = 'integ'
     df2, demand_params, order = prep_for_snsplots(self,demand_mining_integ=mining_or_integ_ph,
                                                   percentile=percentile, n_most_important=n_most_important)
+    if type(n_most_important)!=int:
+        n_most_important = abs(n_most_important[1]-n_most_important[0])
     df2 = df2.set_index(['Commodity','Scenario number']).stack().reset_index(drop=False).rename(
         columns={'level_2':'Parameter',0:'Value'})
     if mining_or_integ=='demand':
@@ -1424,9 +1433,9 @@ def plot_important_parameter_scatter(self, mining_or_integ='mining', percentile=
     def replace_for_mining(string):
         return string.replace(' to T','\nto T').replace('y d','y\nd').replace('ing pr','ing\npr')\
             .replace('ge e','ge\ne')
-    if mining_or_integ=='mining':
-        for i in demand_params:
-            df2a.replace(i,replace_for_mining(i),inplace=True)
+#     if mining_or_integ=='mining':
+#         for i in demand_params:
+#             df2a.replace(i,replace_for_mining(i),inplace=True)
     df2b = df2.copy().loc[[i in outer for i in df2['Parameter']]]
     if best_or_median=='median':
         df2a_means = df2a.groupby(['Commodity','Parameter']).median().reset_index(drop=False)
@@ -1543,7 +1552,7 @@ def plot_important_parameter_scatter(self, mining_or_integ='mining', percentile=
 
     return fig,ax,df2
 
-def commodity_level_feature_importance_heatmap(self,dpi=50,recalculate=True,objective=None):
+def commodity_level_feature_importance_heatmap(self,dpi=50,recalculate=True,objective=None, only_plot_names=False, normalize=False):
     """
     Creates a plot showing commodity level feature importances in heatmap form.
 
@@ -1551,6 +1560,15 @@ def commodity_level_feature_importance_heatmap(self,dpi=50,recalculate=True,obje
     recalculate: bool, whether or not feature importance gets recalculated,
       should keep as True unless you have just run this function with
       recalculate=True and just want to update dpi.
+    objective: None or str, string must correspond with a column in the results
+      dataframe
+    only_plot_names: bool, default False, restricts the variables shown to be
+      those defined in the names variable within this function. Does not seem
+      useful
+    normalize: bool, default False. If True, divides all feature importance
+      values in each commodity by the commodity maximum; gives relative importance
+      where most important parameter has the value 1, rather than all summing
+      to 1
     """
     names = ['Intensity elasticity to GDP',
                  'Intensity decline per year',
@@ -1583,15 +1601,24 @@ def commodity_level_feature_importance_heatmap(self,dpi=50,recalculate=True,obje
         self.importances_df_reformed = importances_df.rename(
             make_parameter_names_nice(importances_df.index)).rename(
             columns=dict(zip(importances_df.columns,[i.capitalize().replace('None','All') for i in importances_df.columns])))
-        self.importances_df_reformed = self.importances_df_reformed.loc[[i for i in names if i in self.importances_df_reformed.index]]
+        if only_plot_names:
+            self.importances_df_reformed = self.importances_df_reformed.loc[[i for i in names if i in self.importances_df_reformed.index]]
 
-    fig,ax = easy_subplots(1,height_scale=1.1)
+    fig,ax = easy_subplots(1,height_scale=1.1*self.importances_df.shape[0]/len(names))
     a = ax[0]
-
+    if normalize:
+        self.importances_df_reformed = self.importances_df_reformed.div(self.importances_df_reformed.max())
+        cbar_kws = {'label': 'Relative feature importance'}
+    else:
+        cbar_kws = {'label': 'Feature importance'}
+    self.importances_df_reformed.rename(columns=self.commodity_element_map, inplace=True)
+    self.importances_df_reformed = self.importances_df_reformed.sort_values(by='All',ascending=False)[[
+        'Ag','Al','Au','Cu','Ni','Pb','Sn','Steel','Zn','All']]
     sns.heatmap(self.importances_df_reformed,
-                xticklabels=True,yticklabels=True,ax=a,cbar_kws={'label':'Feature importance'},cmap='OrRd')
+                xticklabels=True,yticklabels=True,ax=a,cbar_kws=cbar_kws,cmap='OrRd')
     fig.set_dpi(dpi)
-    a.set_title('Integrated model\nfeature importance',weight='bold')
+    a.tick_params(axis='x', labelbottom=True, labeltop=True, labelrotation=90)
+    a.set_title('Commodity level\nfeature importance',weight='bold')
     return fig,a
 
 def nice_plot_pretuning(demand_or_mining='mining',dpi=50,pkl_folder='data',filename_base='_run_hist',filename_modifier=''):
@@ -3080,6 +3107,8 @@ class SHAP():
         from facet.selection import LearnerRanker, LearnerGrid
 
         get_X_df_y_df(self.many, commodity=self.commodity, standard_scaler=self.standard_scaler, objective=self.objective)
+        if self.objective is None:
+            self.objective='score'
         self.many.y_df = self.many.y_df.rename(columns={self.many.y_df.columns[0]:self.objective})
         self.facet_data = pd.concat([self.many.X_df.copy(),self.many.y_df.copy()],axis=1)
         # initial data wrangling
@@ -3143,6 +3172,9 @@ class SHAP():
         self.synergy_matrix = self.synergy_matrix.loc[self.names,self.names]
         self.redundancy_matrix = self.redundancy_matrix.loc[self.synergy_matrix.index, self.synergy_matrix.index]
         self.independence_matrix = self.independence_matrix.loc[self.synergy_matrix.index, self.synergy_matrix.index]
+        setattr(self.many, str(self.commodity)+'_synergy_matrix', self.synergy_matrix)
+        setattr(self.many, str(self.commodity)+'_redundancy_matrix', self.redundancy_matrix)
+        setattr(self.many, str(self.commodity)+'_independence_matrix', self.independence_matrix)
 
 def draw_facet_dendrogram(self):
     """
@@ -3155,7 +3187,7 @@ def draw_facet_dendrogram(self):
     redundancy = self.inspector.feature_redundancy_linkage()
     DendrogramDrawer().draw(data=redundancy, title="Redundancy Dendrogram")
 
-def plot_sri_matrices(self, n_param=3, width_scale=1, width_ratio_scale = 0.83, dpi = 100):
+def plot_sri_matrices(self, n_param=3, width_scale=1, width_ratio_scale = 0.83, dpi = 100, cmap='viridis_r'):
     '''
     notes: the synergy matrix shows that from the perspective of nearly
     any parameter (rows), the information in "incentive pool opening
@@ -3190,7 +3222,8 @@ def plot_sri_matrices(self, n_param=3, width_scale=1, width_ratio_scale = 0.83, 
                             width_ratios=[width_ratio_scale,width_ratio_scale,1][-n_param:],
                             sharey=True)
     for i,a,name in zip(dfs,ax,names):
-        b = sns.heatmap(i,ax=a,annot=True,fmt='.2f',annot_kws={'fontsize':16},cbar=(name==names[-1]),xticklabels=True,yticklabels=True)
+        i = i.sort_index().T.sort_index().T
+        b = sns.heatmap(i,ax=a,annot=True,fmt='.2f',annot_kws={'fontsize':16},cbar=(name==names[-1]),xticklabels=True,yticklabels=True,cmap=cmap)
         a.set_title(name,weight='bold')
         a.set(ylabel='Feature' if name==names[0] else '',xlabel='Feature')
     if len(self.synergy_matrix.index)>11:
@@ -3201,7 +3234,7 @@ def plot_sri_matrices(self, n_param=3, width_scale=1, width_ratio_scale = 0.83, 
     fig.tight_layout(pad=1)
     return fig
 
-def plot_all_sri_matrices(many, commodities=None, standard_scaler=True, dummies=False, split_frac=0.6, Regressor=RandomForestRegressor, use_train_data=False, objective=None):
+def plot_all_sri_matrices(many, commodities=None, standard_scaler=True, dummies=False, split_frac=0.6, Regressor=RandomForestRegressor, use_train_data=False, objective=None, n_param=3, width_scale=1, cmap='viridis_r', dpi=50):
     """
     Rather than needing to initialize the SHAP function every time,
     can just run this function to get all the SRI matrices. Takes
@@ -3242,7 +3275,7 @@ def plot_all_sri_matrices(many, commodities=None, standard_scaler=True, dummies=
         print(comm)
         sh1 = SHAP(many,commodity=comm, standard_scaler=standard_scaler, dummies=dummies, split_frac=split_frac, Regressor=Regressor, use_train_data=use_train_data, objective=objective)
         sh1.gamma_facet()
-        plot_sri_matrices(sh1)
+        plot_sri_matrices(sh1, n_param=n_param, width_scale=width_scale, width_ratio_scale=width_ratio_scale, cmap=cmap, dpi=dpi)
         plt.show()
         plt.close()
 
@@ -3509,9 +3542,17 @@ def make_parameter_mean_std_table(many, n_best, value_in_parentheses='standard e
     mean_std = mean_std.rename(dict(zip(mean_std.index, [many.commodity_element_map[i.capitalize()]
                                                          for i in mean_std.index])))
     mean_std.columns = pd.MultiIndex.from_tuples(mean_std.columns)
-    return mean_std.T.sort_index().T
+    means = means.T.replace('',np.nan)
+    means = means.rename(columns=dict(zip(means.columns,
+                                                [convert_param_names(i) for i in means.columns])))
+    means = means.rename(dict(zip(means.index, [many.commodity_element_map[i.capitalize()]
+                                                         for i in means.index])))
+    means.columns = pd.MultiIndex.from_tuples(means.columns)
+    return mean_std.T.sort_index().T, means.sort_index().T.sort_index().T
 
-def plot_violin_all(many, mining_or_integ='integ', percentile=25, n=25, n_most_important=100, legend=True, normalize=False, dpi=50):
+
+def plot_violin_all(many, mining_or_integ='integ', percentile=25, n=25, n_most_important=100, legend=True,
+                    normalize=False, dpi=50):
     """
     The huge violinplot.
 
@@ -3530,24 +3571,42 @@ def plot_violin_all(many, mining_or_integ='integ', percentile=25, n=25, n_most_i
 
     Returns fig, ax, df
     """
-    plot_important_parameter_scatter(many, mining_or_integ=mining_or_integ, percentile=percentile, n=n, n_most_important=n_most_important, legend=legend, normalize=normalize, dpi=dpi, plot=False)
+    plot_important_parameter_scatter(many, mining_or_integ=mining_or_integ, percentile=percentile, n=n,
+                                     n_most_important=n_most_important, legend=legend, normalize=normalize, dpi=dpi,
+                                     plot=False)
 
     df_use = many.df2.loc[
-        (many.df2.Parameter!='Price lag used for incentive pool tonnage')
-        & (many.df2.Parameter!='Prior years used for price prediction')]
-    df_use.loc[(df_use['Parameter']=='Incentive mine cost change per year')|(df_use['Parameter']=='Mine cost change per year'),'Value']/=5
-    df_use.loc[(df_use['Parameter']=='Intensity elasticity to time'),'Value']*=10
-    df_use.loc[df_use['Parameter']=='Incentive mine cost change per year','Parameter'] = r'$\frac{Incentive\:mine\:cost\:change\:per\:year}{5}$'
-    df_use.loc[df_use['Parameter']=='Mine cost change per year','Parameter'] = r'$\frac{Mine\:cost\:change\:per\:year}{5}$'
-    df_use.loc[df_use['Parameter']=='Intensity elasticity to time','Parameter'] = '10 x Intensity elasticity to time'
-    fig,a = plt.subplots(figsize=(10,60))
-    sns.violinplot(data=df_use, y='Parameter', x='Value', hue='Commodity',ax=a, linewidth=2,
-                  cut=0,orient='h')
-    a.tick_params(axis='x',rotation=90)
+        (many.df2.Parameter != 'Price lag used for incentive pool tonnage')
+        & (many.df2.Parameter != 'Prior years used for price prediction')]
+    df_use.loc[(df_use['Parameter'] == 'Incentive mine cost change per year') | (
+                df_use['Parameter'] == 'Mine cost change per year'), 'Value'] /= 5
+    df_use.loc[(df_use['Parameter'] == 'Intensity elasticity to time'), 'Value'] *= 10
+    df_use.loc[df_use[
+                   'Parameter'] == 'Incentive mine cost change per year', 'Parameter'] = r'$\frac{Incentive\:mine\:cost\:change\:per\:year}{5}$'
+    df_use.loc[
+        df_use['Parameter'] == 'Mine cost change per year', 'Parameter'] = r'$\frac{Mine\:cost\:change\:per\:year}{5}$'
+    df_use.loc[df_use['Parameter'] == 'Intensity elasticity to time', 'Parameter'] = '10 x Intensity elasticity to time'
+    fig, a = plt.subplots(figsize=(10, 60))
+    if hasattr(many, 'integ') and mining_or_integ == 'integ':
+        order_many = many.integ
+    else:
+        order_many = many
+    order = order_many.importances_df['Mean no dummies'].sort_values(ascending=False).index
+    order = [make_parameter_names_nice(order)[i].replace(
+        'Intensity elasticity to time', '10 x Intensity elasticity to time').replace(
+        'Mine cost change per year', r'$\frac{Mine\:cost\:change\:per\:year}{5}$').replace(
+        'Incentive mine cost change per year', r'$\frac{Incentive\:mine\:cost\:change\:per\:year}{5}$')
+        for i in order]
+    order = [i for i in order if i in df_use['Parameter'].unique()]
+
+    sns.violinplot(data=df_use, y='Parameter', x='Value', hue='Commodity', ax=a, linewidth=2,
+                   cut=0, orient='h', order=order)
+    a.tick_params(axis='x', rotation=90)
     a.grid(axis='x')
     if not legend:
         a.get_legend().remove()
     return fig, a, df_use
+
 
 def run_demand_pretuning():
     """

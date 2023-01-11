@@ -10,6 +10,7 @@ import statsmodels.api as sm
 from sklearn.ensemble import RandomForestRegressor, ExtraTreesRegressor, GradientBoostingRegressor
 from matplotlib.lines import Line2D
 from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import r2_score
 from joblib import Parallel, delayed
 import os
 from shutil import copyfile
@@ -940,7 +941,9 @@ def get_X_df_y_df(self, commodity=None, objective=None, standard_scaler=True):
     self.y_df = y_df.copy()
     self.X_df = X_df.copy()
 
-def feature_importance(self,plot=None,recalculate=False, standard_scaler=True, plot_commodity_importances=False, commodity=None, objective=None, processing_option=None, dpi=50):
+
+def feature_importance(self, plot=None, recalculate=False, standard_scaler=True, plot_commodity_importances=False,
+                       commodity=None, objective=None, processing_option=None, dpi=50):
     '''
     Calculates feature importances using three different tree-based machine
     learning algorithms: RandomForestRegressor, ExtraTreesRegressor, and
@@ -989,107 +992,143 @@ def feature_importance(self,plot=None,recalculate=False, standard_scaler=True, p
     if processing_option is not None:
         self.processing_option = processing_option
 
-    if hasattr(self,'objective'):
-        objective=self.objective
+    if hasattr(self, 'objective'):
+        objective = self.objective
     elif objective is None:
-        objective='score'
+        objective = 'score'
     self.objective = objective
 
     split_frac = 0.5
 
-    if plot==None or (type(plot)==bool and plot):
-        plot_train_test=False
-        plot_feature_importances=True
-    elif type(plot)==bool and not plot:
-        plot_train_test=False
-        plot_feature_importances=False
-    elif type(plot)==str and plot=='both':
-        plot_train_test=True
-        plot_feature_importances=True
+    if plot == None or (type(plot) == bool and plot):
+        plot_train_test = False
+        plot_feature_importances = True
+    elif type(plot) == bool and not plot:
+        plot_train_test = False
+        plot_feature_importances = False
+    elif type(plot) == str and plot == 'both':
+        plot_train_test = True
+        plot_feature_importances = True
 
     get_X_df_y_df(self, commodity=commodity, objective=objective, standard_scaler=standard_scaler)
 
-    if not hasattr(self,'importances_df') or recalculate or plot_commodity_importances:
+    if not hasattr(self, 'importances_df') or recalculate or plot_commodity_importances:
+        self.importance_test = None
         importances_df = pd.DataFrame()
-        for Regressor, name in zip([RandomForestRegressor, ExtraTreesRegressor, GradientBoostingRegressor],['RandomForest','ExtraTrees','GradientBoosting']):
-            if plot_train_test: fig2,ax2 = easy_subplots(2,dpi=dpi)
-            for e,dummies in enumerate([True,False]):
-                X_df, y_df = self.X_df.copy().fillna(0), self.y_df.copy()
+        importance_r2 = pd.DataFrame()
+        for Regressor, name in zip([RandomForestRegressor, ExtraTreesRegressor, GradientBoostingRegressor],
+                                   ['RandomForest', 'ExtraTrees', 'GradientBoosting']):
+            if plot_train_test: fig2, ax2 = easy_subplots(2, dpi=dpi)
+            for e, dummies in enumerate([True, False]):
+                for quantile in [0.95, 1]:
+                    X_df, y_df = self.X_df.copy().fillna(0), self.y_df.copy()
 
-                if dummies:
-                    X_df.loc[:,'commodity =']=X_df.index.get_level_values(0)
-                    X_df = pd.get_dummies(X_df,columns=['commodity ='])
-                X_df_test = X_df.sample(frac=split_frac,replace=False,random_state=0)
-                X_test = X_df_test.reset_index(drop=True).values
-                y_df_test = y_df.loc[X_df_test.index]
-                X_df = X_df.loc[~X_df.index.isin(X_df_test.index)]
-                y_df = y_df.loc[X_df.index]
+                    if dummies:
+                        X_df.loc[:, 'commodity ='] = X_df.index.get_level_values(0)
+                        X_df = pd.get_dummies(X_df, columns=['commodity ='])
 
-                X = X_df.reset_index(drop=True).values
-                y = y_df.values.flatten()
+                    y_df = y_df.loc[y_df['score'] < y_df['score'].quantile(quantile)]
+                    X_df = X_df.loc[y_df.index]
 
-                regr = Regressor(random_state=0)
-                regr.fit(X,y)
+                    X = X_df.reset_index(drop=True).values
+                    y = y_df.values.flatten()
 
-                test = pd.concat([X_df_test,y_df_test],axis=1)
-                test.loc[:,'predicted '+objective] = regr.predict(X_test)
+                    X_train, X_test, y_train, y_test, ind_train, ind_test = train_test_split(X,
+                                                                                             y,
+                                                                                             y_df.index,
+                                                                                             test_size=0.333,
+                                                                                             random_state=42)
+                    X_df_test = X_df.loc[ind_test]
+                    y_df_test = y_df.loc[ind_test]
 
-                if not plot_commodity_importances:
-                    importances = pd.Series(regr.feature_importances_, X_df.columns).drop([i for i in X_df.columns if 'commodity =' in i]).sort_values(ascending=False)
-                else:
-                    importances = pd.Series(regr.feature_importances_, X_df.columns).sort_values(ascending=False)
-                importances.name =  name + (' w/ dummies' if dummies else ' no dummies')
-                if dummies:
-                    importances /= importances.sum()
-                    self.X_df_dummies = X_df.copy()
-                    self.y_df_dummies = y_df.copy()
-                else:
-                    self.X_df_no_dummies = X_df.copy()
-                    self.y_df_no_dummies = y_df.copy()
-                importances_df = pd.concat([importances_df, importances],axis=1)
+                    regr = Regressor(random_state=0, n_estimators=200)
+                    regr.fit(X_train, y_train)
 
-                if plot_train_test:
-                    if objective is None and 'RMSE' in test.columns:
-                        target='RMSE'
-                    elif objective is None:
-                        target = 'score'
-                    else: target = objective
-                    do_a_regress(test[target], test['predicted '+objective],ax=ax2[e])
-                    ax2[e].set(title=importances.name.replace(' w/','\nw/').replace(' no','\nno'))
+                    test = pd.concat([X_df_test, y_df_test], axis=1)
+                    if self.importance_test is None:
+                        self.importance_test = test.copy()
+                    test.loc[:, 'predicted ' + objective] = regr.predict(X_test)
+                    dumm_name = 'w/ dummies' if dummies else 'no dummies'
+                    self.importance_test.loc[:, 'predicted ' + objective + ' ' + name + ' ' + dumm_name] = test[
+                        'predicted ' + objective]
 
-        dummy_cols = [i for i in importances_df.columns if 'w/ dummies' in i]
-        no_dummy_cols=[i for i in importances_df.columns if 'no dummies' in i]
-        importances_df.loc[:,'Mean w/ dummies'] = importances_df[dummy_cols].mean(axis=1)
-        importances_df.loc[:,'Mean w/ dummies'] /= importances_df['Mean w/ dummies'].sum()
-        importances_df.loc[:,'Mean no dummies'] = importances_df[no_dummy_cols].mean(axis=1)
-        importances_df.loc[:,'Mean no dummies'] /= importances_df['Mean no dummies'].sum()
+                    if not plot_commodity_importances:
+                        importances = pd.Series(regr.feature_importances_, X_df.columns).drop(
+                            [i for i in X_df.columns if 'commodity =' in i]).sort_values(ascending=False)
+                    else:
+                        importances = pd.Series(regr.feature_importances_, X_df.columns).sort_values(ascending=False)
+                    importances.name = name + (' w/ dummies' if dummies else ' no dummies') + f', {quantile} quantile'
+
+                    r2_name = importances.name.replace(f', {quantile} quantile', '')
+                    importance_r2.loc[r2_name, quantile] = r2_score(y_test, regr.predict(X_test))
+
+                    if dummies:
+                        importances /= importances.sum()
+                        self.X_df_dummies = X_df.copy()
+                        self.y_df_dummies = y_df.copy()
+                    else:
+                        self.X_df_no_dummies = X_df.copy()
+                        self.y_df_no_dummies = y_df.copy()
+                    importances_df = pd.concat([importances_df, importances], axis=1)
+
+                    if plot_train_test:
+                        if objective is None and 'RMSE' in test.columns:
+                            target = 'RMSE'
+                        elif objective is None:
+                            target = 'score'
+                        else:
+                            target = objective
+                        do_a_regress(test[target], test['predicted ' + objective], ax=ax2[e])
+                        ax2[e].set(title=importances.name.replace(' w/', '\nw/').replace(' no', '\nno'))
+
+        # adding columns to importances_df that don't have the quantile label, taking best of quantiles
+        for dummies in [True, False]:
+            for name in importance_r2.index:
+                quantile = importance_r2.loc[name].idxmax()
+                quantile = quantile if quantile != 1 else int(quantile)
+                df_name = name + f', {quantile} quantile'
+                importances_df.loc[:, name] = importances_df[df_name]
+
+        dummy_cols = [i for i in importances_df.columns if 'w/ dummies' in i and 'quantile' not in i]
+        no_dummy_cols = [i for i in importances_df.columns if 'no dummies' in i and 'quantile' not in i]
+        importances_df.loc[:, 'Mean w/ dummies'] = importances_df[dummy_cols].mean(axis=1)
+        importances_df.loc[:, 'Mean w/ dummies'] /= importances_df['Mean w/ dummies'].sum()
+        importances_df.loc[:, 'Mean no dummies'] = importances_df[no_dummy_cols].mean(axis=1)
+        importances_df.loc[:, 'Mean no dummies'] /= importances_df['Mean no dummies'].sum()
         dummy_cols += ['Mean w/ dummies']
         no_dummy_cols += ['Mean no dummies']
+
+        importances_df.loc[:, 'Best test R2'] = importances_df[importance_r2.max(axis=1).idxmax()]
         self.importances_df = importances_df.copy()
+        self.importance_r2 = importance_r2.copy()
 
     dummy_cols = [i for i in self.importances_df.columns if 'w/ dummies' in i]
-    no_dummy_cols=[i for i in self.importances_df.columns if 'no dummies' in i]
+    no_dummy_cols = [i for i in self.importances_df.columns if 'no dummies' in i]
 
     if plot_feature_importances:
-        to_plot_du = self.importances_df.loc[:,dummy_cols].sort_values(by='Mean w/ dummies',ascending=False)
-        to_plot_du.rename(columns=dict(zip(dummy_cols,[i.split(' w/ dummies')[0] for i in dummy_cols])),inplace=True)
-        to_plot_no = self.importances_df.loc[:,no_dummy_cols].sort_values(by='Mean no dummies',ascending=False).dropna()
-        to_plot_no.rename(columns=dict(zip(no_dummy_cols,[i.split(' no dummies')[0] for i in no_dummy_cols])),inplace=True)
-        to_plot_du.rename(make_parameter_names_nice(to_plot_du.index),inplace=True)
-        to_plot_no.rename(make_parameter_names_nice(to_plot_no.index),inplace=True)
+        to_plot_du = self.importances_df.loc[:, dummy_cols].sort_values(by='Mean w/ dummies', ascending=False)
+        to_plot_du.rename(columns=dict(zip(dummy_cols, [i.split(' w/ dummies')[0] for i in dummy_cols])), inplace=True)
+        to_plot_no = self.importances_df.loc[:, no_dummy_cols].sort_values(by='Mean no dummies',
+                                                                           ascending=False).dropna()
+        to_plot_no.rename(columns=dict(zip(no_dummy_cols, [i.split(' no dummies')[0] for i in no_dummy_cols])),
+                          inplace=True)
+        to_plot_du.rename(make_parameter_names_nice(to_plot_du.index), inplace=True)
+        to_plot_no.rename(make_parameter_names_nice(to_plot_no.index), inplace=True)
         height_scale = 2 if plot_commodity_importances and 'Mine cost reduction per year' in to_plot_no.index else 1.7 if plot_commodity_importances else 1.5
-        fig1,ax1 = easy_subplots(2, height_scale=height_scale, width_scale=9/len(self.importances_df.columns), dpi=dpi,
-                            width_ratios=(to_plot_du.shape[0],to_plot_no.shape[0]))
-        to_plot_du.plot.bar(ax=ax1[0],ylabel='Feature importance').grid(axis='x')
-        to_plot_no.plot.bar(ax=ax1[1],ylabel='Feature importance',legend=not plot_commodity_importances).grid(axis='x')
-        ax1[0].set_title('With commodity dummies',weight='bold')
-        ax1[1].set_title('No dummies',weight='bold')
+        fig1, ax1 = easy_subplots(2, height_scale=height_scale, width_scale=9 / len(self.importances_df.columns),
+                                  dpi=dpi,
+                                  width_ratios=(to_plot_du.shape[0], to_plot_no.shape[0]))
+        to_plot_du.plot.bar(ax=ax1[0], ylabel='Feature importance').grid(axis='x')
+        to_plot_no.plot.bar(ax=ax1[1], ylabel='Feature importance', legend=not plot_commodity_importances).grid(
+            axis='x')
+        ax1[0].set_title('With commodity dummies', weight='bold')
+        ax1[1].set_title('No dummies', weight='bold')
         y1a, y1b = ax1[0].get_ylim()
         y2a, y2b = ax1[1].get_ylim()
-        ya = min(y1a,y2a)
-        yb = max(y1b,y2b)
-        ax1[0].set(ylim=(ya,yb))
-        ax1[1].set(ylim=(ya,yb))
+        ya = min(y1a, y2a)
+        yb = max(y1b, y2b)
+        ax1[0].set(ylim=(ya, yb))
+        ax1[1].set(ylim=(ya, yb))
         if plot_commodity_importances:
             ax1[1].set_yticklabels([])
             ax1[1].set_ylabel(None)
@@ -1098,6 +1137,7 @@ def feature_importance(self,plot=None,recalculate=False, standard_scaler=True, p
         plt.show()
         plt.close()
         return fig1, ax1
+
 
 def nice_feature_importance_plot(self, dpi=50):
     """
@@ -1552,59 +1592,72 @@ def plot_important_parameter_scatter(self, mining_or_integ='mining', percentile=
 
     return fig,ax,df2
 
-def commodity_level_feature_importance_heatmap(self,dpi=50,recalculate=True,objective=None, only_plot_names=False, normalize=False):
+
+def commodity_level_feature_importance_heatmap(self, dpi=50, recalculate=True, objective=None, only_plot_names=False,
+                                               normalize=False, importances_df_column='Mean no dummies'):
     """
     Creates a plot showing commodity level feature importances in heatmap form.
 
     dpi: int, dots per inch, controls figure resolution.
     recalculate: bool, whether or not feature importance gets recalculated,
       should keep as True unless you have just run this function with
-      recalculate=True and just want to update dpi.
+      recalculate=True and just want to update dpi or other plotting components.
     objective: None or str, string must correspond with a column in the results
       dataframe
     only_plot_names: bool, default False, restricts the variables shown to be
       those defined in the names variable within this function. Does not seem
-      useful
+      useful anymore
     normalize: bool, default False. If True, divides all feature importance
       values in each commodity by the commodity maximum; gives relative importance
       where most important parameter has the value 1, rather than all summing
       to 1
     """
     names = ['Intensity elasticity to GDP',
-                 'Intensity decline per year',
-                 'Intensity elasticity to price',
-                 'Mine CU elasticity to TCM',
-                 'Incentive pool opening probability',
-                 'Ore grade elasticity distribution mean',
-                 'Mine cost reduction per year',
-                 'TCRC elasticity to SD',
-                 'Refinery SR elasticity to scrap spread',
-                 'Refinery SR elasticity to TCRC',
-                 'Secondary refinery CU elasticity to price',
-                 'Primary refinery CU elasticity to price',
-                 'Scrap spread elasticity to SD',
-                 'Ref. cap. growth frac. from mine prod. growth',
-                 'TCRC elasticity to price',
-                 'Collection elasticity to scrap price',
-                 'Direct melt fraction elasticity to scrap spread']
-    if not hasattr(self,'importances_df_reformed') or recalculate:
+             'Intensity decline per year',
+             'Intensity elasticity to price',
+             'Mine CU elasticity to TCM',
+             'Incentive pool opening probability',
+             'Ore grade elasticity distribution mean',
+             'Mine cost reduction per year',
+             'TCRC elasticity to SD',
+             'Refinery SR elasticity to scrap spread',
+             'Refinery SR elasticity to TCRC',
+             'Secondary refinery CU elasticity to price',
+             'Primary refinery CU elasticity to price',
+             'Scrap spread elasticity to SD',
+             'Ref. cap. growth frac. from mine prod. growth',
+             'TCRC elasticity to price',
+             'Collection elasticity to scrap price',
+             'Direct melt fraction elasticity to scrap spread']
+    if not hasattr(self, 'importances_df_reformed') or recalculate:
         importances_df = pd.DataFrame()
-        if hasattr(self,'rmse_df'):
+        importances_predict = pd.DataFrame()
+        importance_r2 = pd.DataFrame()
+        if hasattr(self, 'rmse_df'):
             outer = self.rmse_df.copy()
         else:
             outer = self.multi_scenario_results.copy()
-        for comm in list(outer.index.get_level_values(0).unique())+[None]:
-            feature_importance(self,commodity=comm,recalculate=True,plot=False,objective=objective)
-            ph = self.importances_df['Mean no dummies']
-            ph.name=comm if comm!=None else 'None'
-            importances_df = pd.concat([importances_df,ph],axis=1)
+        for comm in list(outer.index.get_level_values(0).unique()) + [None]:
+            feature_importance(self, commodity=comm, recalculate=True, plot=False, objective=objective)
+            ph = self.importances_df[importances_df_column]
+            ph.name = comm if comm != None else 'None'
+            importances_df = pd.concat([importances_df, ph], axis=1)
+            ph = pd.concat([self.importance_test], keys=[comm])
+            importances_predict = pd.concat([importances_predict, ph])
+            ph = pd.concat([self.importance_r2], keys=[comm])
+            importance_r2 = pd.concat([importance_r2, ph])
+
         self.importances_df_reformed = importances_df.rename(
             make_parameter_names_nice(importances_df.index)).rename(
-            columns=dict(zip(importances_df.columns,[i.capitalize().replace('None','All') for i in importances_df.columns])))
+            columns=dict(
+                zip(importances_df.columns, [i.capitalize().replace('None', 'All') for i in importances_df.columns])))
+        self.importances_predict = importances_predict.copy()
+        self.importance_r2 = importance_r2.copy()
         if only_plot_names:
-            self.importances_df_reformed = self.importances_df_reformed.loc[[i for i in names if i in self.importances_df_reformed.index]]
+            self.importances_df_reformed = self.importances_df_reformed.loc[
+                [i for i in names if i in self.importances_df_reformed.index]]
 
-    fig,ax = easy_subplots(1,height_scale=1.1*self.importances_df.shape[0]/len(names))
+    fig, ax = easy_subplots(1, height_scale=1.1 * self.importances_df.shape[0] / len(names))
     a = ax[0]
     if normalize:
         self.importances_df_reformed = self.importances_df_reformed.div(self.importances_df_reformed.max())
@@ -1612,14 +1665,14 @@ def commodity_level_feature_importance_heatmap(self,dpi=50,recalculate=True,obje
     else:
         cbar_kws = {'label': 'Feature importance'}
     self.importances_df_reformed.rename(columns=self.commodity_element_map, inplace=True)
-    self.importances_df_reformed = self.importances_df_reformed.sort_values(by='All',ascending=False)[[
-        'Ag','Al','Au','Cu','Ni','Pb','Sn','Steel','Zn','All']]
+    self.importances_df_reformed = self.importances_df_reformed.sort_values(by='All', ascending=False)[[
+        'Ag', 'Al', 'Au', 'Cu', 'Ni', 'Pb', 'Sn', 'Steel', 'Zn', 'All']]
     sns.heatmap(self.importances_df_reformed,
-                xticklabels=True,yticklabels=True,ax=a,cbar_kws=cbar_kws,cmap='OrRd')
+                xticklabels=True, yticklabels=True, ax=a, cbar_kws=cbar_kws, cmap='OrRd')
     fig.set_dpi(dpi)
     a.tick_params(axis='x', labelbottom=True, labeltop=True, labelrotation=90)
-    a.set_title('Commodity level\nfeature importance',weight='bold')
-    return fig,a
+    a.set_title('Commodity level\nfeature importance', weight='bold')
+    return fig, a
 
 def nice_plot_pretuning(demand_or_mining='mining',dpi=50,pkl_folder='data',filename_base='_run_hist',filename_modifier=''):
     """
@@ -3482,13 +3535,16 @@ def plot_future_line_and_hist_one_commodity(many, commodity, parameter, restrict
     plt.close()
     return comm, fig
 
-def array_to_star(array, no_star_cut=0.1, period_cut=0.05, one_star_cut=0.01, two_star_cut=0.001):
-    pval = stats.ttest_1samp(array, popmean=0)[1]
+def pval_to_star(pval, no_star_cut=0.1, period_cut=0.05, one_star_cut=0.01, two_star_cut=0.001):
+    """
+    Converts a value from its numerical value to a string where:
+    *** < 0.001 < ** < 0.01 < * < 0.05 < . < 0.1
+    """
     pval_str = '***' if pval < two_star_cut else '**' if pval < one_star_cut else '*' if \
         pval < no_star_cut else '(.)' if pval < period_cut else ''
     return pval_str
 
-def make_parameter_mean_std_table(many, n_best, value_in_parentheses='standard error'):
+def make_parameter_mean_std_table(many, n_best, value_in_parentheses='standard error', stars='ttest'):
     """
     many: Many instance, from tuning, either the integ object or full thing is has integ
         object
@@ -3511,7 +3567,15 @@ def make_parameter_mean_std_table(many, n_best, value_in_parentheses='standard e
         stds = best_n.std(axis=1).unstack(0).fillna('')
     elif value_in_parentheses == 'variance':
         stds = best_n.var(axis=1).unstack(0).fillna('')
-    stars = best_n.apply(array_to_star, axis=1)
+
+    if stars == 'ttest':
+        pvals = best_n.apply(lambda x: stats.ttest_1samp(x, popmean=0)[1], axis=1)
+        display(pvals)
+    elif stars == 'uniform':
+        pvals = get_difference_from_uniform(rmse_df)
+    else:
+        raise ValueError('stars input must be either ttest or uniform')
+    stars = pvals.apply(pval_to_star)
 
     demand_pretune = ['sector_specific_dematerialization_tech_growth', 'sector_specific_price_response',
                       'intensity_response_to_gdp']
@@ -3542,14 +3606,63 @@ def make_parameter_mean_std_table(many, n_best, value_in_parentheses='standard e
     mean_std = mean_std.rename(dict(zip(mean_std.index, [many.commodity_element_map[i.capitalize()]
                                                          for i in mean_std.index])))
     mean_std.columns = pd.MultiIndex.from_tuples(mean_std.columns)
-    means = means.T.replace('',np.nan)
+    means = means.T.replace('', np.nan)
     means = means.rename(columns=dict(zip(means.columns,
-                                                [convert_param_names(i) for i in means.columns])))
+                                          [convert_param_names(i) for i in means.columns])))
     means = means.rename(dict(zip(means.index, [many.commodity_element_map[i.capitalize()]
-                                                         for i in means.index])))
+                                                for i in means.index])))
     means.columns = pd.MultiIndex.from_tuples(means.columns)
     return mean_std.T.sort_index().T, means.sort_index().T.sort_index().T
 
+def get_difference_from_uniform(rmse_df):
+    for_test = rmse_df.copy()
+
+    uniform_rvs = pd.DataFrame()
+    loc = 0
+    scale = 1
+    for rs in np.arange(0, 100):
+        uniform_rvs[rs] = stats.uniform.rvs(loc=loc, scale=scale, size=25, random_state=rs)
+
+    def ks100_uniform(array, size=1000):
+        """
+        Size is the size of the random variable generation from the uniform distribution
+        """
+        ks_pvals = []
+        name = array.name[1]
+        loc = 0
+        scale = 1
+        if name == 'incentive_opening_probability':
+            scale = 0.5
+        elif name in ['mine_cost_change_per_year', 'incentive_mine_cost_change_per_year']:
+            loc = -5
+            scale = 10
+        elif name == 'sector_specific_dematerialization_tech_growth':
+            loc = -0.1
+            scale = 0.2
+        elif name == 'intensity_response_to_gdp':
+            loc = -0.5
+            scale = 1.5
+        elif name == 'sector_specific_price_response':
+            loc = -0.6
+            scale = 0.6
+        elif np.max(array) < 0:
+            loc = -1
+        if size is not None:
+            for rs in np.arange(0, 100):
+                if True:
+                    randoms = stats.uniform.rvs(loc=loc, scale=scale, size=size, random_state=rs)
+                    val = stats.kstest(array, randoms)[1]
+                else:
+                    val = stats.kstest(array, uniform_rvs[rs])[1]
+                ks_pvals += [val]
+            return np.mean(ks_pvals)
+        else:
+            randoms = stats.uniform.rvs(loc=loc, scale=scale, size=1000, random_state=0)
+            val = stats.kstest(array, randoms)[1]
+            return val
+
+    applied = for_test.apply(ks100_uniform, axis=1)
+    return applied
 
 def plot_violin_all(many, mining_or_integ='integ', percentile=25, n=25, n_most_important=100, legend=True,
                     normalize=False, dpi=50):
@@ -3606,7 +3719,6 @@ def plot_violin_all(many, mining_or_integ='integ', percentile=25, n=25, n_most_i
     if not legend:
         a.get_legend().remove()
     return fig, a, df_use
-
 
 def run_demand_pretuning():
     """

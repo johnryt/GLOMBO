@@ -617,27 +617,17 @@ class Integration():
                 self.additional_secondary_refined.loc[self.simulation_time[0] - 1, :] = 0
                 self.additional_secondary_refined = self.additional_secondary_refined.sort_index()
                 self.refine.additional_secondary_refined = self.additional_secondary_refined.copy()
+        self.initialize_mining()
+
+    def complete_initialization(self):
+        h = self.hyperparam['Value']
 
         # concentrate_supply,    initializing mining
-        if self.hyperparam['Value']['presimulate_mining']:
+        if h['presimulate_mining']:
             self.presimulate_mining()
         else:
-            self.mining = miningModel(simulation_time=self.simulation_time, verbosity=self.verbosity,
-                                      byproduct=self.byproduct)
-            self.mining.hyperparam.loc['primary_production', 'Value'] = self.concentrate_demand['Global'][i]
-            if hasattr(self, 'historical_data'):
-                self.mining.demand_series = self.historical_data[
-                    'Primary supply' if 'Primary supply' in self.historical_data.columns else 'Primary production']
-            else:
-                raise ValueError(
-                    'if simulating a real commodity, the Integration class initialization should take a str input for its commodity variable, which should correspond with a sheet name in case study data.xlsx. See the presimulate_mining function for how to deal with creating an alternate demand, if that is desired')
-            if self.verbosity > 1: print('Mining parameters updated:')
-            h = self.hyperparam['Value']
-            for param in np.intersect1d(self.mining.hyperparam.index, h.index):
-                self.mining.hyperparam.loc[param, 'Value'] = h[param]
-                if self.verbosity > 1:
-                    print('  ', param)
             self.mining.run()
+
         self.concentrate_supply = self.mining.concentrate_supply_series.copy()
         self.sxew_supply = self.mining.sxew_supply_series.copy()
         self.row_fraction_sxew = self.refine.hyperparam['RoW'][[
@@ -805,11 +795,13 @@ class Integration():
         self.primary_supply.loc[self.i, 'Global'] += self.sxew_supply.loc[self.i]
         self.primary_supply.loc[self.i, 'RoW'] += self.sxew_supply.loc[self.i]
 
-    def presimulate_mining(self):
+    def initialize_mining(self):
         h = self.hyperparam['Value'].copy()
         end_yr = self.simulation_time[0]
-        hist_simulation_time = np.arange(end_yr - h['presimulate_n_years'], end_yr + 1)
-        mine_simulation_time = np.arange(end_yr - h['presimulate_n_years'], self.simulation_time[-1] + 1)
+        if h['presimulate_mining']:
+            mine_simulation_time = np.arange(end_yr - h['presimulate_n_years'], self.simulation_time[-1] + 1)
+        else:
+            mine_simulation_time = self.simulation_time
         self.mining = miningModel(simulation_time=mine_simulation_time, byproduct=self.byproduct,
                                   verbosity=self.verbosity)
         self.mining.primary_price_series = self.primary_commodity_price.copy()
@@ -821,17 +813,6 @@ class Integration():
             m.hyperparam[param] = h[param]
             if self.verbosity > 1:
                 print('  ', param, 'now', h[param])
-
-        initial_ore_grade_decline = m.hyperparam['initial_ore_grade_decline']
-        incentive_mine_cost_change_per_year = m.hyperparam['incentive_mine_cost_change_per_year']
-        mine_cost_change_per_year = m.hyperparam['mine_cost_change_per_year']
-        annual_reserves_ratio_with_initial_production_slope = m.hyperparam[
-            'annual_reserves_ratio_with_initial_production_slope']
-        m.hyperparam['internal_price_formation'] = False
-        m.hyperparam['initial_ore_grade_decline'] = 0
-        m.hyperparam['incentive_mine_cost_change_per_year'] = 0
-        m.hyperparam['mine_cost_change_per_year'] = 0
-        m.hyperparam['annual_reserves_ratio_with_initial_production_slope'] = 0
 
         #         primary_production
         if hasattr(self, 'historical_data'):
@@ -853,26 +834,44 @@ class Integration():
             #     m.primary_price_series]).sort_index()
             # self.primary_price_series = m.primary_price_series.copy()
             m.hyperparam['primary_commodity_price'] = m.primary_price_series.iloc[0]
-
         else:
             m.demand_series = self.demand.alt_demand[
                 [j for j in self.demand.alt_demand.columns if j != 'China Fraction']].sum(axis=1).rolling(5).mean()
             m.demand_series *= self.concentrate_demand['Global'][end_yr] / m.demand_series[end_yr]
             warn(
                 'if simulating a real commodity, the Integration class initialization should take a str input for its commodity variable, which should correspond with a sheet name in case study data.xlsx')
+        self.mining = m
 
-        m.hyperparam['primary_production'] = m.demand_series[mine_simulation_time[0]]
+    def presimulate_mining(self):
+        h = self.hyperparam['Value']
+        end_yr = self.simulation_time[0]
+        hist_simulation_time = np.arange(end_yr - h['presimulate_n_years'], end_yr + 1)
+        m = self.mining
+
+        initial_ore_grade_decline = m.hyperparam['initial_ore_grade_decline']
+        incentive_mine_cost_change_per_year = m.hyperparam['incentive_mine_cost_change_per_year']
+        mine_cost_change_per_year = m.hyperparam['mine_cost_change_per_year']
+        annual_reserves_ratio_with_initial_production_slope = m.hyperparam[
+            'annual_reserves_ratio_with_initial_production_slope']
+        m.hyperparam['internal_price_formation'] = False
+        m.hyperparam['initial_ore_grade_decline'] = 0
+        m.hyperparam['incentive_mine_cost_change_per_year'] = 0
+        m.hyperparam['mine_cost_change_per_year'] = 0
+        m.hyperparam['annual_reserves_ratio_with_initial_production_slope'] = 0
+
+        m.hyperparam['primary_production'] = m.demand_series[m.simulation_time[0]]
         primary_production_mean_series = m.demand_series * h['primary_production_mean'] / m.demand_series[end_yr]
         self.primary_production_mean_series = primary_production_mean_series.copy()
         #         display(m.demand_series)
         for year in hist_simulation_time:
+            self.update_hyperparam_scenario_input(year)
             m.i = year
+            m.in_history = year > hist_simulation_time[1]
             if self.verbosity > 1:
                 print('sim mine history year:', year)
             m.hyperparam['primary_production_mean'] = primary_production_mean_series[year]
+            # TODO Decide if changing mean mine size every year during presimulation makes sense
             m.run()
-            #             display(m.demand_series)
-            #             raise ValueError('no')
 
             if self.verbosity > 4:
                 fig, ax = easy_subplots(3)
@@ -893,6 +892,7 @@ class Integration():
         m.hyperparam[
             'annual_reserves_ratio_with_initial_production_slope'] = annual_reserves_ratio_with_initial_production_slope
         m.hyperparam['internal_price_formation'] = False
+        m.initial_hyperparam = m.hyperparam.copy()
         self.concentrate_supply = m.concentrate_supply_series.copy()
         self.sxew_supply = m.sxew_supply_series.copy()
         self.mine_production = self.concentrate_supply + self.sxew_supply
@@ -903,6 +903,7 @@ class Integration():
         self.primary_commodity_price = m.primary_price_series.copy()
         self.concentrate_demand.loc[:, 'Global'] = m.demand_series.copy()
 
+        m.in_history = False
         self.mining = m
 
     def calculate_direct_melt_demand(self):
@@ -990,6 +991,8 @@ class Integration():
                 self.decode_scenario_name()
                 self.update_hyperparam_scenario_input()
                 self.initialize_integration()
+                # self.update_hyperparam_scenario_input()
+                self.complete_initialization()
                 self.initialize_price()
             else:
                 self.update_hyperparam_scenario_input()
@@ -1215,30 +1218,34 @@ class Integration():
         self.hyperparam.loc[
             'secondary_refined_pct_change_inc', 'Notes'] = 'once the direct_melt_pct_change_tot is reached, the direct melt fraction will then increase by this value per year. Given as 1+%change/100'
 
-    def update_hyperparam_scenario_input(self):
+    def update_hyperparam_scenario_input(self, i=None):
         """
         Run within any year to update hyperparameters from the scenario input excel file
         """
+        h = self.hyperparam['Value']
         if not hasattr(self,'scenario_update_df'):
             return None
-        intersect = np.intersect1d(self.i, self.scenario_update_df.index.get_level_values(1).unique())
+        if i is None: i = self.i
+        intersect = np.intersect1d(i, self.scenario_update_df.index.get_level_values(1).unique())
         if len(intersect) > 0:
-            update_this_year = self.scenario_update_df.loc[idx[:, self.i]]
+            update_this_year = self.scenario_update_df.loc[idx[:, i]]
             if update_this_year.index.duplicated().any():
                 ind = update_this_year.loc[update_this_year.index.duplicated()].index
                 update_this_year = update_this_year.loc[~update_this_year.index.duplicated()]
                 warnings.warn(
-                    f'\nMultiple entries for the same year: {list(ind)}, {self.i}  |  Only the first row will be implemented.')
+                    f'\nMultiple entries for the same year: {list(ind)}, {i}  |  Only the first row will be implemented.')
             for v in update_this_year.index.get_level_values(0).unique():
                 value = update_this_year.loc[v] if update_this_year.index.nlevels == 1 \
-                    else update_this_year.loc[v].loc[self.i]
-                for q in [self.hyperparam, self.mining.hyperparam, self.refine.hyperparam, self.demand.hyperparam]:
+                    else update_this_year.loc[v].loc[i]
+                iterator = [self.hyperparam]+[getattr(self, at).hyperparam for at in ['mining', 'refine', 'demand']
+                                              if hasattr(self, at)]
+                for it, q in enumerate(iterator):
                     if type(q) == dict:
                         if v in q:
                             q[v] = value
                     else:
-                        if v in q.index:
+                        if v in q.index or it==0:
                             q.loc[v, 'Value'] = value
 
                 if self.verbosity>-10:
-                    print(self.i, v, value) # TODO remove this after confirmed working
+                    print(i, v, value) # TODO remove this after confirmed working

@@ -556,7 +556,7 @@ class demandModel():
                           self.hyperparam['Value'][j]!=self.initial_hyperparam['Value'][j]]
         if 'volume_growth_rate' in changed_params:
             actual_simulation_time = self.simulation_time
-            self.simulation_time = np.arange(self.i,self.simulation_time[-1]+1)
+            self.simulation_time = np.arange(self.i, self.simulation_time[-1]+1)
             self.update_volumes()
             self.simulation_time = actual_simulation_time
         self.initial_hyperparam = self.hyperparam.copy()

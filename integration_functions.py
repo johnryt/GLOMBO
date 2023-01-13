@@ -766,8 +766,9 @@ class Sensitivity():
             if self.verbosity>-1:
                 print(params_to_change)
         else:
-            n_scenarios = int(np.ceil(sensitivity_parameters.shape[1]/self.n_jobs))+1
-        # do something with incentive_opening_probability?
+            n_scenarios = sensitivity_parameters.shape[1]+1
+            # ^ when we're running scenarios rather than tuning, we give a dataframe of hyperparameters to use
+            # this dataframe is saved in the sensitivity_parameters variable
 
         if bayesian_tune:
             self.setup_bayesian_tune(n_params=n_params, surrogate_model=surrogate_model)
@@ -784,11 +785,13 @@ class Sensitivity():
 
             if bayesian_tune:
                 next_parameters = self.opt.ask(n_points=self.n_jobs)
-            if bayesian_tune or given_hyperparam_df:
+                n_jobs = self.n_jobs
+            if bayesian_tune or (given_hyperparam_df and n == 1):
                 mods = []
                 new_param_series_all = []
                 if given_hyperparam_df:
                     next_parameters=0
+                    n_jobs = 1
             else:
                 self.n_jobs = 1
 
@@ -797,11 +800,13 @@ class Sensitivity():
                     self.scenario_frame = get_scenario_dataframe(
                         file_path_for_scenario_setup=self.scenarios[1].split('++')[0],
                         default_year=2019)
-            for i in range(self.n_jobs):
+            for i in range(n_jobs):
                 for enum,scenario_name in enumerate(self.scenarios):
                     if len(self.scenarios)>1:
                         if '++' in scenario_name:
                             original_scenario_name = scenario_name
+                            self.scenario_frame = get_scenario_dataframe(
+                                file_path_for_scenario_setup=scenario_name.split('++')[0], default_year=2019)
                             pass_scenario_name = self.scenario_frame.loc[scenario_name.split('++')[1]]
                         else:
                             pass_scenario_name = scenario_name
@@ -818,6 +823,7 @@ class Sensitivity():
                                            historical_price_rolling_window=self.historical_price_rolling_window,
                                            force_integration_historical_price=self.force_integration_historical_price,
                                            use_historical_price_for_mine_initialization=self.use_historical_price_for_mine_initialization)
+                    self.mod.hyperparam.loc['scenario_name'] = scenario_name
 
                     if self.bayesian_tune or (
                             hasattr(self,
@@ -937,15 +943,26 @@ class Sensitivity():
                     else:
                         self.check_run_append()
 
-            if bayesian_tune or given_hyperparam_df:
+            # If tuning, want to run complete_bayesian_trial now so that we can update our optimization model
+            # with the runs from that scenario round.
+            if bayesian_tune:
                 self.complete_bayesian_trial(mods=mods,
                                              new_param_series_all=new_param_series_all,
-                                             scenario_numbers=range(self.n_jobs*(n-1)+1, self.n_jobs*(n)+1),
+                                             scenario_numbers=range(n_jobs*(n-1)+1, n_jobs*(n)+1),
                                              next_parameters=next_parameters,
                                              bayesian_tune=bayesian_tune,
                                              n_params=n_params)
+                if self.timer is not None: self.timer.end_iter()
 
-
+        # If we're not tuning, we want to run the complete_bayesian_trial one level out, so that all the
+        # models have been properly initialized prior to running the parallel part.
+        if given_hyperparam_df:
+            self.complete_bayesian_trial(mods=mods,
+                                         new_param_series_all=new_param_series_all,
+                                         scenario_numbers=np.arange(0,len(mods)),
+                                         next_parameters=next_parameters,
+                                         bayesian_tune=bayesian_tune,
+                                         n_params=n_params)
             if self.timer is not None: self.timer.end_iter()
 
         if bayesian_tune:
@@ -1030,7 +1047,9 @@ class Sensitivity():
         values to give the error the Bayesian optimization is trying to minimize.
         '''
         #output is of the form [(score_0, new_params_0, potential_append_0), (score_1, new_params_1, potential_append_0), ...]
-        output = Parallel(n_jobs=self.n_jobs)(delayed(self.skopt_run_score)(mod, param_series, s_n, bayesian_tune, n_params) for mod, param_series, s_n in zip(mods, new_param_series_all, scenario_numbers))
+        output = Parallel(n_jobs=self.n_jobs)(delayed(self.skopt_run_score)(
+            mod, param_series, s_n, bayesian_tune, n_params
+        ) for mod, param_series, s_n in zip(mods, new_param_series_all, scenario_numbers))
 
         #give scores to skopt
         if bayesian_tune:

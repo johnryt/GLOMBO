@@ -977,7 +977,6 @@ class Sensitivity():
                 to_here = (k+1)*self.n_jobs
                 if to_here > len(mods):
                     to_here = len(mods)
-                print(k, from_here, to_here, self.n_jobs)
                 if from_here <= len(mods):
                     if type(next_parameters) == int:
                         next_params = next_parameters

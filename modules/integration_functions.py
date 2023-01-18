@@ -12,6 +12,8 @@ from modules.useful_functions import easy_subplots, do_a_regress
 import os
 
 from copy import deepcopy
+from shutil import copy as shutil_copy
+from datetime import datetime
 
 from skopt import Optimizer
 from joblib import Parallel, delayed
@@ -373,6 +375,8 @@ class Sensitivity():
         self.train_time = train_time
         self.changing_base_parameters_series = changing_base_parameters_series
         self.additional_base_parameters = additional_base_parameters
+        self.additional_base_parameters.loc['primary_overhead_regression2use'] = 'None'
+        # TODO determine if overhead is good to include or not ^^^^ (other option is linear_194)
         self.user_data_folder = 'input_files/user_defined' if user_data_folder is None else user_data_folder
         self.static_data_folder = 'input_files/static' if static_data_folder is None else static_data_folder
         self.output_data_folder = 'output_files' if output_data_folder is None else output_data_folder
@@ -419,6 +423,68 @@ class Sensitivity():
         self.demand_or_mining = None
 
         self.n_files = 0
+
+    def setup_output_folder(self):
+        self.create_output_folder_level_one()
+        self.create_output_folder_level_two()
+        self.add_input_files_to_folder()
+
+    def create_output_folder_level_one(self):
+        year_strings = [str(i) for i in np.arange(2023,2051)]
+        if self.pkl_filename[:4] not in year_strings:
+            if not hasattr(self, 'time_str'):
+                self.time_str = str(datetime.now()).replace(':', '_').replace('.', '_')[:21]
+            self.scenario_id = self.pkl_filename.split('.pkl')[0]
+            if '/' in self.scenario_id:
+                self.scenario_id = self.scenario_id.split('/')[-1]
+            if self.material in self.element_commodity_map:
+                commodity_string = self.element_commodity_map[self.material].lower() + '_'
+                if commodity_string in self.scenario_id:
+                    self.scenario_id = self.scenario_id.replace(commodity_string,'')
+            if self.material in self.scenario_id:
+                self.scenario_id = self.scenario_id.replace(self.material),''
+            if self.scenario_id[0] == '_':
+                self.scenario_id = self.scenario_id[1:]
+            main_folder_str = f'{self.time_str}_{self.scenario_id}'
+        else:
+            main_folder_str = self.pkl_filename
+
+        sim_or_hist = 'Historical tuning' if self.bayesian_tune else 'Simulation'
+        output_data_folder_full = f'{self.output_data_folder}/{sim_or_hist}'
+        if main_folder_str not in os.listdir(output_data_folder_full):
+            print(main_folder_str)
+            final_folder = f'{output_data_folder_full}/{main_folder_str}'
+            os.mkdir(final_folder)
+        final_folder = f'{output_data_folder_full}/{main_folder_str}'
+        self.output_data_folder_level_one = final_folder
+
+    def create_output_folder_level_two(self):
+        commodity = self.material
+        scenario_name = self.scenario_id
+
+        new_folder = f'results_{commodity}'
+        data_folder = f'{self.output_data_folder_level_one}/{new_folder}'
+        os.mkdir(data_folder)
+
+        new_folder = 'input_files'
+        input_files_folder = f'{self.output_data_folder_level_one}/{new_folder}'
+        if not os.path.exists(input_files_folder):
+            os.mkdir(input_files_folder)
+
+        self.output_data_results_folder = data_folder
+        self.output_data_input_files_folder = input_files_folder
+
+    def add_input_files_to_folder(self):
+        data_folder, input_files_folder = self.output_data_results_folder, self.output_data_input_files_folder
+        user_data_folder = self.user_data_folder
+        print(input_files_folder)
+        for file_name in os.listdir(user_data_folder):
+            # construct full file path
+            source = f'{user_data_folder}/{file_name}'
+            destination = f'{input_files_folder}/{file_name}'
+            # copy only excel and csv files
+            if ('.xls' in source or '.csv' in source) and not os.path.exists(destination):
+                shutil_copy(source, destination)
 
     def update_pkl_filename_path(self):
         if len(self.pkl_filename.split('output_data/'))>2:
@@ -477,13 +543,14 @@ class Sensitivity():
                 'version','notes','hyperparam','mining.hyperparam','refine.hyperparam','demand.hyperparam','results','mine_data'
             ],columns=[])
             reg_results = create_result_df(self, self.mod)
+            self.reg_results = reg_results.copy()
             if not self.save_mining_info: ml = [0]
             elif self.save_mining_info=='cost_curve':
                 ml = self.mod.mining.ml.copy()[['Commodity price (USD/t)','Minesite cost (USD/t)','Total cash margin (USD/t)','TCRC (USD/t)','Head grade (%)','Recovery rate (%)','Payable percent (%)','Production (kt)','Opening','Simulated closure']]
             else: ml = self.mod.mining.ml.copy()
             big_df.loc[:,0] = np.array([self.mod.version, self.notes, self.mod.hyperparam, self.mod.mining.hyperparam,
                                         self.mod.refine.hyperparam, self.mod.demand.hyperparam, reg_results, ml],dtype=object)
-            big_df.to_pickle(self.pkl_filename)
+            # big_df.to_pickle(self.pkl_filename) # TODO remove all pickle infrastructure
         self.big_df = big_df.copy()
 
     def update_changing_base_parameters_series(self):
@@ -742,6 +809,7 @@ class Sensitivity():
         given_hyperparam_df = type(sensitivity_parameters)==pd.core.frame.DataFrame
         self.given_hyperparam_df = given_hyperparam_df
         self.update_changing_base_parameters_series()
+        self.setup_output_folder()
         self.update_pkl_filename_path()
         if not given_hyperparam_df:
             self.initialize_big_df()
@@ -750,7 +818,7 @@ class Sensitivity():
             # self.big_df.to_pickle(self.pkl_filename)
         if np.all(['++' not in q for q in self.scenarios]):
             self.mod = Integration(static_data_folder=self.static_data_folder, user_data_folder=self.user_data_folder,
-                                    simulation_time=self.simulation_time,
+                                   simulation_time=self.simulation_time,
                                    verbosity=self.verbosity,byproduct=self.byproduct,commodity=self.material,
                                    price_to_use=self.price_to_use,
                                    historical_price_rolling_window=self.historical_price_rolling_window,
@@ -973,8 +1041,7 @@ class Sensitivity():
         if given_hyperparam_df:
             n_iterations = int(np.ceil(len(mods) / self.n_jobs))+1
             for k in np.arange(0,n_iterations):
-                from_here = k*self.n_jobs
-                to_here = (k+1)*self.n_jobs
+                from_here, to_here = k*self.n_jobs, (k+1)*self.n_jobs
                 if to_here > len(mods):
                     to_here = len(mods)
                 if from_here <= len(mods):
@@ -992,6 +1059,25 @@ class Sensitivity():
 
         if bayesian_tune:
             self.save_bayesian_results(n_params=n_params)
+        else:
+            self.resave_data()
+
+    def resave_data(self):
+        files = [i for i in os.listdir(self.output_data_results_folder) if
+                 '.csv' in i and '_' in i and i.split('_')[-1].split('.')[0].isnumeric()]
+        unique_pre = np.unique([i.replace(i.split('_')[-1], '') for i in files])
+        data_dict = dict(zip(unique_pre, [pd.DataFrame() for _ in unique_pre]))
+        for file in files:
+            header = [0,1] if 'mine_data' in file else 0
+            data = pd.read_csv(f'{self.output_data_results_folder}/{file}', index_col=[0, 1], header=header)
+            clipped = file.replace(file.split('_')[-1], '')
+            previous = data_dict[clipped]
+            data_dict[clipped] = pd.concat([previous, data]).sort_index()
+        for clipped in data_dict:
+            file = clipped[:-1]
+            data_dict[clipped].to_csv(f'{self.output_data_results_folder}/{file}.csv')
+        for file in files:
+            os.remove(f'{self.output_data_results_folder}/{file}')
 
     def check_for_previously_tuned(self,param):
         """
@@ -1075,6 +1161,7 @@ class Sensitivity():
         output = Parallel(n_jobs=self.n_jobs)(delayed(self.skopt_run_score)(
             mod, param_series, s_n, bayesian_tune, n_params
         ) for mod, param_series, s_n in zip(mods, new_param_series_all, scenario_numbers))
+        mods_out = [out[3] for out in output]
 
         #give scores to skopt
         if bayesian_tune:
@@ -1101,10 +1188,77 @@ class Sensitivity():
             temp_filename = ''.join([temp_filename[0],str(self.n_files)+'.',temp_filename[1]])
         else:
             temp_filename = self.pkl_filename
-        big_df.to_pickle(temp_filename)
+        # big_df.to_pickle(temp_filename) # TODO remove all pickle infrastructure
         self.big_df = big_df.copy()
+        self.save_scenario_results(mods_out)
         if self.verbosity>-1:
             print('\tScenario successfully saved\n')
+
+    def save_scenario_results(self, mods):
+        for mod in mods:
+            if hasattr(mod,'historical_data'):
+                mod.historical_data.to_csv(f'{self.output_data_results_folder}/historical_data.csv')
+
+            if not hasattr(self, 'too_big'):
+                self.too_big = 0
+
+            # Saving results
+            if not hasattr(self,'all_reg_results'):
+                self.all_reg_results = pd.DataFrame()
+                self.all_china_results = pd.DataFrame()
+                self.all_row_results = pd.DataFrame()
+                if self.too_big<=0:
+                    num = 0
+            else:
+                num = self.all_reg_results.index.get_level_values(0).max()+1
+
+            if num % 500 == 0 and not self.bayesian_tune:
+                self.too_big += 1
+                self.all_reg_results = pd.DataFrame()
+                self.all_china_results = pd.DataFrame()
+                self.all_row_results = pd.DataFrame()
+                self.all_hyperparam = pd.DataFrame()
+                self.ml_all = pd.DataFrame()
+            add_string = '' if self.bayesian_tune else f'_{self.too_big}'
+
+            reg_results = create_result_df(self, mod)
+            # reg_results = mod.reg_results.copy()
+            to_concat = pd.concat([reg_results['Global'][0]], keys=[num])
+            self.all_reg_results = pd.concat([self.all_reg_results, to_concat])
+            self.all_reg_results.to_csv(f'{self.output_data_results_folder}/results{add_string}.csv')
+            if self.save_regional_data:
+                to_concat = pd.concat([reg_results['China'][0]], keys=[num])
+                self.all_china_results = pd.concat([self.all_china_results, to_concat])
+                self.all_china_results.to_csv(f'{self.output_data_results_folder}/results_china{add_string}.csv')
+                to_concat = pd.concat([reg_results['RoW'][0]], keys=[num])
+                self.all_row_results = pd.concat([self.all_row_results, to_concat])
+                self.all_row_results.to_csv(f'{self.output_data_results_folder}/results_row{add_string}.csv')
+
+            # Saving rmse_df
+            rmse_df_ph = self.rmse_df.copy()
+            rmse_df_ph.index = pd.MultiIndex.from_tuples(rmse_df_ph.index)
+            rmse_df_ph.to_csv(f'{self.output_data_results_folder}/rmse_df.csv')
+
+            # Saving hyperparameters
+            if not hasattr(self,'all_hyperparam'):
+                self.all_hyperparam = pd.DataFrame()
+            to_concat = pd.concat([mod.hyperparam], keys=[num])
+            self.all_hyperparam = pd.concat([self.all_hyperparam, to_concat])
+            self.all_hyperparam.to_csv(f'{self.output_data_results_folder}/hyperparam{add_string}.csv')
+
+            # Saving mine-level information (or not)
+            if not self.save_mining_info:
+                ml = [0]
+            elif self.save_mining_info=='cost_curve':
+                ml = mod.mining.ml.copy()[['Commodity price (USD/t)','Minesite cost (USD/t)','Total cash margin (USD/t)','TCRC (USD/t)','Head grade (%)','Recovery rate (%)','Payable percent (%)','Production (kt)','Opening','Simulated closure']]
+            else:
+                ml = mod.mining.ml.copy()
+            if self.save_mining_info:
+                if not hasattr(self,'ml_all'):
+                    self.ml_all = pd.DataFrame()
+                to_concat = pd.concat([ml.unstack()], keys=[num])
+                self.ml_all = pd.concat([self.ml_all, to_concat])
+                self.ml_all.to_csv(f'{self.output_data_results_folder}/mine_level_data{add_string}.csv')
 
     def skopt_run_score(self, mod, new_param_series, s_n, bayesian_tune=True, n_params=3):
 
@@ -1157,7 +1311,7 @@ class Sensitivity():
         else:
             score=0
         new_param_series = pd.concat([new_param_series],keys=[s_n])
-        return score, new_param_series, potential_append
+        return score, new_param_series, potential_append, mod
 
     def calculate_rmse_r2(self, sim, hist, use_rmse):
         n = len(self.simulation_time)
@@ -1291,7 +1445,7 @@ class Sensitivity():
             big_df = pd.read_pickle(self.pkl_filename)
         else:
             big_df = pd.DataFrame([],['version','notes','hyperparam','results'],[])
-            big_df.to_pickle(self.pkl_filename)
+            # big_df.to_pickle(self.pkl_filename) # TODO remove all pickle infrastructure
         if demand_or_mining=='demand' and 'Primary commodity price' not in self.historical_data.columns:
             raise ValueError('require a price input in primary commodity price for historical_sim_check_demand to work properly')
         elif demand_or_mining=='mining' and 'Primary commodity price' not in self.historical_data.columns and 'Primary production' not in self.historial_data.columns and 'Primary supply' not in self.historial_data.columns:
@@ -1509,7 +1663,7 @@ class Sensitivity():
                         raise Exception("Scenario has already been run, this case has not been implemented yet. Ask Luca Montanelli why.")
                     big_df = pd.concat([big_df,potential_append],axis=1)
 
-                    big_df.to_pickle(self.pkl_filename)
+                    # big_df.to_pickle(self.pkl_filename) # TODO remove all pickle infrastructure
 
                     if self.timer is not None: self.timer.end_iter()
 
@@ -1525,13 +1679,13 @@ class Sensitivity():
                     self.rmse_df = pd.concat([self.rmse_df, new_param_series])
 
                 #save scenario results in pickle file
-                big_df = pd.read_pickle(self.pkl_filename)
-                for potential_append in [out[2] for out in output]:
-                    if potential_append is None:
-                        raise Exception("Scenario has already been run, this case has not been implemented yet. Ask Luca Montanelli why.")
-                    big_df = pd.concat([big_df,potential_append],axis=1)
+                # big_df = pd.read_pickle(self.pkl_filename)
+                # for potential_append in [out[2] for out in output]:
+                #     if potential_append is None:
+                #         raise Exception("Scenario has already been run, this case has not been implemented yet. Ask Luca Montanelli why.")
+                #     big_df = pd.concat([big_df,potential_append],axis=1)
 
-                big_df.to_pickle(self.pkl_filename)
+                # big_df.to_pickle(self.pkl_filename) # TODO remove all pickle infrastructure
                 if self.verbosity>-1:
                     print('\tScenario successfully saved\n')
         rmse_df = self.rmse_df.copy()
@@ -1804,7 +1958,7 @@ class Sensitivity():
                         mod.run_mining_only()
                     else:
                         mod.run()
-                except MemoryError:
+                except MemoryError as e:
                     if self.verbosity>-1:
                         print('************************MemoryError, no clue what to do about this************************')
                     param_variable_map = {'Total demand':'total_demand','Primary demand':'primary_demand',
@@ -1817,7 +1971,7 @@ class Sensitivity():
                             getattr(mod,param_variable_map[param]).loc[:,'Global'] = historical*5
                         else:
                             getattr(mod,param_variable_map[param]).loc[:] = historical*5
-                    raise MemoryError
+                    raise e
             elif type(mod)==demandModel:
                 for i in mod.simulation_time:
                     mod.i = i
@@ -1839,7 +1993,7 @@ class Sensitivity():
                 notes = self.notes+ f', {i}={self.val}'
             else:
                 notes = self.notes+''
-            ind = [j for j in self.hyperparam_copy.index if type(self.hyperparam_copy['Value'][j]) not in [np.ndarray,list,pd.core.series.Series]]
+            ind = [j for j in self.hyperparam_copy['Value'].dropna().index if type(self.hyperparam_copy['Value'][j]) not in [np.ndarray,list,pd.core.series.Series]]
             z = self.hyperparam_copy['Value'][ind].dropna()!=mod.hyperparam['Value'][ind].dropna()
             z = [j for j in z[z].index]
             if len(z)>0:
@@ -1854,6 +2008,7 @@ class Sensitivity():
             elif type(mod) == demandModel:
                 reg_results = pd.concat([mod.demand.sum(axis=1),mod.commodity_price_series],axis=1,keys=['Total demand','Primary commodity price'])
             elif type(mod) == miningModel: reg_results = pd.concat([mod.supply_series,mod.primary_price_series,mod.demand_series],axis=1,keys=['Primary supply','Primary commodity price','Total demand'])
+            mod.reg_results = reg_results.copy()
 
             if type(mod)!=Integration or self.demand_or_mining=='mining':
                 time_index = np.arange(self.simulation_time[0]-self.changing_base_parameters_series['presimulate_n_years'],self.simulation_time[-1]+1)
@@ -1863,7 +2018,7 @@ class Sensitivity():
             if mod is None or (self.bayesian_tune==False and self.given_hyperparam_df==False):
                 big_df = pd.concat([big_df,potential_append],axis=1)
                 # self.big_df = pd.concat([self.big_df,potential_append],axis=1)
-                big_df.to_pickle(self.pkl_filename)
+                # big_df.to_pickle(self.pkl_filename) # TODO remove all pickle infrastructure
                 if self.verbosity>-1:
                     print('\tScenario successfully saved\n')
             else:

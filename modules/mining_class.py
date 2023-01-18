@@ -353,7 +353,7 @@ class miningModel:
                 hyperparameter_notes['primary_reclamation_constant'] = 'for use in np.exp(1.321+0.671*np.log(mines_cor_adj[Capacity (kt)]))'
                 hyperparameters['primary_reclamation_slope'] = 0.671
                 hyperparameter_notes['primary_reclamation_slope'] = 'for use in np.exp(1.321+0.671*np.log(mines_cor_adj[Capacity (kt)]))'
-                hyperparameters['primary_overhead_regression2use'] = 'linear_194'
+                hyperparameters['primary_overhead_regression2use'] = 'None'
                 hyperparameter_notes['primary_overhead_regression2use'] = 'options are linear_194, which uses values from 20210825 Generalization.pptx slide 194 or None, which gives a constant value for overhead at all mines of 0.1, in $M'
                 hyperparameters = self.add_minesite_cost_regression_params(hyperparameters)
 

@@ -1,6 +1,7 @@
 import warnings
 from modules.integration_functions import Sensitivity
 from modules.scenario_parser import get_scenario_dataframe
+from modules.load_data import LoadFolderContents
 import numpy as np
 import pandas as pd
 from modules.useful_functions import *
@@ -144,8 +145,8 @@ class Many():
         self.ready_commodities = ['Al','Au','Sn','Cu','Ni','Ag','Zn','Pb','Steel']
         self.element_commodity_map = {'Steel':'Steel','Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungsten','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
         self.commodity_element_map = dict(zip(self.element_commodity_map.values(),self.element_commodity_map.keys()))
-        self.user_data_folder = 'input_data/user_defined' if user_data_folder == None else user_data_folder
-        self.static_data_folder = 'input_data/static' if static_data_folder == None else static_data_folder
+        self.user_data_folder = 'input_files/user_defined' if user_data_folder == None else user_data_folder
+        self.static_data_folder = 'input_files/static' if static_data_folder == None else static_data_folder
         self.output_data_folder = 'output_files' if output_data_folder == None else output_data_folder
         self.objective_results_map = {'Total demand':'Total demand','Primary commodity price':'Refined price',
                                  'Primary demand':'Conc. demand','Primary supply':'Mine production',
@@ -184,6 +185,7 @@ class Many():
             parallel (number of commodities to run simultaneously)
         """
         t1 = datetime.now()
+        self.time_str = str(datetime.now()).replace(':', '_').replace('.', '_')[:21]
         commodities = self.ready_commodities if commodities==None else commodities
         def run_individual_demand(material):
             print('-'*40)
@@ -197,6 +199,7 @@ class Many():
                                       use_alternative_gold_volumes=True,
                                       constrain_tuning_to_sign=constrain_tuning_to_sign,
                                       historical_price_rolling_window=5, verbosity=0, trim_result_df=trim_result_df)
+            self.shist.time_str = self.time_str
             self.shist1.historical_sim_check_demand(n_runs,demand_or_mining='demand')
             print(f'time elapsed: {str(datetime.now()-t1)}')
 
@@ -236,6 +239,7 @@ class Many():
             parallel (number of commodities to run simultaneously)
         """
         commodities = self.ready_commodities if commodities==None else commodities
+        self.time_str = str(datetime.now()).replace(':', '_').replace('.', '_')[:21]
         # for material in commodities:
         def run_individual_mining(material):
             t1 = datetime.now()
@@ -255,6 +259,7 @@ class Many():
                                      constrain_tuning_to_sign=constrain_tuning_to_sign,
                                      incentive_opening_probability_fraction_zero=0, save_mining_info=save_mining_info,
                                      trim_result_df=trim_result_df)
+            self.shist.time_str = self.time_str
             self.shist.historical_sim_check_demand(n_runs,demand_or_mining='mining')
             print(f'time elapsed: {str(datetime.now()-t1)}')
 
@@ -350,6 +355,7 @@ class Many():
                     rmse_df_out.drop(mat,level=0,inplace=True)
 
         t1 = datetime.now()
+        self.time_str = str(datetime.now()).replace(':', '_').replace('.', '_')[:21]
 
         def run_individual_integration(self,material):
             print('-'*40)
@@ -360,9 +366,9 @@ class Many():
             filename=f'{self.output_data_folder}/{mat}{filename_base}_all{filename_modifier}.pkl'
             print('--'*15+filename+'-'*15)
             additional_base_parameters = pd.Series(1,['refinery_capacity_growth_lag'])
-            additional_base_parameters.loc['primary_overhead_regression2use'] = 'None' # TODO determine if overhead is good to include or not
             if 'mcpe0' in filename_modifier:
                 additional_base_parameters.loc['mine_cost_price_elas'] = 0
+            # comparison
             self.s = Sensitivity(pkl_filename=filename, user_data_folder=self.user_data_folder,
                                  static_data_folder=self.static_data_folder,
                                  changing_base_parameters_series=material,
@@ -375,7 +381,7 @@ class Many():
                                  constrain_previously_tuned=constrain_previously_tuned, normalize_objectives=normalize_objectives,
                                  use_historical_price_for_mine_initialization=use_historical_price_for_mine_initialization,
                                  save_mining_info=save_mining_info, trim_result_df=trim_result_df)
-
+            self.s.time_str = self.time_str
             sensitivity_parameters = [
                 'pri CU price elas',
                 'sec CU price elas',
@@ -428,7 +434,7 @@ class Many():
             rmse_df = pd.concat([rmse_df],keys=[mat])
             return rmse_df
 
-        if len(commodities)>1:
+        if len(commodities) > 1:
             output = Parallel(n_jobs=n_parallel)(delayed(run_individual_integration)(self, material) for material in commodities)
             rmse_df_out = pd.concat([rmse_df_out, pd.concat(output)]).fillna(0)
             rmse_df_out.to_pickle(f'{self.output_data_folder}/tuned_rmse_df_out{tuned_rmse_df_out_append}.pkl')
@@ -848,6 +854,42 @@ class Many():
                 self.multi_scenario_hyperparam_formatted.drop(drop_ind, inplace=True)
         else:
             raise FileExistsError('No files matching the input found')
+
+    def load_data(self, folder_path):
+        """"
+            Used to load all the csv files from within a given scenario folder.
+            If you only want a single commodity, load the entire folder and down-select
+            from there, as single commodity (or subsets) are not supported. Give the
+            overall scenario folder, not the data_Element version. Folder names will
+            correspond with the time the model was initialized, followed by a given
+            scenario name.
+
+            Will look for the folder in the current working directory, the path given,
+            and in:
+                generalization/output_files/Historical tuning
+                generalization/output_files/Simulation
+                output_files/Historical tuning
+                output_files/Simulation
+
+            ----------------------------------------
+            OUTPUTS:
+                No direct outputs, but saves the following variables as attributes of self
+                - rmse_df
+                - hyperparam
+                - results
+                - historical_data
+                - rmse_df_sorted
+                - hyperparam_sorted
+                - results_sorted
+        """
+        lod = LoadFolderContents(folder_path)
+        lod.load_scenario_data()
+        lod.get_sorted_dataframes()
+        dataframes_to_pull = ['results','rmse_df','hyperparam','historical_data','results_sorted','rmse_df_sorted','hyperparam_sorted']
+
+        for i in dataframes_to_pull:
+            dataframe = getattr(lod, i)
+            setattr(self, i, dataframe.copy())
 
 def get_X_df_y_df(self, commodity=None, objective=None, standard_scaler=True):
     """
@@ -1733,7 +1775,13 @@ def nice_plot_pretuning(demand_or_mining='mining',dpi=50,output_data_folder='out
     fig.tight_layout()
     return fig,ax
 
-def run_future_scenarios(output_data_folder='output_files', run_parallel=3, scenario_sheet_file_path=None, supply_or_demand='demand', n_best_scenarios=25, n_per_baseline=25, price_response=True, commodities=None, years_of_increase=np.arange(1,2),scenario_name_base='_run_scenario_set', simulation_time=np.arange(2019,2041), baseline_sampling='clustered', tuned_rmse_df_out_append='', save_mining_info=False, trim_result_df=True, notes='Scenario run!', random_state=None, verbosity=2):
+def run_future_scenarios(output_data_folder='output_files', user_data_folder='input_files/user_defined',
+                         static_data_folder='input_files/static', run_parallel=3, scenario_sheet_file_path=None,
+                         supply_or_demand='demand', n_best_scenarios=25, n_per_baseline=25, price_response=True,
+                         commodities=None, years_of_increase=np.arange(1,2),scenario_name_base='_run_scenario_set',
+                         simulation_time=np.arange(2019,2041), baseline_sampling='clustered',
+                         tuned_rmse_df_out_append='', save_mining_info=False, trim_result_df=True,
+                         notes='Scenario run!', random_state=None, verbosity=2):
     """
     Runs scrap demand scenarios, for 0.01 to 20% of the market switching from
     refined consumption to scrap consumption, for years given (default is just
@@ -1846,6 +1894,9 @@ def run_future_scenarios(output_data_folder='output_files', run_parallel=3, scen
     exponent = 10
     element_commodity_map = {'Steel':'Steel','Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungsten','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
     col_map = dict(zip(element_commodity_map.values(),element_commodity_map.keys()))
+
+    time_str = str(datetime.now()).replace(':', '_').replace('.', '_')[:21]
+
     for commodity in commodities:
         # weighted sampling from Bayesian optimization
         commodity=element_commodity_map[commodity].lower()
@@ -1915,6 +1966,8 @@ def run_future_scenarios(output_data_folder='output_files', run_parallel=3, scen
             run_fn = op_run_sensitivity_fn
         run_fn(
             commodity=commodity,
+            user_data_folder=user_data_folder,
+            static_data_folder=static_data_folder,
             hyperparam_df=hyp_sample,
             scenario_list=scenarios,
             scenario_name_base=scenario_name_base,
@@ -1924,9 +1977,12 @@ def run_future_scenarios(output_data_folder='output_files', run_parallel=3, scen
             notes=notes,
             random_state=random_state,
             save_mining_info=save_mining_info,
+            time_str=time_str
             )
 
-def op_run_future_scenarios(commodity, hyperparam_df, scenario_list, scenario_name_base='_run_scenario_set', verbosity=0, run_parallel=None, simulation_time=np.arange(2019,2041), notes='', save_mining_info=False, random_state=None):
+
+
+def op_run_future_scenarios(commodity, hyperparam_df, scenario_list, user_data_folder='input_files/user_defined', static_data_folder='input_files/static', scenario_name_base='_run_scenario_set', verbosity=0, run_parallel=None, simulation_time=np.arange(2019,2041), notes='', save_mining_info=False, random_state=None, time_str=None):
     """
     Can be run by run_future_scenarios if run_parallel is set to zero; this is
     currently the most deprecated version of this process, see
@@ -1934,6 +1990,8 @@ def op_run_future_scenarios(commodity, hyperparam_df, scenario_list, scenario_na
     """
     from integration_functions import Sensitivity
     from datetime import datetime
+    if time_str is None:
+        time_str = str(datetime.now()).replace(':', '_').replace('.', '_')[:21]
 
     if type(scenario_list[0])==str:
         scenario_list = [scenario_list]
@@ -1972,18 +2030,20 @@ def op_run_future_scenarios(commodity, hyperparam_df, scenario_list, scenario_na
                     best_params.loc['random_state'] = random_state[rs]
                 best_params.loc['reserves_ratio_price_lag'] = 5
                 best_params.loc['close_years_back'] = 3
+
                 s = Sensitivity(filename,changing_base_parameters_series=col_map[material.capitalize()],notes=notes,
                                 additional_base_parameters=best_params, historical_price_rolling_window=5,
                                 simulation_time=simulation_time,
                                 scenarios=scenarios, save_mining_info=save_mining_info,
                                 OVERWRITE=rs==0,verbosity=verbosity)
+                s.time_str = time_str
                 s.run_monte_carlo(n_scenarios=2,bayesian_tune=False, sensitivity_parameters=['Nothing, giving a string incompatible with any of the variable names'])
                 if verbosity>-1: print(f'time for batch: {str(datetime.now()-t1)}')
                 t_per_batch.loc[m*len(scenario_list)+n] = datetime.now()-t1
                 filename_list += [filename]
     if verbosity>-1: print(f'total time elapsed: {str(datetime.now()-t0)}')
 
-def op_run_sensitivity_fn(commodity, hyperparam_df, scenario_list, scenario_name_base='_run_scenario_baseline', verbosity=0, run_parallel=None, simulation_time=np.arange(2019,2041), notes='', save_mining_info=False, trim_result_df=True, random_state=None):
+def op_run_sensitivity_fn(commodity, hyperparam_df, scenario_list, user_data_folder='input_files/user_defined', static_data_folder='input_files/static', scenario_name_base='_run_scenario_baseline', verbosity=0, run_parallel=None, simulation_time=np.arange(2019,2041), notes='', save_mining_info=False, trim_result_df=True, random_state=None, time_str=None):
     """
     Run by the run_future_scenarios function if run_parallel is greater than
     zero. Mainly used so that the large pickle files for all the data get
@@ -1997,25 +2057,40 @@ def op_run_sensitivity_fn(commodity, hyperparam_df, scenario_list, scenario_name
     get_variables function in line with how Many().load_future_scenario_runs
     function loads its data to fix.
     """
+    if time_str is None:
+        time_str = str(datetime.now()).replace(':', '_').replace('.', '_')[:21]
+
     element_commodity_map = {'Steel':'Steel','Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungsten','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
     col_map = dict(zip(element_commodity_map.values(),element_commodity_map.keys()))
     element = col_map[commodity.capitalize()]
 
+    # comparison
     filename=f'output_files/Simulation/'+commodity+scenario_name_base+'.pkl'
     if verbosity>-2: print('--'*15+filename+'-'*15)
     best_params = pd.Series(dtype=float)
     best_params.loc['reserves_ratio_price_lag'] = 5
     best_params.loc['close_years_back'] = 3
-    s = Sensitivity(filename,changing_base_parameters_series=col_map[commodity.capitalize()],notes=notes,
-                    additional_base_parameters=best_params, historical_price_rolling_window=5,
-                    simulation_time=simulation_time,
-                    scenarios=scenario_list,
-                    OVERWRITE=True,verbosity=verbosity,
-                    save_mining_info=save_mining_info,
-                    trim_result_df=trim_result_df)
+
+    train_time = np.intersect1d(simulation_time, np.arange(2001,2020))
+    s = Sensitivity(pkl_filename=filename, user_data_folder=user_data_folder,
+                         static_data_folder=static_data_folder,
+                         changing_base_parameters_series=element,
+                         notes=notes,
+                         scenarios=scenario_list,
+                         additional_base_parameters=best_params,
+                         simulation_time=simulation_time, include_sd_objectives=False, train_time=train_time,
+                         OVERWRITE=True, verbosity=verbosity, historical_price_rolling_window=5,
+                         force_integration_historical_price=False,
+                         constrain_tuning_to_sign=True,
+                         constrain_previously_tuned=False,
+                         normalize_objectives=True,
+                         use_historical_price_for_mine_initialization=True,
+                         save_mining_info=save_mining_info, trim_result_df=trim_result_df)
+
+    s.time_str = time_str
     s.run_monte_carlo(n_scenarios=2,bayesian_tune=False, sensitivity_parameters=hyperparam_df,n_jobs=abs(run_parallel))
 
-def op_run_future_scenarios_parallel(commodity, hyperparam_df, scenario_list, scenario_name_base='_run_scenario_set', verbosity=0, run_parallel=3, simulation_time=np.arange(2019,2041), notes='', save_mining_info=False, random_state=None):
+def op_run_future_scenarios_parallel(commodity, hyperparam_df, scenario_list, user_data_folder='input_files/user_defined', static_data_folder='input_files/static', scenario_name_base='_run_scenario_set', verbosity=0, run_parallel=3, simulation_time=np.arange(2019,2041), notes='', save_mining_info=False, random_state=None, time_str=None):
     """
     Called by run_future_scenarios if its run_parallel input is below zero,
     since in my opinion this function is mostly deprecated
@@ -2024,6 +2099,9 @@ def op_run_future_scenarios_parallel(commodity, hyperparam_df, scenario_list, sc
     from datetime import datetime
     from joblib import Parallel, delayed
     from IterTimer import IterTimer
+
+    if time_str is None:
+        time_str = str(datetime.now()).replace(':', '_').replace('.', '_')[:21]
 
     if type(scenario_list[0])==str:
         scenario_list = [scenario_list]
@@ -2042,14 +2120,17 @@ def op_run_future_scenarios_parallel(commodity, hyperparam_df, scenario_list, sc
     hyp_sample.loc['reserves_ratio_price_lag'] = 5
     hyp_sample.loc['close_years_back'] = 3
 
-    Parallel(n_jobs=abs(run_parallel))(delayed(run_scenario_set)(m, best_ind, hyp_sample, scenario_list, material, scenario_name_base, col_map, verbosity, simulation_time, save_mining_info, notes, timer, random_state) for m,best_ind in enumerate(hyp_sample.columns))
+    Parallel(n_jobs=abs(run_parallel))(delayed(run_scenario_set)(m, best_ind, hyp_sample, scenario_list, material, scenario_name_base, col_map, verbosity, simulation_time, save_mining_info, notes, timer, random_state, time_str) for m,best_ind in enumerate(hyp_sample.columns))
 
     if verbosity>-1: print(f'total time elapsed: {str(datetime.now()-t0)}')
 
-def run_scenario_set(m,best_ind,hyp_sample,scenario_list,material,scenario_name_base,col_map,verbosity, simulation_time=np.arange(2019,2041), save_mining_info=False, notes='', timer=None, random_state=None):
+def run_scenario_set(m,best_ind,hyp_sample,scenario_list,material,scenario_name_base,col_map,verbosity, simulation_time=np.arange(2019,2041), save_mining_info=False, notes='', timer=None, random_state=None, time_str=None):
     """
     Called by op_run_future_scenarios_parallel to run each set of scenarios
     """
+    if time_str is None:
+        time_str = str(datetime.now()).replace(':', '_').replace('.', '_')[:21]
+
     element_commodity_map = {'Steel':'Steel','Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungsten','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
     col_map = dict(zip(element_commodity_map.values(),element_commodity_map.keys()))
     element = col_map[material.capitalize()]
@@ -2083,6 +2164,7 @@ def run_scenario_set(m,best_ind,hyp_sample,scenario_list,material,scenario_name_
                             simulation_time=simulation_time,
                             scenarios=scenarios, save_mining_info=save_mining_info,
                             OVERWRITE=OVERWRITE,verbosity=verbosity)
+            s.time_str = time_str
             s.run_monte_carlo(n_scenarios=2,bayesian_tune=False, sensitivity_parameters=['Nothing, giving a string incompatible with any of the variable names'])
             if verbosity>-1: print(f'time for batch: {str(datetime.now()-t1)}')
         # timer.end_iter()

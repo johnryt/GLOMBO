@@ -59,8 +59,8 @@ class Integration():
                                       'Te': 'Telllurium', 'Li': 'Lithium'}
         self.i = simulation_time[0]
         self.commodity = commodity
-        self.user_data_folder = 'input_data/user_defined' if user_data_folder is None else user_data_folder
-        self.static_data_folder = 'input_data/static' if user_data_folder is None else static_data_folder
+        self.user_data_folder = 'input_files/user_defined' if user_data_folder is None else user_data_folder
+        self.static_data_folder = 'input_files/static' if user_data_folder is None else static_data_folder
         self.simulation_time = simulation_time
         self.verbosity = verbosity
         self.byproduct = byproduct
@@ -631,12 +631,16 @@ class Integration():
 
         self.concentrate_supply = self.mining.concentrate_supply_series.copy()
         self.sxew_supply = self.mining.sxew_supply_series.copy()
-        self.row_fraction_sxew = self.refine.hyperparam['RoW'][[
-            'SX-EW fraction of production', 'Total production']].product() / self.refine.hyperparam['Global'][[
-            'SX-EW fraction of production', 'Total production']].product()
-        self.china_fraction_sxew = self.refine.hyperparam['China'][[
-            'SX-EW fraction of production', 'Total production']].product() / self.refine.hyperparam['Global'][[
-            'SX-EW fraction of production', 'Total production']].product()
+        if self.refine.hyperparam['Global']['SX-EW fraction of production']!=0:
+            self.row_fraction_sxew = self.refine.hyperparam['RoW'][[
+                'SX-EW fraction of production', 'Total production']].product() / self.refine.hyperparam['Global'][[
+                'SX-EW fraction of production', 'Total production']].product()
+            self.china_fraction_sxew = self.refine.hyperparam['China'][[
+                'SX-EW fraction of production', 'Total production']].product() / self.refine.hyperparam['Global'][[
+                'SX-EW fraction of production', 'Total production']].product()
+        else:
+            self.row_fraction_sxew = 0
+            self.china_fraction_sxew = 0
         # ^ we assume that the distribution of SX-EW production between China and RoW remains constant throughout
         self.sxew_supply_regional = pd.concat([
             self.sxew_supply,
@@ -1093,8 +1097,8 @@ class Integration():
             self.scenario_frame = get_scenario_dataframe(
                 file_path_for_scenario_setup=scenario_name.split('++')[0],
                 default_year=2019)
-            scenario_name = self.scenario_frame.loc[scenario_name.split('++')[1]]
-            self.scenario_update_df = self.scenario_frame.loc[scenario_name]
+            scenario_name_alt = scenario_name.split('++')[1]
+            self.scenario_update_df = self.scenario_frame.loc[scenario_name_alt]
             scenario_update_scrap_handling(self)
 
         else:

@@ -1,6 +1,10 @@
 import pandas as pd
 import numpy as np
 import os
+import shutil
+import warnings
+from datetime import datetime
+
 idx = pd.IndexSlice
 
 class LoadFolderContents:
@@ -27,6 +31,7 @@ class LoadFolderContents:
         - hyperparam_sorted
         - results_sorted
     """
+
     def __init__(self, folder_path):
         if not os.path.exists(folder_path):
             potential_paths = ['generalization/output_files/Historical tuning',
@@ -102,3 +107,157 @@ class LoadFolderContents:
                     previous = getattr(self, df_name + '_sorted')
                     df = pd.concat([df], keys=[commodity])
                     setattr(self, df_name + '_sorted', pd.concat([previous, df]))
+
+
+class ResavePklAsCsv:
+    """
+    Takes an entire folder and converts all pkl files to csv files, just initialize with
+    the folder name and then use the run() method.
+    """
+
+    def __init__(self, output_data_folder='generalization/output_files/Historical tuning'):
+        self.output_data_folder = output_data_folder
+        self.time_strs = {}
+
+    def run(self):
+        for file in os.listdir(self.output_data_folder):
+            self.run_one(file)
+
+    def run_one(self, file):
+        print(file)
+        self.file = file
+        if file[-4:] == '.pkl':
+            self.get_scenario_name()
+            self.create_folders_subfolders()
+            self.copy_input_files()
+            self.save_results()
+
+    def get_scenario_name(self):
+        # Get scenario name and make sure they all get saved in the same folder (same timestamp)
+        if 'Simulation' in self.output_data_folder:
+            self.commodity = self.file.split('_')[0]
+            self.scenario_name = self.file.split(f'{self.commodity}_')[1].split('.pkl')[0]
+            num_strings = [str(i) for i in np.arange(0, 10)]
+            if self.scenario_name[-1] in num_strings:
+                self.scenario_id = self.scenario_name[-1]
+                self.scenario_name = self.scenario_name[:-1]
+        elif 'Historical tuning' in self.output_data_folder:
+            self.scenario_name = self.file.split('_all_')[1].split('.pkl')[0]
+            self.commodity = self.file.split('_run_hist')[0]
+
+        if self.scenario_name not in self.time_strs:
+            self.time_str = str(datetime.now()).replace(':', '_').replace('.', '_')[:21]
+            self.time_strs[self.scenario_name] = self.time_str
+        self.time_str = self.time_strs[self.scenario_name]
+        self.element = self.commodity_element_map[self.commodity.capitalize()]
+
+    def create_folders_subfolders(self):
+        # Create scenario folder
+        self.scenario_folder = f'{self.output_data_folder}/{self.time_str}_{self.scenario_name}'
+        if not os.path.exists(self.scenario_folder):
+            os.mkdir(self.scenario_folder)
+
+        # Create data_element subfolder
+        new_folder = f'data_{self.element}'
+        self.data_folder = f'{self.scenario_folder}/{new_folder}'
+        if not os.path.exists(self.data_folder):
+            os.mkdir(self.data_folder)
+
+        # Create input_files subfolder
+        new_folder = 'input_files'
+        self.input_files_folder = f'{self.scenario_folder}/{new_folder}'
+        if not os.path.exists(self.input_files_folder):
+            os.mkdir(self.input_files_folder)
+
+    def copy_input_files(self):
+        # Copy over input files
+        user_data_folder = 'generalization/input_files/user_defined'
+        for file_name in os.listdir(user_data_folder):
+            # construct full file path
+            source = f'{user_data_folder}/{file_name}'
+            destination = f'{self.input_files_folder}/{file_name}'
+            # copy only excel and csv files
+            if '.xls' in source or '.csv' in source:
+                shutil.copy(source, destination)
+
+    def save_results(self):
+        # Load pickle file
+        pkl_file = pd.read_pickle(f'{self.output_data_folder}/{self.file}')
+        write_data = {}
+        write_data['results'] = pd.concat([pkl_file[i]['results']['Global'][0] for i in pkl_file.columns],
+                                          keys=pkl_file.columns)
+        write_data['hyperparam'] = pd.concat([pkl_file[i]['hyperparam'] for i in pkl_file.columns],
+                                             keys=pkl_file.columns)
+        write_data['rmse_df'] = pkl_file.iloc[:, -1]['rmse_df']
+        write_data['historical_data'] = self.integ.historical_data.loc[self.commodity]
+        if write_data['rmse_df'].index.nlevels == 1:
+            write_data['rmse_df'].index = pd.MultiIndex.from_tuples(write_data['rmse_df'].index)
+
+        # Save results from pickle file
+        for i in ['results', 'hyperparam', 'rmse_df', 'historical_data']:
+            file_path_string = f'{self.data_folder}/{i}.csv'
+            if os.path.exists(file_path_string):
+                if i != 'historical_data':
+                    ind_col = [0, 1]
+                    current = pd.read_csv(file_path_string, index_col=ind_col)
+                    self.current = current.copy()
+                    self.write_data = write_data
+                    if i != 'rmse_df':
+                        write_data[i] = pd.concat([write_data[i], current]).sort_index()
+                    else:
+                        if current.index.get_level_values(0).max() > write_data[i].index.get_level_values(0).max():
+                            write_data[i] = current.copy()
+            write_data[i].to_csv(file_path_string)
+
+
+def create_output_folder_level_one():
+    time_str = str(datetime.now()).replace(':', '_').replace('.', '_')[:21]
+    output_data_folder = 'generalization/output_files'
+    scenario_name = 'split_grades'
+    sim_or_hist = 'Simulation'
+    main_folder_str = f'{time_str} {scenario_name}'
+    output_data_folder_full = f'{output_data_folder}/{sim_or_hist}'
+    n_iter = 0
+    MAX_RUNS_PER_SECOND = 3
+    if main_folder_str not in os.listdir(output_data_folder_full):
+        print(main_folder_str)
+        final_folder = f'{output_data_folder_full}/{main_folder_str}'
+        os.mkdir(final_folder)
+    else:
+        raise ValueError(
+            'Scenario folder name already taken (needs to be run at least 0.1 seconds after the other with the same name)')
+    return final_folder
+
+
+def create_output_folder_level_two():
+    commodity = 'copper'
+    scenario_name = '2023-01-16 13_53_30_6 split_grades'
+    output_data_folder = 'generalization/output_files'
+    sim_or_hist = 'Simulation'
+    output_data_folder_full = f'{output_data_folder}/{sim_or_hist}'
+    folder_level_one = f'{output_data_folder_full}/{scenario_name}'
+    if scenario_name not in os.listdir(output_data_folder_full):
+        folder_level_one = create_output_folder_level_one()
+
+    new_folder = f'{commodity} data'
+    data_folder = f'{folder_level_one}/{new_folder}'
+    os.mkdir(data_folder)
+
+    new_folder = 'input_files'
+    input_files_folder = f'{folder_level_one}/{new_folder}'
+    os.mkdir(input_files_folder)
+
+    return data_folder, input_files_folder
+
+
+def add_input_files_to_folder():
+    data_folder, input_files_folder = create_output_folder_level_two()
+    user_data_folder = 'generalization/input_files/user_defined'
+    print(input_files_folder)
+    for file_name in os.listdir(user_data_folder):
+        # construct full file path
+        source = f'{user_data_folder}/{file_name}'
+        destination = f'{input_files_folder}/{file_name}'
+        # copy only excel and csv files
+        if '.xls' in source or '.csv' in source:
+            shutil.copy(source, destination)

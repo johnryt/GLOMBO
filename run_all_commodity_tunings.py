@@ -8,7 +8,7 @@ import numpy as np
 # np.seterr(all='raise')
 
 # ------- Running all mining scenarios, lots of commodities ------- #
-to_run = ['Cu', 'Al', 'Au', 'Sn', 'Ni', 'Ag', 'Zn', 'Pb', 'Steel']
+to_run = [ 'Au', 'Sn', 'Ni', 'Ag', 'Zn', 'Pb', 'Steel']
 # to_run = ['Sn','Ni','Ag','Zn','Pb','Steel']
 # to_run = ['Ag','Zn','Pb','Al','Au']
 # to_run = ['Ni','Cu','Sn','Steel']

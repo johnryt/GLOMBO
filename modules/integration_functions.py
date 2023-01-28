@@ -19,6 +19,8 @@ from skopt import Optimizer
 from joblib import Parallel, delayed
 from sklearn.metrics import mean_squared_error, r2_score
 
+from multiprocessing import Pool, freeze_support
+
 import warnings
 # warnings.filterwarnings('error')
 # np.seterr(all='raise')
@@ -1158,9 +1160,17 @@ class Sensitivity():
         values to give the error the Bayesian optimization is trying to minimize.
         '''
         #output is of the form [(score_0, new_params_0, potential_append_0), (score_1, new_params_1, potential_append_0), ...]
-        output = Parallel(n_jobs=self.n_jobs)(delayed(self.skopt_run_score)(
-            mod, param_series, s_n, bayesian_tune, n_params
-        ) for mod, param_series, s_n in zip(mods, new_param_series_all, scenario_numbers))
+        if True: # TODO fix parallelism for windows
+            output = Parallel(n_jobs=self.n_jobs)(delayed(self.skopt_run_score)(
+                mod, param_series, s_n, bayesian_tune, n_params
+            ) for mod, param_series, s_n in zip(mods, new_param_series_all, scenario_numbers))
+        else:
+            pool = Pool(self.n_jobs)
+            freeze_support()
+            pools = [pool.apply_async(self.skopt_run_score,
+                [mod, param_series, s_n, bayesian_tune, n_params]
+            ) for mod, param_series, s_n in zip(mods, new_param_series_all, scenario_numbers)]
+            output = [p.get(timeout=10) for p in pools]
         mods_out = [out[3] for out in output]
 
         #give scores to skopt

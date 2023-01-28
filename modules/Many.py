@@ -11,6 +11,7 @@ import statsmodels.api as sm
 from sklearn.ensemble import RandomForestRegressor, ExtraTreesRegressor, GradientBoostingRegressor
 from matplotlib.lines import Line2D
 from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
 from sklearn.metrics import r2_score
 from joblib import Parallel, delayed
 import os
@@ -342,8 +343,8 @@ class Many():
             tuned_rmse_df_out_append = filename_modifier
 
         commodities = self.ready_commodities if commodities==None else commodities
-        if os.path.exists(f'output_files/tuned_rmse_df_out{tuned_rmse_df_out_append}.pkl'):
-            rmse_df_out = pd.read_pickle(f'output_files/tuned_rmse_df_out{tuned_rmse_df_out_append}.pkl')
+        if os.path.exists(f'output_files/tuned_rmse_df_out{tuned_rmse_df_out_append}.csv'):
+            rmse_df_out = pd.read_csv(f'output_files/tuned_rmse_df_out{tuned_rmse_df_out_append}.csv', index_co=[0,1])
             if rmse_df_out.index.nlevels==1:
                 rmse_df_out = pd.DataFrame()
         else:
@@ -438,10 +439,10 @@ class Many():
         if len(commodities) > 1:
             output = Parallel(n_jobs=n_parallel)(delayed(run_individual_integration)(self, material) for material in commodities)
             rmse_df_out = pd.concat([rmse_df_out, pd.concat(output)]).fillna(0)
-            rmse_df_out.to_pickle(f'{self.output_data_folder}/tuned_rmse_df_out{tuned_rmse_df_out_append}.pkl')
+            rmse_df_out.to_csv(f'{self.output_data_folder}/tuned_rmse_df_out{tuned_rmse_df_out_append}.csv')
         else:
             output = run_individual_integration(self, commodities[0])
-            print(f'commodity info not updated in {self.output_data_folder}/tuned_rmse_df_out{tuned_rmse_df_out_append}.pkl')
+            print(f'commodity info not updated in {self.output_data_folder}/tuned_rmse_df_out{tuned_rmse_df_out_append}.csv')
 
         print(f'time elapsed: {str(datetime.now()-t1)}')
         # add 'response','growth' to sensitivity_parameters input to allow demand parameters to change again
@@ -468,7 +469,7 @@ class Many():
         self.filename_modifier = filename_modifier
         self.tuned_rmse_df_out_append = tuned_rmse_df_out_append if tuned_rmse_df_out_append!=None else filename_modifier
         if demand_mining_all=='all':
-            self.tuned_rmse_df_out = pd.read_pickle(f'output_files/tuned_rmse_df_out{self.tuned_rmse_df_out_append}.pkl')
+            self.tuned_rmse_df_out = pd.read_csv(f'output_files/tuned_rmse_df_out{self.tuned_rmse_df_out_append}.csv', index_col=[0,1])
 
         for df_name in ['rmse_df','hyperparam','simulated_demand','results','historical_data','mine_supply']:
             df_outer = pd.DataFrame()
@@ -1868,7 +1869,7 @@ def run_future_scenarios(output_data_folder='output_files', user_data_folder='in
         scenario_frame = get_scenario_dataframe(file_path_for_scenario_setup=scenario_sheet_file_path, default_year=2019)
         scenarios = ['++'.join([scenario_sheet_file_path,q])
                           for q in scenario_frame.index.get_level_values(0).unique()]+['']
-        # TODO implementation to run a baseline somehow, whether to just always have baseline be the first
+        # TODO implementation to run a baseline somehow, whether to just always have baseline be the first, label baseline somehow.
     else:
         if supply_or_demand=='supply': s = 'ss'
         elif supply_or_demand=='demand': s = 'sd'
@@ -1888,7 +1889,7 @@ def run_future_scenarios(output_data_folder='output_files', user_data_folder='in
         scenarios = scenariosb+scenarios2+scenarios3+scenarios4
     if verbosity>0: print(scenarios)
 
-    rmse_df = pd.read_pickle(f'{output_data_folder}/tuned_rmse_df_out{tuned_rmse_df_out_append}.pkl').stack().unstack(1)
+    rmse_df = pd.read_csv(f'{output_data_folder}/tuned_rmse_df_out{tuned_rmse_df_out_append}.csv',index_col=[0,1]).stack().unstack(1)
     if commodities is None:
         commodities = ['Steel','Al','Au','Sn','Cu','Ni','Ag','Zn','Pb']
 

@@ -115,9 +115,16 @@ class ResavePklAsCsv:
     the folder name and then use the run() method.
     """
 
-    def __init__(self, output_data_folder='generalization/output_files/Historical tuning'):
+    def __init__(self, output_data_folder='generalization/output_files/Historical tuning', many=None):
+        self.many = many
         self.output_data_folder = output_data_folder
         self.time_strs = {}
+
+        self.element_commodity_map = {'Steel': 'Steel', 'Al': 'Aluminum', 'Au': 'Gold', 'Cu': 'Copper',
+                                      'Steel': 'Steel', 'Co': 'Cobalt', 'REEs': 'REEs', 'W': 'Tungsten', 'Sn': 'Tin',
+                                      'Ta': 'Tantalum', 'Ni': 'Nickel', 'Ag': 'Silver', 'Zn': 'Zinc', 'Pb': 'Lead',
+                                      'Mo': 'Molybdenum', 'Pt': 'Platinum', 'Te': 'Telllurium', 'Li': 'Lithium'}
+        self.commodity_element_map = dict(zip(self.element_commodity_map.values(), self.element_commodity_map.keys()))
 
     def run(self):
         for file in os.listdir(self.output_data_folder):
@@ -189,7 +196,7 @@ class ResavePklAsCsv:
         write_data['hyperparam'] = pd.concat([pkl_file[i]['hyperparam'] for i in pkl_file.columns],
                                              keys=pkl_file.columns)
         write_data['rmse_df'] = pkl_file.iloc[:, -1]['rmse_df']
-        write_data['historical_data'] = self.integ.historical_data.loc[self.commodity]
+        write_data['historical_data'] = self.many.integ.historical_data.loc[self.commodity]
         if write_data['rmse_df'].index.nlevels == 1:
             write_data['rmse_df'].index = pd.MultiIndex.from_tuples(write_data['rmse_df'].index)
 

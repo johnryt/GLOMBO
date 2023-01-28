@@ -1,4 +1,3 @@
-import sys
 import warnings
 
 from modules.Many import *
@@ -257,6 +256,13 @@ run_future_scenarios(commodities=to_run, run_parallel=3, verbosity=-1,
                      save_mining_info=False, # 'cost_curve'
                      n_best_scenarios=25, n_per_baseline=50,
                      )
+# run_future_scenarios(commodities=to_run, run_parallel=3, verbosity=-1,
+#                      scenario_name_base='_baselines_TEST', supply_or_demand=None,
+#                      simulation_time=np.arange(2001, 2041), baseline_sampling='clustered',
+#                      tuned_rmse_df_out_append='_split_grades',#_one_more_time
+#                      save_mining_info=False, # 'cost_curve'
+#                      n_best_scenarios=3, n_per_baseline=3,
+#                      )
 # to_run=['Cu']
 # run_future_scenarios(commodities=to_run,run_parallel= 4,verbosity= -1,
 #     scenario_name_base='_run_scenario_check_cumu_ot',supply_or_demand=None,
@@ -269,10 +275,10 @@ run_future_scenarios(commodities=to_run, run_parallel=3, verbosity=-1,
 # checking scenario file functionality
 # to_run=['Cu','Ni']
 # warnings.simplefilter('error')
-# run_future_scenarios(commodities=to_run, run_parallel=3, verbosity=-1,
-#                      scenario_sheet_file_path='input_files/user_defined/Scenario setup.xlsx',
-#                      scenario_name_base='_TEST', supply_or_demand=None,
-#                      simulation_time=np.arange(2001,2041), baseline_sampling='clustered',
-#                      tuned_rmse_df_out_append='_split_grades',
-#                      save_mining_info=False,
-#                      n_best_scenarios=5, n_per_baseline=1)
+run_future_scenarios(commodities=['Cu'], run_parallel=3, verbosity=-1,
+                     scenario_sheet_file_path='input_files/user_defined/Scenario setup.xlsx',
+                     scenario_name_base='_TEST', supply_or_demand=None,
+                     simulation_time=np.arange(2001,2041), baseline_sampling='clustered',
+                     tuned_rmse_df_out_append='_split_grades',
+                     save_mining_info=False,
+                     n_best_scenarios=1, n_per_baseline=1)

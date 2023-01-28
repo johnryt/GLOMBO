@@ -2,9 +2,9 @@ import pandas as pd
 import numpy as np
 import os
 import shutil
-import warnings
 from datetime import datetime
 
+import warnings
 idx = pd.IndexSlice
 
 class LoadFolderContents:

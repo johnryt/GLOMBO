@@ -1197,7 +1197,8 @@ class Sensitivity():
     def save_scenario_results(self, mods):
         for mod in mods:
             if hasattr(mod,'historical_data'):
-                mod.historical_data.to_csv(f'{self.output_data_results_folder}/historical_data.csv')
+                if not os.path.exists(f'{self.output_data_results_folder}/historical_data.csv'):
+                    mod.historical_data.to_csv(f'{self.output_data_results_folder}/historical_data.csv')
 
             if not hasattr(self, 'too_big'):
                 self.too_big = 0
@@ -1905,9 +1906,9 @@ class Sensitivity():
                 if not hasattr(self,'rmse_df'):
                     self.rmse_df=0
             else:
-                mining = deepcopy([mod.mining])[0]
-                refine = deepcopy([mod.refine])[0]
-                demand = deepcopy([mod.demand])[0]
+                mining = mod.mining
+                refine = mod.refine
+                demand = mod.demand
             if not self.save_mining_info: ml = [0]
             elif self.save_mining_info=='cost_curve':
                 if mining.ml.shape[0]>0:

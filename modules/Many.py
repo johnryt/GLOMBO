@@ -19,6 +19,7 @@ from shutil import copyfile
 import shap
 from modules.Individual import *
 from datetime import datetime
+import warnings
 
 # warnings.filterwarnings('error')
 # np.seterr(all='raise')

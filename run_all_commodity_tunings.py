@@ -14,8 +14,8 @@ if platform=='win32':
 # np.seterr(all='raise')
 
 # ------- Running all mining scenarios, lots of commodities ------- #
-to_run = ['Cu', 'Al', 'Au', 'Sn', 'Ni', 'Ag', 'Zn', 'Pb', 'Steel']
-to_run = ['Au','Sn','Ni','Ag','Zn','Pb','Steel']
+# to_run = ['Cu', 'Al', 'Au', 'Sn', 'Ni', 'Ag', 'Zn', 'Pb', 'Steel']
+# to_run = ['Au','Sn','Ni','Ag','Zn','Pb','Steel']
 # to_run = ['Ag','Zn','Pb','Al','Au']
 # to_run = ['Ni','Cu','Sn','Steel']
 
@@ -87,12 +87,12 @@ to_run = ['Au','Sn','Ni','Ag','Zn','Pb','Steel']
 
 #################### Checking how well integ runs
 # many=Many()
-# many.get_variables('all',filename_modifier='_rerun_overhead_sxew',tuned_rmse_df_out_append='_mcpe0',commodities=['Cu'])
-# integ1 = Integration(user_data_folder='generalization/data',
+# many.load_data('2023-01-20 11_36_19_0_run_hist_all_one_more_time')
+# integ1 = Integration(user_data_folder='input_files/user_defined',
 #                      commodity='Cu',
 #                      price_to_use='log',
 #                      simulation_time=np.arange(2001,2041),
-#                      input_hyperparam=many.hyperparam_sorted.loc['copper'][0],
+#                      input_hyperparam=many.rmse_df_sorted.loc['Cu'][0],
 #                      historical_price_rolling_window=5,
 #                      use_historical_price_for_mine_initialization=True,
 #                      )
@@ -100,9 +100,9 @@ to_run = ['Au','Sn','Ni','Ag','Zn','Pb','Steel']
 # integ1.run()
 
 ############# Current main run method
-mod = Many()
-# to_run = ['Steel']
-# to_run = ['Al','Sn','Ni','Ag','Zn','Pb','Steel']
+# mod = Many()
+# to_run = ['Ag','Sn']
+# # to_run = ['Al','Sn','Ni','Ag','Zn','Pb','Steel']
 # mod.run_all_integration(n_runs=200, n_params=3, n_jobs=3,
 #                         tuned_rmse_df_out_append='_one_more_time',
 #                         train_time=np.arange(2001,2020),
@@ -117,7 +117,7 @@ mod = Many()
 #                         n_parallel=1,
 #                         verbosity=0)
 # to_run = ['Cu','Ni']
-# mod.run_all_integration(n_runs=5, n_params=3, n_jobs=3,
+# mod.run_all_integration(n_runs=200, n_params=3, n_jobs=3,
 #                         tuned_rmse_df_out_append='_split_2017_TEST',
 #                         train_time=np.arange(2001,2017),
 #                         simulation_time=np.arange(2001,2041),
@@ -126,6 +126,32 @@ mod = Many()
 #                         commodities=to_run,
 #                         force_integration_historical_price=False,
 #                         filename_modifier='_split_2017_TEST',
+#                         save_mining_info=False,
+#                         use_historical_price_for_mine_initialization=True,
+#                         n_parallel=1,
+#                         verbosity=0)
+# mod.run_all_integration(n_runs=200, n_params=3, n_jobs=3,
+#                         tuned_rmse_df_out_append='_split_2016_TEST',
+#                         train_time=np.arange(2001,2016),
+#                         simulation_time=np.arange(2001,2041),
+#                         normalize_objectives=True,
+#                         constrain_previously_tuned=False,
+#                         commodities=to_run,
+#                         force_integration_historical_price=False,
+#                         filename_modifier='_split_2016_TEST',
+#                         save_mining_info=False,
+#                         use_historical_price_for_mine_initialization=True,
+#                         n_parallel=1,
+#                         verbosity=0)
+# mod.run_all_integration(n_runs=200, n_params=3, n_jobs=3,
+#                         tuned_rmse_df_out_append='_split_2015_TEST',
+#                         train_time=np.arange(2001,2015),
+#                         simulation_time=np.arange(2001,2041),
+#                         normalize_objectives=True,
+#                         constrain_previously_tuned=False,
+#                         commodities=to_run,
+#                         force_integration_historical_price=False,
+#                         filename_modifier='_split_2015_TEST',
 #                         save_mining_info=False,
 #                         use_historical_price_for_mine_initialization=True,
 #                         n_parallel=1,
@@ -185,7 +211,7 @@ mod = Many()
 # shist1.historical_sim_check_demand(50,demand_or_mining='mining')
 
 # to_run = ['Steel','Al','Au','Sn','Cu','Ni','Ag','Zn','Pb']
-to_run = ['Cu', 'Au', 'Al', 'Ag', 'Zn', 'Pb', 'Sn', 'Ni', 'Steel']
+# to_run = ['Cu', 'Au', 'Al', 'Ag', 'Zn', 'Pb', 'Sn', 'Ni', 'Steel']
 # to_run = ['Au','Al','Ag','Zn','Pb','Sn','Ni','Steel']
 # to_run = ['Sn','Cu','Ni','Steel']
 # to_run = ['Al','Au']
@@ -249,13 +275,13 @@ to_run = ['Cu', 'Au', 'Al', 'Ag', 'Zn', 'Pb', 'Sn', 'Ni', 'Steel']
 
 # ------- Running a bunch of baselines ------- #
 # warnings.simplefilter('error')
-run_future_scenarios(commodities=to_run, run_parallel=3, verbosity=-1,
-                     scenario_name_base='_baselines', supply_or_demand=None,
-                     simulation_time=np.arange(2001, 2041), baseline_sampling='clustered',
-                     tuned_rmse_df_out_append='_one_more_time',
-                     save_mining_info=False, # 'cost_curve'
-                     n_best_scenarios=25, n_per_baseline=50,
-                     )
+# run_future_scenarios(commodities=to_run, run_parallel=3, verbosity=-1,
+#                      scenario_name_base='_baselines', supply_or_demand=None,
+#                      simulation_time=np.arange(2001, 2041), baseline_sampling='clustered',
+#                      tuned_rmse_df_out_append='_one_more_time',
+#                      save_mining_info=False, # 'cost_curve'
+#                      n_best_scenarios=25, n_per_baseline=50,
+#                      )
 # run_future_scenarios(commodities=to_run, run_parallel=3, verbosity=-1,
 #                      scenario_name_base='_baselines_TEST', supply_or_demand=None,
 #                      simulation_time=np.arange(2001, 2041), baseline_sampling='clustered',
@@ -264,21 +290,70 @@ run_future_scenarios(commodities=to_run, run_parallel=3, verbosity=-1,
 #                      n_best_scenarios=3, n_per_baseline=3,
 #                      )
 # to_run=['Cu']
-# run_future_scenarios(commodities=to_run,run_parallel= 4,verbosity= -1,
-#     scenario_name_base='_run_scenario_check_cumu_ot',supply_or_demand=None,
+# run_future_scenarios(commodities=to_run,run_parallel= 3,verbosity= -1,
+#     scenario_name_base='_run_scenario_CHECK',supply_or_demand=None,
 #     simulation_time=np.arange(2001,2041), baseline_sampling='clustered',
-#     tuned_rmse_df_out_append='_rerun_overhead',
-#     save_mining_info=True,
-#     n_best_scenarios=1, n_per_baseline=1,
+#     tuned_rmse_df_out_append='_one_more_time',
+#     save_mining_info=False,
+#     n_best_scenarios=25, n_per_baseline=1,
 # )
 
 # checking scenario file functionality
 # to_run=['Cu','Ni']
 # warnings.simplefilter('error')
-run_future_scenarios(commodities=['Cu'], run_parallel=3, verbosity=-1,
-                     scenario_sheet_file_path='input_files/user_defined/Scenario setup.xlsx',
-                     scenario_name_base='_TEST', supply_or_demand=None,
-                     simulation_time=np.arange(2001,2041), baseline_sampling='clustered',
-                     tuned_rmse_df_out_append='_split_grades',
-                     save_mining_info=False,
-                     n_best_scenarios=1, n_per_baseline=1)
+# run_future_scenarios(commodities=['Cu'], run_parallel=3, verbosity=-1,
+#                      scenario_sheet_file_path='input_files/user_defined/Scenario setup.xlsx',
+#                      scenario_name_base='_TEST', supply_or_demand=None,
+#                      simulation_time=np.arange(2001,2041), baseline_sampling='clustered',
+#                      tuned_rmse_df_out_append='_split_grades',
+#                      save_mining_info=False,
+#                      n_best_scenarios=1, n_per_baseline=1)
+
+
+# Fruity scenarios:
+# to_run = ['Au', 'Al', 'Ag', 'Zn', 'Pb', 'Sn', 'Ni', 'Steel']
+to_run = ['Ta']
+# run_future_scenarios(commodities=to_run,run_parallel=3,verbosity= -1,
+#         scenario_name_base='_fruity_demand_alt',supply_or_demand='demand-alt',
+#         simulation_time=np.arange(2001,2041), baseline_sampling='clustered',
+#         years_of_increase=np.arange(1,2),tuned_rmse_df_out_append='_one_more_time',
+#         n_best_scenarios=10,n_per_baseline=5
+#     )
+# run_future_scenarios(commodities=to_run,run_parallel=2,verbosity= -1,
+#         scenario_name_base='_fruity_both_alt_TEST',supply_or_demand='both-alt',
+#         simulation_time=np.arange(2001,2041), baseline_sampling='clustered',
+#         years_of_increase=np.arange(1,2),tuned_rmse_df_out_append='_one_more_time',
+#         save_mining_info=False,
+#         n_best_scenarios=10,n_per_baseline=5
+#     )
+
+
+####### Trying out byproducts
+# from modules.integration import Integration
+# m = Integration(verbosity=1, commodity='Cu', byproduct=True)
+#
+# m.run()
+
+from modules.mining_class import miningModel
+import pandas as pd
+with warnings.catch_warnings():
+    warnings.simplefilter('error')
+    mine = miningModel(byproduct=True)
+    # mine.hyperparam['simulate_opening']=False
+    update_hyperparam = pd.read_excel('input_files/user_defined/case study data.xlsx',
+                                       index_col=0)['Co'].dropna()
+    for i in np.intersect1d(list(mine.hyperparam.keys()), update_hyperparam.index):
+        mine.hyperparam[i] = update_hyperparam[i]
+
+    # mine.byproduct_mine_models
+    # if mine.hyperparam['byproduct_pri_production_fraction'] > 0:
+    #     pri = mine.byproduct_mine_models[0]
+    # else:
+    #     pri = None
+
+
+    for y in mine.simulation_time:
+        mine.i = y
+        mine.run()
+
+    print('done')

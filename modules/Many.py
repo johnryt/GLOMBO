@@ -145,7 +145,7 @@ class Many():
         output_data_folder: str, folder where pkl files of results will be saved
         '''
         self.ready_commodities = ['Al','Au','Sn','Cu','Ni','Ag','Zn','Pb','Steel']
-        self.element_commodity_map = {'Steel':'Steel','Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungsten','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
+        self.element_commodity_map = {'Steel':'Steel','Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungstate','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
         self.commodity_element_map = dict(zip(self.element_commodity_map.values(),self.element_commodity_map.keys()))
         self.user_data_folder = 'input_files/user_defined' if user_data_folder == None else user_data_folder
         self.static_data_folder = 'input_files/static' if static_data_folder == None else static_data_folder
@@ -344,7 +344,7 @@ class Many():
 
         commodities = self.ready_commodities if commodities==None else commodities
         if os.path.exists(f'output_files/tuned_rmse_df_out{tuned_rmse_df_out_append}.csv'):
-            rmse_df_out = pd.read_csv(f'output_files/tuned_rmse_df_out{tuned_rmse_df_out_append}.csv', index_co=[0,1])
+            rmse_df_out = pd.read_csv(f'output_files/tuned_rmse_df_out{tuned_rmse_df_out_append}.csv', index_col=[0,1])
             if rmse_df_out.index.nlevels==1:
                 rmse_df_out = pd.DataFrame()
         else:
@@ -427,8 +427,9 @@ class Many():
                     'refinery_capacity_fraction_increase_mining']
             if n_params==2:
                 sensitivity_parameters = [i for i in sensitivity_parameters if i!='primary_commodity_price_elas_sd']
-            self.s.run_historical_monte_carlo(n_scenarios=n_runs,bayesian_tune=True,n_params=n_params,
-                sensitivity_parameters=sensitivity_parameters, n_jobs=n_jobs)
+            self.s.run_historical_multiple_integration_models(n_scenarios=n_runs,
+                                                              sensitivity_parameters=sensitivity_parameters,
+                                                              bayesian_tune=True, n_params=n_params, n_jobs=n_jobs)
             rmse_df = self.s.rmse_df.copy()
             ind = [j for j in self.s.updated_commodity_inputs.index if j not in rmse_df.columns and j!='pareto_3p']
             for k in ind:
@@ -1328,14 +1329,14 @@ def make_parameter_names_nice(ind):
         ' cu ',' CU ').replace(' og ',' OG ').replace('Primary price resources contained elas','Incentive tonnage response to price').replace(
         'OG elas','elasticity to ore grade').replace('Initial','Incentive').replace('Primary oge scale','Ore grade elasticity to COT distribution mean').replace(
         'Mine CU margin elas','Mine CU elasticity to TCM').replace('Mine cost tech improvements','Mine cost reduction per year').replace(
-        'Incentive opening','Incentive pool opening').replace('Mine cost price elas','Mine cost elasticity to commodity price').replace(
+        'Incentive opening probability','Fraction of viable mines that open').replace('Mine cost price elas','Mine cost elasticity to commodity price').replace(
         'Close years back','Prior years used for price prediction').replace('Reserves ratio price lag','Price lag used for incentive pool tonnage').replace(
         'Incentive ore grade decline','Incentive ore grade elasticity to COT').replace('response','elasticity').replace('Tcrc','TCRC').replace('tcrc','TCRC').replace(
         'sd','SD').replace(' elas ',' elasticity to ').replace('Direct melt elas','Direct melt fraction elas').replace('CU price elas','CU elasticity to price').replace(
         'ratio TCRC elas','ratio elasticity to TCRC').replace('ratio scrap spread elas','ratio elasticity to scrap spread').replace(
         'Refinery capacity fraction increase mining','Ref. cap. growth frac. from mine prod. growth').replace('Pri ','Primary refinery ').replace(
         'Sec CU','Secondary refinery CU').replace('Sec ratio','Refinery SR').replace('primary commodity ','').replace('Primary commodity','Refined').replace(
-        'tcm','TCM').replace(' sr',' SR').replace('CU TCRC elas','CU elasticity to TCRC')
+        'tcm','TCM').replace(' sr',' SR').replace('CU TCRC elas','CU elasticity to TCRC').replace(' dist ',' fraction in ')
                                        for i in ind]
     return dict(zip(ind,updated))
 
@@ -1669,7 +1670,7 @@ def commodity_level_feature_importance_heatmap(self, dpi=50, recalculate=True, o
              'Intensity decline per year',
              'Intensity elasticity to price',
              'Mine CU elasticity to TCM',
-             'Incentive pool opening probability',
+             'Fraction of viable mines that open',
              'Ore grade elasticity distribution mean',
              'Mine cost reduction per year',
              'TCRC elasticity to SD',
@@ -1894,7 +1895,7 @@ def run_future_scenarios(output_data_folder='output_files', user_data_folder='in
         commodities = ['Steel','Al','Au','Sn','Cu','Ni','Ag','Zn','Pb']
 
     exponent = 10
-    element_commodity_map = {'Steel':'Steel','Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungsten','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
+    element_commodity_map = {'Steel':'Steel','Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungstate','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
     col_map = dict(zip(element_commodity_map.values(),element_commodity_map.keys()))
 
     time_str = str(datetime.now()).replace(':', '_').replace('.', '_')[:21]
@@ -1999,7 +2000,7 @@ def op_run_future_scenarios(commodity, hyperparam_df, scenario_list, user_data_f
         scenario_list = [scenario_list]
     hyp_sample = hyperparam_df.copy()
 
-    element_commodity_map = {'Steel':'Steel','Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungsten','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
+    element_commodity_map = {'Steel':'Steel','Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungstate','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
     col_map = dict(zip(element_commodity_map.values(),element_commodity_map.keys()))
 
     material=commodity
@@ -2039,7 +2040,7 @@ def op_run_future_scenarios(commodity, hyperparam_df, scenario_list, user_data_f
                                 scenarios=scenarios, save_mining_info=save_mining_info,
                                 OVERWRITE=rs==0,verbosity=verbosity)
                 s.time_str = time_str
-                s.run_monte_carlo(n_scenarios=2,bayesian_tune=False, sensitivity_parameters=['Nothing, giving a string incompatible with any of the variable names'])
+                s.run_multiple_integration_models(n_scenarios=2, bayesian_tune=False, sensitivity_parameters=['Nothing, giving a string incompatible with any of the variable names'])
                 if verbosity>-1: print(f'time for batch: {str(datetime.now()-t1)}')
                 t_per_batch.loc[m*len(scenario_list)+n] = datetime.now()-t1
                 filename_list += [filename]
@@ -2062,7 +2063,7 @@ def op_run_sensitivity_fn(commodity, hyperparam_df, scenario_list, user_data_fol
     if time_str is None:
         time_str = str(datetime.now()).replace(':', '_').replace('.', '_')[:21]
 
-    element_commodity_map = {'Steel':'Steel','Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungsten','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
+    element_commodity_map = {'Steel':'Steel','Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungstate','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
     col_map = dict(zip(element_commodity_map.values(),element_commodity_map.keys()))
     element = col_map[commodity.capitalize()]
 
@@ -2090,7 +2091,7 @@ def op_run_sensitivity_fn(commodity, hyperparam_df, scenario_list, user_data_fol
                          save_mining_info=save_mining_info, trim_result_df=trim_result_df)
 
     s.time_str = time_str
-    s.run_monte_carlo(n_scenarios=2,bayesian_tune=False, sensitivity_parameters=hyperparam_df,n_jobs=abs(run_parallel))
+    s.run_multiple_integration_models(n_scenarios=2, bayesian_tune=False, sensitivity_parameters=hyperparam_df, n_jobs=abs(run_parallel))
 
 def op_run_future_scenarios_parallel(commodity, hyperparam_df, scenario_list, user_data_folder='input_files/user_defined', static_data_folder='input_files/static', scenario_name_base='_run_scenario_set', verbosity=0, run_parallel=3, simulation_time=np.arange(2019,2041), notes='', save_mining_info=False, random_state=None, time_str=None):
     """
@@ -2111,7 +2112,7 @@ def op_run_future_scenarios_parallel(commodity, hyperparam_df, scenario_list, us
 
     timer = IterTimer(n_iters=len(scenario_list)*hyp_sample.shape[1], log_times=False)
 
-    element_commodity_map = {'Steel':'Steel','Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungsten','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
+    element_commodity_map = {'Steel':'Steel','Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungstate','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
     col_map = dict(zip(element_commodity_map.values(),element_commodity_map.keys()))
 
     material=commodity
@@ -2133,7 +2134,7 @@ def run_scenario_set(m,best_ind,hyp_sample,scenario_list,material,scenario_name_
     if time_str is None:
         time_str = str(datetime.now()).replace(':', '_').replace('.', '_')[:21]
 
-    element_commodity_map = {'Steel':'Steel','Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungsten','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
+    element_commodity_map = {'Steel':'Steel','Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungstate','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
     col_map = dict(zip(element_commodity_map.values(),element_commodity_map.keys()))
     element = col_map[material.capitalize()]
 
@@ -2167,7 +2168,7 @@ def run_scenario_set(m,best_ind,hyp_sample,scenario_list,material,scenario_name_
                             scenarios=scenarios, save_mining_info=save_mining_info,
                             OVERWRITE=OVERWRITE,verbosity=verbosity)
             s.time_str = time_str
-            s.run_monte_carlo(n_scenarios=2,bayesian_tune=False, sensitivity_parameters=['Nothing, giving a string incompatible with any of the variable names'])
+            s.run_multiple_integration_models(n_scenarios=2, bayesian_tune=False, sensitivity_parameters=['Nothing, giving a string incompatible with any of the variable names'])
             if verbosity>-1: print(f'time for batch: {str(datetime.now()-t1)}')
         # timer.end_iter()
 
@@ -2669,7 +2670,7 @@ def compare_constrained_unconstrained_tuning(plot_cummin_rmse=True,log_cummin_rm
     dpi: float, dots per inch, figure resolution
     """
     ready_commodities = ['Al','Au','Sn','Cu','Ni','Ag','Zn','Pb','Steel']
-    element_commodity_map = {'Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungsten','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
+    element_commodity_map = {'Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungstate','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
     commodities = [element_commodity_map[i].lower() for i in ready_commodities]
 
     fig_dict = {}
@@ -2777,7 +2778,7 @@ def format_data_for_pca_tsne(demand_or_mining='demand', filename_base='_run_hist
     """
     mining_only = demand_or_mining=='mining'
     ready_commodities = ['Al','Au','Sn','Cu','Ni','Ag','Zn','Pb','Steel']
-    element_commodity_map = {'Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungsten','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
+    element_commodity_map = {'Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungstate','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
     all_rmse_df = pd.DataFrame()
     for material in ready_commodities:
         material = element_commodity_map[material].lower()
@@ -3949,7 +3950,7 @@ def run_all_the_future_scenarios():
         n_best_scenarios=10,n_per_baseline=5
     )
     run_future_scenarios(commodities=to_run,run_parallel=4,verbosity= -1,
-        scenario_name_base='_run_scenario_set_alt_hist_act',supply_or_demand='supply',
+        scenario_name_base='_run_scenario_set_alt_hist_act',supply_or_demand='both-alt',
         simulation_time=np.arange(2001,2041), baseline_sampling='clustered',
         years_of_increase=np.arange(1,2),tuned_rmse_df_out_append='_mcpe0',
         n_best_scenarios=10,n_per_baseline=5
@@ -3969,3 +3970,16 @@ def run_all_the_future_scenarios():
         normalize_objectives=True, constrain_previously_tuned=True,
         force_integration_historical_price=True,
         commodities=to_run, filename_modifier='_norm_histprice')
+
+def update_tuned_rmse_df_out_with_new_data(folder_name, element, tuned_rmse_df_out_append,
+                                           generalization_file_path='generalization'):
+    m = Many()
+    m.load_data(folder_name)
+    commodity = m.element_commodity_map[element].lower()
+    rmse_ph = m.rmse_df_sorted.stack().unstack(1).rename({element:commodity})
+    filename = f'{generalization_file_path}/output_files/tuned_rmse_df_out_{tuned_rmse_df_out_append}.csv'
+    tuned = pd.read_csv(filename, index_col=[0,1])
+    if commodity in tuned.index.get_level_values(0).unique():
+        tuned.drop(commodity,inplace=True)
+    rmse = pd.concat([tuned,rmse_ph]).fillna(0)
+    rmse.to_csv(filename)

@@ -111,11 +111,11 @@ class Integration():
                     float)
                 self.historical_data = self.historical_data.dropna()
                 self.historical_data.index = self.historical_data.index.astype(int)
-                self.price_adjustment_results_file_path = f'{self.user_data_folder}/price adjustment results.xlsx'
+                self.price_adjustment_results_file_path = f'{self.user_data_folder}/price adjustment results.csv'
                 if self.price_to_use != 'case study data' or 'Primary commodity price' not in self.historical_data.dropna().columns:
-                    self.historical_price_data = pd.read_excel(self.price_adjustment_results_file_path, index_col=0)
+                    self.historical_price_data = pd.read_csv(self.price_adjustment_results_file_path, index_col=0)
                     cap_mat = self.element_commodity_map[self.commodity]
-                    price_map = {'log': 'log(' + cap_mat + ')', 'diff': '∆' + cap_mat,
+                    price_map = {'log': 'log(' + cap_mat + ')', 'diff': 'diff(' + cap_mat+')',
                                  'original': cap_mat + ' original'}
                     self.historical_price_data = self.historical_price_data[price_map[self.price_to_use]].astype(
                         float).dropna().sort_index()
@@ -165,13 +165,13 @@ class Integration():
                                                                                                            how='all').astype(
                 float)
             historical_data.index = historical_data.index.astype(int)
-            if simulation_time[0] in historical_data.index and simulation_time[0] != 2019:
+            if simulation_time[0] in historical_data.index:
                 historical_data = history_file.loc[[i for i in simulation_time if i in history_file.index]]
                 if self.price_to_use != 'case study data':
-                    self.price_adjustment_results_file_path = f'{self.user_data_folder}/price adjustment results.xlsx'
-                    price_update_file = pd.read_excel(self.price_adjustment_results_file_path, index_col=0)
+                    self.price_adjustment_results_file_path = f'{self.user_data_folder}/price adjustment results.csv'
+                    price_update_file = pd.read_csv(self.price_adjustment_results_file_path, index_col=0)
                     cap_mat = self.element_commodity_map[self.commodity]
-                    price_map = {'log': 'log(' + cap_mat + ')', 'diff': '∆' + cap_mat,
+                    price_map = {'log': 'log(' + cap_mat + ')', 'diff': 'diff(' + cap_mat+')',
                                  'original': cap_mat + ' original'}
                     historical_price = price_update_file[price_map[self.price_to_use]].astype(float)
                     if not self.use_historical_price_for_mine_initialization:
@@ -1127,7 +1127,8 @@ class Integration():
                 if scenario_type == 'both' or scenario_type == 'both-alt':
                     integ = 1
                     if name[2].split('yr')[1] == '' or name[3].split('%tot')[1] == '' or name[4].split('%inc')[1] == '':
-                        print(
+                        if self.verbosity>-1:
+                            print(
                             'WARNING: scenario name does not fit BOTH format, using SCRAP SUPPLY value for SCRAP DEMAND')
                         integ = 0
                 else:

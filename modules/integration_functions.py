@@ -108,7 +108,11 @@ def create_result_df(self,integ):
         scrap_collected = scrap_collected.rename(columns=dict(zip(scrap_collected.columns,['Old scrap '+j.lower() for j in scrap_collected.columns])))
         collection = collection.rename(columns=dict(zip(collection.columns,['Collection rate '+j.lower() for j in collection.columns])))
         scraps = pd.concat([old_scrap,new_scrap],axis=1,keys=['Old scrap collection','New scrap collection'])
-        results = pd.concat([results,collection,scrap_collected,scraps],axis=1)
+        sector_demand = integ.demand.demand.groupby(level=1,axis=1).sum()
+        sector_demand = sector_demand.rename(columns=dict(zip(sector_demand.columns,[i+' demand, global' for i in sector_demand.columns])))
+        sector_demand_china = integ.demand.demand.loc[:,'China']
+        sector_demand_china = sector_demand_china.rename(columns=dict(zip(sector_demand_china.columns,[i+' demand, China' for i in sector_demand_china.columns])))
+        results = pd.concat([results,collection,scrap_collected,scraps,sector_demand,sector_demand_china],axis=1)
         time_index = np.arange(self.simulation_time[0]-self.changing_base_parameters_series['presimulate_n_years'],self.simulation_time[-1]+1)
         time_index = [i for i in results.index if i in time_index]
         if self.trim_result_df: results = results.loc[time_index]
@@ -181,7 +185,7 @@ class Sensitivity():
         gives the number of scenarios to run per parameter, and param_scale
         (from 1-param_scale to 1+param_scale) gives the multiplier for
         the parameters included
-    - run_monte_carlo: takes in a list of sensitivity_parameters, where
+    - run_multiple_integration_models: takes in a list of sensitivity_parameters, where
         if any of the strings in that list are in any of the hyperparameters,
         that hyperparameter will be subject to random generation, with values
         between 0 and 1. The demand parameters sector_specific_dematerialization_tech_growth,
@@ -201,7 +205,7 @@ class Sensitivity():
         historical_sim_check_demand to ensure our algorithm converged correctly,
         plotting the simulated demands, the best simulated demand, and historical
         demand. Also plots the RMSE vs the demand parameters.
-    - run_historical_monte_carlo: similar to the run_monte_carlo function, but also
+    - run_historical_monte_carlo: similar to the run_multiple_integration_models function, but also
         requires the presence of a
 
     The update_changing_base_parameters_series function could be a source of error,
@@ -273,7 +277,7 @@ class Sensitivity():
         ---------------
         pkl_filename: str, path/filename ending in pkl for where you want to save the results of the
             sensitivity you are about to run
-        user_data_folder: str, path to where case study data.xlsx and price adjustment results.xlsx are saved
+        user_data_folder: str, path to where case study data.xlsx and price adjustment results.csv are saved
         static_data_folder: str, path to where additional do-not-edit input files are saved
         output_data_folder: str, path to where model outputs will be saved
         changing_base_parameters_series: pd.series.Series | str. If string, must correspond with a column and
@@ -323,7 +327,7 @@ class Sensitivity():
             If doing a Bayesian tuning sensitivity, needs to be set True
         random_state: int, can be anything, but have been using the default for all scenarios for
             reproducibility
-        incentive_opening_probability_fraction_zero: float, used in the run_monte_carlo() method to determine the
+        incentive_opening_probability_fraction_zero: float, used in the run_multiple_integration_models() method to determine the
             fraction of incentive_opening_probability values generated that are then set to zero, since setting
             to zero allows the model to determine the incentive_opening_probability value endogenously, picking
             the mean value from the most recent n simulations where incentive tuning used incentive_opening_probability
@@ -354,7 +358,7 @@ class Sensitivity():
         dont_constrain_demand: bool, if True, makes it so that the constrain_previously_tuned above does not apply
             to the parameters associated with demand
         price_to_use: str within the set [log,original,diff,case study data]. The first three refer to
-            the respective columns in the data/price adjustment results.xlsx excel file, for the selected commodity.
+            the respective columns in the data/price adjustment results.csv file, for the selected commodity.
             Using case study data causes the system to use the values from the case study data.xlsx excel sheet
             corresponding with the selected commodity. Using the other three values overwrites this input value,
             with the purpose being to have more historical price data prior to the historical simulation time
@@ -383,7 +387,7 @@ class Sensitivity():
         self.static_data_folder = 'input_files/static' if static_data_folder is None else static_data_folder
         self.output_data_folder = 'output_files' if output_data_folder is None else output_data_folder
         self.case_study_data_file_path = f'{self.user_data_folder}/case study data.xlsx'
-        self.price_adjustment_results_file_path = f'{self.user_data_folder}/price adjustment results.xlsx'
+        self.price_adjustment_results_file_path = f'{self.user_data_folder}/price adjustment results.csv'
         self.price_to_use = price_to_use
         self.force_integration_historical_price = force_integration_historical_price
         self.use_alternative_gold_volumes = use_alternative_gold_volumes
@@ -391,7 +395,7 @@ class Sensitivity():
         self.constrain_tuning_to_sign = constrain_tuning_to_sign
         self.constrain_previously_tuned = constrain_previously_tuned
         self.dont_constrain_demand = dont_constrain_demand
-        self.element_commodity_map = {'Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungsten','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
+        self.element_commodity_map = {'Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungstate','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
         self.update_changing_base_parameters_series()
 
         self.byproduct = byproduct
@@ -541,6 +545,7 @@ class Sensitivity():
 
 
             self.mod.run()
+            self.save_scenario_results([self.mod])
             big_df = pd.DataFrame(np.nan,index=[
                 'version','notes','hyperparam','mining.hyperparam','refine.hyperparam','demand.hyperparam','results','mine_data'
             ],columns=[])
@@ -593,9 +598,9 @@ class Sensitivity():
             if simulation_time[0] in historical_data.index and simulation_time[0]!=2019:
                 historical_data = history_file.loc[[i for i in simulation_time if i in history_file.index]]
                 if self.price_to_use!='case study data':
-                    price_update_file = pd.read_excel(self.price_adjustment_results_file_path,index_col=0)
+                    price_update_file = pd.read_csv(self.price_adjustment_results_file_path,index_col=0)
                     cap_mat = self.element_commodity_map[self.material]
-                    price_map = {'log':'log('+cap_mat+')',  'diff':'∆'+cap_mat,  'original':cap_mat+' original'}
+                    price_map = {'log':'log('+cap_mat+')',  'diff':'diff('+cap_mat+')',  'original':cap_mat+' original'}
                     historical_price = price_update_file[price_map[self.price_to_use]].astype(float)
                     if not self.use_historical_price_for_mine_initialization:
                         historical_price = historical_price.loc[
@@ -775,7 +780,7 @@ class Sensitivity():
 
                 self.check_run_append()
 
-    def run_monte_carlo(self, n_scenarios, random_state=220530,sensitivity_parameters=['elas','response','growth','improvements','refinery_capacity_fraction_increase_mining','incentive_opening_probability'],bayesian_tune=False,n_params=1, n_jobs=3, surrogate_model='GBRT'):
+    def run_multiple_integration_models(self, n_scenarios, random_state=220530, sensitivity_parameters=['elas', 'response', 'growth', 'improvements', 'refinery_capacity_fraction_increase_mining', 'incentive_opening_probability'], bayesian_tune=False, n_params=1, n_jobs=3, surrogate_model='GBRT'):
 
         '''
         Runs a Monte Carlo based approach to the sensitivity, where all the sensitivity_parameters
@@ -1246,9 +1251,10 @@ class Sensitivity():
                 self.all_row_results.to_csv(f'{self.output_data_results_folder}/results_row{add_string}.csv')
 
             # Saving rmse_df
-            rmse_df_ph = self.rmse_df.copy()
-            rmse_df_ph.index = pd.MultiIndex.from_tuples(rmse_df_ph.index)
-            rmse_df_ph.to_csv(f'{self.output_data_results_folder}/rmse_df.csv')
+            if hasattr(self,'rmse_df'):
+                rmse_df_ph = self.rmse_df.copy()
+                rmse_df_ph.index = pd.MultiIndex.from_tuples(rmse_df_ph.index)
+                rmse_df_ph.to_csv(f'{self.output_data_results_folder}/rmse_df.csv')
 
             # Saving hyperparameters
             if not hasattr(self,'all_hyperparam'):
@@ -1811,10 +1817,10 @@ class Sensitivity():
         fig.tight_layout()
         plt.show()
 
-    def run_historical_monte_carlo(self, n_scenarios, random_state=220621,sensitivity_parameters=['elas','incentive_opening_probability','improvements','refinery_capacity_fraction_increase_mining'],bayesian_tune=False, n_params=2, n_jobs=3, surrogate_model='ET', log=True):
+    def run_historical_multiple_integration_models(self, n_scenarios, random_state=220621,sensitivity_parameters=['elas','incentive_opening_probability','improvements','refinery_capacity_fraction_increase_mining'],bayesian_tune=False, n_params=2, n_jobs=3, surrogate_model='ET', log=True):
 
         '''
-        Wrapper to run the run_monte_carlo() method on historical data
+        Wrapper to run the run_multiple_integration_models() method on historical data
 
         Always runs an initial scenario with default parameters, so remember to skip that one
         when looking at the resulting pickle file
@@ -1871,10 +1877,6 @@ class Sensitivity():
         else:
             raise ValueError('need to use a string input to changing_base_parameters_series in Sensitivity initialization to run this method')
 
-        # demand_params = ['sector_specific_dematerialization_tech_growth','sector_specific_price_response','region_specific_price_response','intensity_response_to_gdp']
-        # for i in demand_params:
-        #     self.changing_base_parameters_series.loc[i] = best_params[i]
-
         for i in [j for j in best_params.index if 'pareto' not in j]:
             self.changing_base_parameters_series.loc[i] = best_params[i]
 
@@ -1884,13 +1886,13 @@ class Sensitivity():
         self.n_jobs = n_jobs
         self.log = log
 
-        self.run_monte_carlo(n_scenarios=n_scenarios,
-                             random_state=random_state,
-                             sensitivity_parameters=sensitivity_parameters,
-                             bayesian_tune=bayesian_tune,
-                             n_params=n_params,
-                             surrogate_model=surrogate_model,
-                             n_jobs=n_jobs)
+        self.run_multiple_integration_models(n_scenarios=n_scenarios,
+                                             random_state=random_state,
+                                             sensitivity_parameters=sensitivity_parameters,
+                                             bayesian_tune=bayesian_tune,
+                                             n_params=n_params,
+                                             surrogate_model=surrogate_model,
+                                             n_jobs=n_jobs)
 
     def create_potential_append(self,big_df,notes,reg_results,initialize=False, mod=None):
         '''
@@ -2072,7 +2074,7 @@ def grade_predict(ci):
 def generate_commodity_inputs(commodity_inputs, random_state):
     '''
     Used for generating random \"materials\" that can then be run
-    through a Monte Carlo using the run_monte_carlo() method.
+    through a Monte Carlo using the run_multiple_integration_models() method.
     '''
     ci = commodity_inputs.copy()
     if 'Byproduct status' in ci.index:

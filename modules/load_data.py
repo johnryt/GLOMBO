@@ -165,7 +165,7 @@ class ResavePklAsCsv:
             os.mkdir(self.scenario_folder)
 
         # Create data_element subfolder
-        new_folder = f'data_{self.element}'
+        new_folder = f'results_{self.element}'
         self.data_folder = f'{self.scenario_folder}/{new_folder}'
         if not os.path.exists(self.data_folder):
             os.mkdir(self.data_folder)

@@ -42,4 +42,4 @@ for i in np.arange(7,n_scen):
         warnings.simplefilter('error')
         OVERWRITE = OVERWRITE if i==0 else False
         s = Sensitivity(pkl_filename=filename,data_folder='data',changing_base_parameters_series=ci,OVERWRITE=OVERWRITE,notes='Big sensitivity, scrap demand shock, no collection rate price response',scenarios=scenarios,verbosity=0)
-        s.run_monte_carlo(n_scenarios=2,random_state=220615+i)
+        s.run_multiple_integration_models(n_scenarios=2, random_state=220615 + i)

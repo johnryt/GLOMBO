@@ -161,7 +161,7 @@ class Sensitivity():
         gives the number of scenarios to run per parameter, and param_scale
         (from 1-param_scale to 1+param_scale) gives the multiplier for
         the parameters included
-    - run_monte_carlo: takes in a list of sensitivity_parameters, where
+    - run_multiple_integration_models: takes in a list of sensitivity_parameters, where
         if any of the strings in that list are in any of the hyperparameters,
         that hyperparameter will be subject to random generation, with values
         between 0 and 1. The demand parameters sector_specific_dematerialization_tech_growth,
@@ -181,7 +181,7 @@ class Sensitivity():
         historical_sim_check_demand to ensure our algorithm converged correctly,
         plotting the simulated demands, the best simulated demand, and historical
         demand. Also plots the RMSE vs the demand parameters.
-    - run_historical_monte_carlo: similar to the run_monte_carlo function, but also
+    - run_historical_monte_carlo: similar to the run_multiple_integration_models function, but also
         requires the presence of a
 
     The update_changing_base_parameters_series function could be a source of error,
@@ -266,7 +266,7 @@ class Sensitivity():
         param_scale: float, used in conjunction with params_to_change and n_per_param in the run() simple
             sensitivity function, where whichever parameter is selected will be scaled by +/- param_scale
         scenarios: list or array, including only strings. The contents of each string determine the scrap
-            supply or demand changes that will be implemented. See the decode_scrap_scenario_name() function
+            supply or demand changes that will be implemented. See the decode_scenario_name() function
             in integration.py (Integration class) for more detail, but some are given here:
                 takes the form 00_11_22_33_44
                 where:
@@ -286,7 +286,7 @@ class Sensitivity():
             If doing a Bayesian tuning sensitivity, needs to be set True
         random_state: int, can be anything, but have been using the default for all scenarios for
             reproducibility
-        incentive_opening_probability_fraction_zero: used in the run_monte_carlo() method to determine the
+        incentive_opening_probability_fraction_zero: used in the run_multiple_integration_models() method to determine the
             fraction of incentive_opening_probability values generated that are then set to zero, since setting
             to zero allows the model to determine the incentive_opening_probability value endogenously, picking
             the mean value from the most recent n simulations where incentive tuning used incentive_opening_probability
@@ -1032,7 +1032,7 @@ class Sensitivity():
                                    sensitivity_parameters=['elas','incentive_opening_probability','improvements','refinery_capacity_fraction_increase_mining'],
                                    bayesian_tune=False, n_params=2, n_jobs=3, surrogate_model='ET', log=True):
         '''
-        Wrapper to run the run_monte_carlo() method on historical data
+        Wrapper to run the run_multiple_integration_models() method on historical data
 
         Always runs an initial scenario with default parameters, so remember to skip that one
         when looking at the resulting pickle file
@@ -1228,7 +1228,7 @@ def grade_predict(ci):
 def generate_commodity_inputs(commodity_inputs, random_state):
     '''
     Used for generating random \"materials\" that can then be run
-    through a Monte Carlo using the run_monte_carlo() method.
+    through a Monte Carlo using the run_multiple_integration_models() method.
     '''
     ci = commodity_inputs.copy()
     if 'Byproduct status' in ci.index:

@@ -439,7 +439,8 @@ class Sensitivity():
         year_strings = [str(i) for i in np.arange(2023,2051)]
         if self.pkl_filename[:4] not in year_strings:
             if not hasattr(self, 'time_str'):
-                self.time_str = str(datetime.now()).replace(':', '_').replace('.', '_')[:21]
+                self.time_str = str(datetime.now()).replace(':', '_').replace('.', '_')\
+                                    .replace('-','_').replace(' ','_')[:21]
             self.scenario_id = self.pkl_filename.split('.pkl')[0]
             if '/' in self.scenario_id:
                 self.scenario_id = self.scenario_id.split('/')[-1]
@@ -448,7 +449,7 @@ class Sensitivity():
                 if commodity_string in self.scenario_id:
                     self.scenario_id = self.scenario_id.replace(commodity_string,'')
             if self.material in self.scenario_id:
-                self.scenario_id = self.scenario_id.replace(self.material),''
+                self.scenario_id = self.scenario_id.replace(self.material,'')
             if self.scenario_id[0] == '_':
                 self.scenario_id = self.scenario_id[1:]
             main_folder_str = f'{self.time_str}_{self.scenario_id}'
@@ -1051,7 +1052,7 @@ class Sensitivity():
                 from_here, to_here = k*self.n_jobs, (k+1)*self.n_jobs
                 if to_here > len(mods):
                     to_here = len(mods)
-                if from_here <= len(mods):
+                if from_here < len(mods):
                     if type(next_parameters) == int:
                         next_params = next_parameters
                     else:
@@ -1166,7 +1167,7 @@ class Sensitivity():
         '''
         #output is of the form [(score_0, new_params_0, potential_append_0), (score_1, new_params_1, potential_append_0), ...]
         if True: # TODO fix parallelism for windows
-            output = Parallel(n_jobs=self.n_jobs)(delayed(self.skopt_run_score)(
+            output = Parallel(n_jobs=min(self.n_jobs,len(scenario_numbers)))(delayed(self.skopt_run_score)(
                 mod, param_series, s_n, bayesian_tune, n_params
             ) for mod, param_series, s_n in zip(mods, new_param_series_all, scenario_numbers))
         else:

@@ -70,6 +70,10 @@ class Integration():
         self.force_integration_historical_price = force_integration_historical_price
         self.use_historical_price_for_mine_initialization = use_historical_price_for_mine_initialization
 
+        self.collection_rate_price_response = True
+        self.direct_melt_price_response = True
+        self.secondary_refined_price_response = True
+
         self.demand = demandModel(user_data_folder=self.user_data_folder, static_data_folder=self.static_data_folder,
                                   simulation_time=simulation_time, verbosity=verbosity)
         self.refine = refiningModel(simulation_time=simulation_time, verbosity=verbosity)
@@ -422,6 +426,7 @@ class Integration():
         hyperparameters.loc['sector_specific_price_response', 'Value'] = -0.06
         hyperparameters.loc['region_specific_price_response', 'Value'] = -0.1
         hyperparameters.loc['intensity_response_to_gdp', 'Value'] = 0.69
+        hyperparameters.loc['maximum_collection_rate','Value'] = 0.95
 
         self.hyperparam = hyperparameters.copy()
 
@@ -549,12 +554,12 @@ class Integration():
             if not self.direct_melt_alt:  # trying an alternative method, seems like adding more each year is not quite in line with how the market would work. Instead, it should be that once someone increases demand, their new demand is implicit within the rest of the market so we do not need to keep adding it each year
                 multiplier_array = np.append(np.repeat(1, shock_start - self.simulation_time[0] + 1), np.append(
                     np.repeat(1 + (self.direct_melt_pct_change_tot - 1) / self.direct_melt_duration,
-                              self.direct_melt_duration),
+                              int(self.direct_melt_duration)),
                     [self.direct_melt_pct_change_inc for j in
                      np.arange(1, np.sum(self.simulation_time >= shock_start) - self.direct_melt_duration)]))
             else:
                 multiplier_array = np.append(np.repeat(1, shock_start - self.simulation_time[0]), np.append(
-                    np.linspace(1, self.direct_melt_pct_change_tot, self.direct_melt_duration + 1),
+                    np.linspace(1, self.direct_melt_pct_change_tot, int(self.direct_melt_duration) + 1),
                     [self.direct_melt_pct_change_tot * self.direct_melt_pct_change_inc ** j for j in
                      np.arange(1, np.sum(self.simulation_time >= shock_start) - self.direct_melt_duration)]))
             if self.direct_melt_price_response == False:
@@ -597,12 +602,12 @@ class Integration():
             if not self.secondary_refined_alt:
                 multiplier_array = np.append(np.repeat(1, shock_start - self.simulation_time[0] + 1), np.append(
                     np.repeat(1 + (self.secondary_refined_pct_change_tot - 1) / self.secondary_refined_duration,
-                              self.secondary_refined_duration),
+                              int(self.secondary_refined_duration)),
                     [self.secondary_refined_pct_change_inc for j in
                      np.arange(1, np.sum(self.simulation_time >= shock_start) - self.secondary_refined_duration)]))
             else:
                 multiplier_array = np.append(np.repeat(1, shock_start - self.simulation_time[0]), np.append(
-                    np.linspace(1, self.secondary_refined_pct_change_tot, self.secondary_refined_duration + 1),
+                    np.linspace(1, self.secondary_refined_pct_change_tot, int(self.secondary_refined_duration) + 1),
                     [self.secondary_refined_pct_change_tot * self.secondary_refined_pct_change_inc ** j for j in
                      np.arange(1, np.sum(self.simulation_time >= shock_start) - self.secondary_refined_duration)]))
             if self.secondary_refined_price_response == False:
@@ -744,6 +749,7 @@ class Integration():
         self.demand.collection_rate = self.collection_rate.copy()
         self.demand.run()
         self.additional_scrap = self.demand.additional_scrap.copy()
+        self.collection_rate = self.demand.collection_rate.copy()
         # print(self.additional_scrap.loc[2018:])
 
     def run_refine(self):
@@ -1085,8 +1091,8 @@ class Integration():
         secondary_refined_duration = 0
         secondary_refined_pct_change_tot = 0
         secondary_refined_pct_change_inc = 0
-        self.secondary_refined_alt = False
-        self.direct_melt_alt = False
+        self.secondary_refined_alt = True
+        self.direct_melt_alt = True
 
         if type(scenario_name) != str:
             self.scenario_update_df = scenario_name.copy()
@@ -1243,15 +1249,42 @@ class Integration():
             for v in update_this_year.index.get_level_values(0).unique():
                 value = update_this_year.loc[v] if update_this_year.index.nlevels == 1 \
                     else update_this_year.loc[v].loc[i]
-                iterator = [self.hyperparam]+[getattr(self, at).hyperparam for at in ['mining', 'refine', 'demand']
+                if type(value)==float and round(value,0)==value:
+                    value = int(value)
+                iterator = [self]+[getattr(self, at) for at in ['mining', 'refine', 'demand']
                                               if hasattr(self, at)]
-                for it, q in enumerate(iterator):
+                for it, obj in enumerate(iterator):
+                    q = obj.hyperparam
                     if type(q) == dict:
                         if v in q:
                             q[v] = value
                     else:
                         if v in q.index or it==0:
                             q.loc[v, 'Value'] = value
-
-                if self.verbosity>-10:
+                    if hasattr(obj,v):
+                        setattr(obj,v,value)
+                if self.verbosity>1:
                     print(i, v, value) # TODO remove this after confirmed working
+
+            if 'collection_rate_price_response' in update_this_year.index.get_level_values(0).unique()\
+                    and self.collection_rate_price_response==False and self.i>self.simulation_time[0]:
+                shock_start = self.scrap_shock_start  # shock start is the year the scenario would have started originally (first change in 2020 for 2019 shock_start)
+                if not self.direct_melt_alt:  # trying an alternative method, seems like adding more each year is not quite in line with how the market would work. Instead, it should be that once someone increases demand, their new demand is implicit within the rest of the market so we do not need to keep adding it each year
+                    multiplier_array = np.append(np.repeat(1, shock_start - self.simulation_time[0] + 1), np.append(
+                        np.repeat(1 + (self.collection_rate_pct_change_tot - 1) / self.collection_rate_duration,
+                                  int(self.collection_rate_duration)),
+                        [self.collection_rate_pct_change_inc for j in
+                         np.arange(1, np.sum(self.simulation_time >= shock_start) - self.collection_rate_duration)]))
+                else:
+                    collect_rate_tot = self.collection_rate_pct_change_tot
+                    if collect_rate_tot==0: collect_rate_tot=1
+                    collect_rate_inc = self.collection_rate_pct_change_inc
+                    if collect_rate_inc == 0: collect_rate_inc = 1
+                    multiplier_array = np.append(np.repeat(1, shock_start - self.simulation_time[0]), np.append(
+                        np.linspace(1, collect_rate_tot, int(self.collection_rate_duration) + 1),
+                        [collect_rate_tot * collect_rate_inc ** j for j in
+                         np.arange(1, np.sum(self.simulation_time >= shock_start) - self.collection_rate_duration)]))
+                for yr, mul in zip(self.simulation_time, multiplier_array):
+                    if yr>=self.i:
+                        self.collection_rate.loc[idx[yr, :], :] = self.collection_rate.loc[idx[shock_start, :], :].rename({shock_start:yr})*mul
+                self.collection_rate[self.collection_rate>self.hyperparam['Value']['maximum_collection_rate']] = self.hyperparam['Value']['maximum_collection_rate']

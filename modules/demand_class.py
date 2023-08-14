@@ -399,11 +399,11 @@ class demandModel():
             shock_start=self.scrap_shock_start # shock start is the year the scenario would have started originally (first change in 2020 for 2019 shock_start)
             if not self.direct_melt_alt:# trying an alternative method, seems like adding more each year is not quite in line with how the market would work. Instead, it should be that once someone increases demand, their new demand is implicit within the rest of the market so we do not need to keep adding it each year
                 multiplier_array = np.append(np.repeat(1,shock_start-self.simulation_time[0]+1),np.append(
-                    np.repeat(1+(self.collection_rate_pct_change_tot-1)/self.collection_rate_duration,self.collection_rate_duration),
+                    np.repeat(1+(self.collection_rate_pct_change_tot-1)/self.collection_rate_duration,int(self.collection_rate_duration)),
                     [self.collection_rate_pct_change_inc for j in np.arange(1,np.sum(self.simulation_time>=shock_start)-self.collection_rate_duration)]))
             else:
                 multiplier_array = np.append(np.repeat(1,shock_start-self.simulation_time[0]),np.append(
-                    np.linspace(1,self.collection_rate_pct_change_tot,self.collection_rate_duration+1),
+                    np.linspace(1,self.collection_rate_pct_change_tot,int(self.collection_rate_duration)+1),
                     [self.collection_rate_pct_change_tot*self.collection_rate_pct_change_inc**j for j in np.arange(1,np.sum(self.simulation_time>=shock_start)-self.collection_rate_duration)]))
             self.multiplier_array = multiplier_array
             if self.collection_rate_price_response==False:

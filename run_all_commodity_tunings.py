@@ -309,6 +309,32 @@ if platform=='win32':
 #                      save_mining_info=False,
 #                      n_best_scenarios=1, n_per_baseline=1)
 
+# run_future_scenarios(commodities=['Cu'], run_parallel=3, verbosity=-1,
+#                      scenario_sheet_file_path='input_files/user_defined/Scenario setup.xlsx',
+#                      scenario_name_base='_displacement', supply_or_demand=None,
+#                      simulation_time=np.arange(2001,2041), baseline_sampling='clustered',
+#                      tuned_rmse_df_out_append='_split_grades',
+#                      save_mining_info=False,
+#                      n_best_scenarios=25, n_per_baseline=50)
+
+def resave_data(output_data_results_folder):
+    files = [i for i in os.listdir(output_data_results_folder) if
+             '.csv' in i and '_' in i and i.split('_')[-1].split('.')[0].isnumeric()]
+    unique_pre = np.unique([i.replace(i.split('_')[-1], '') for i in files])
+    data_dict = dict(zip(unique_pre, [pd.DataFrame() for _ in unique_pre]))
+    for file in files:
+        header = [0,1] if 'mine_data' in file else 0
+        data = pd.read_csv(f'{output_data_results_folder}/{file}', index_col=[0, 1], header=header)
+        clipped = file.replace(file.split('_')[-1], '')
+        previous = data_dict[clipped]
+        data_dict[clipped] = pd.concat([previous, data]).sort_index()
+    for clipped in data_dict:
+        file = clipped[:-1]
+        data_dict[clipped].to_csv(f'{output_data_results_folder}/{file}.csv')
+    for file in files:
+        os.remove(f'{output_data_results_folder}/{file}')
+
+resave_data('/Users/johnryter/Dropbox (MIT)/John MIT/Research/generalizationOutside/generalization/output_files/Simulation/2023-06-11 21_36_39_6_displacement/results_Cu')
 
 # Fruity scenarios:
 # to_run = ['Au', 'Al', 'Ag', 'Zn', 'Pb', 'Sn', 'Ni', 'Steel']
@@ -334,26 +360,27 @@ to_run = ['Ta']
 #
 # m.run()
 
-from modules.mining_class import miningModel
-import pandas as pd
-with warnings.catch_warnings():
-    warnings.simplefilter('error')
-    mine = miningModel(byproduct=True)
-    # mine.hyperparam['simulate_opening']=False
-    update_hyperparam = pd.read_excel('input_files/user_defined/case study data.xlsx',
-                                       index_col=0)['Co'].dropna()
-    for i in np.intersect1d(list(mine.hyperparam.keys()), update_hyperparam.index):
-        mine.hyperparam[i] = update_hyperparam[i]
-
-    # mine.byproduct_mine_models
-    # if mine.hyperparam['byproduct_pri_production_fraction'] > 0:
-    #     pri = mine.byproduct_mine_models[0]
-    # else:
-    #     pri = None
-
-
-    for y in mine.simulation_time:
-        mine.i = y
-        mine.run()
-
-    print('done')
+# Testing mining
+# from modules.mining_class import miningModel
+# import pandas as pd
+# with warnings.catch_warnings():
+#     warnings.simplefilter('error')
+#     mine = miningModel(byproduct=True)
+#     # mine.hyperparam['simulate_opening']=False
+#     update_hyperparam = pd.read_excel('input_files/user_defined/case study data.xlsx',
+#                                        index_col=0)['Co'].dropna()
+#     for i in np.intersect1d(list(mine.hyperparam.keys()), update_hyperparam.index):
+#         mine.hyperparam[i] = update_hyperparam[i]
+#
+#     # mine.byproduct_mine_models
+#     # if mine.hyperparam['byproduct_pri_production_fraction'] > 0:
+#     #     pri = mine.byproduct_mine_models[0]
+#     # else:
+#     #     pri = None
+#
+#
+#     for y in mine.simulation_time:
+#         mine.i = y
+#         mine.run()
+#
+#     print('done')

@@ -3,9 +3,9 @@ import numpy as np
 import warnings
 
 scrap_parameters = ['scenario_type',
-                    'collection_rate_price_response',
-                    'direct_melt_price_response',
-                    'secondary_refined_price_response',
+                    # 'collection_rate_price_response',
+                    # 'direct_melt_price_response',
+                    # 'secondary_refined_price_response',
                     'collection_rate_duration',
                     'collection_rate_pct_change_tot',
                     'collection_rate_pct_change_inc',
@@ -106,8 +106,8 @@ def scenario_update_scrap_handling(self):
     self.secondary_refined_duration = 0
     self.secondary_refined_pct_change_tot = 0
     self.secondary_refined_pct_change_inc = 0
-    self.secondary_refined_alt = False
-    self.direct_melt_alt = False
+    self.secondary_refined_alt = True
+    self.direct_melt_alt = True
 
     update = check_year_consistency(self, update)
     update = check_duration_variables(self, update)

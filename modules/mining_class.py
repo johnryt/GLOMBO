@@ -9,6 +9,7 @@ from datetime import datetime
 from copy import deepcopy, copy
 from IPython.display import display
 from random import sample, choices, seed
+import warnings
 
 from sys import exit
 
@@ -128,10 +129,9 @@ class miningModel:
     docstring
     """
 
-    def __init__(self, simulation_time=np.arange(2019, 2041), hyperparam=0, byproduct=False, verbosity=0, price_change_yoy=0):
+    def __init__(self, simulation_time=np.arange(2019, 2041), hyperparam=0, verbosity=0, price_change_yoy=0):
         """"""
         self.simulation_time = simulation_time
-        self.byproduct = byproduct
         self.verbosity = verbosity
         self.initialize_hyperparams(hyperparam)
         self.hyperparam['primary_recovery_rate_shuffle_param'] = 1
@@ -160,7 +160,7 @@ class miningModel:
     #         self.simulate_history_bool = self.hyperparam['simulate_history_bool']
     #         self.incentive_tuning_option = self.hyperparam['incentive_tuning_option']
 
-    def plot_relevant_params(self, include=0, exclude=[], plot_recovery_grade_correlation=True, plot_minesite_supply_curve=True, plot_margin_supply_curve=True, plot_primary_minesite_supply_curve=False, plot_primary_margin_supply_curve=False, log_scale=False, dontplot=False, byproduct=False):
+    def plot_relevant_params(self, include=0, exclude=[], plot_recovery_grade_correlation=True, plot_minesite_supply_curve=True, plot_margin_supply_curve=True, plot_primary_minesite_supply_curve=False, plot_primary_margin_supply_curve=False, log_scale=False, dontplot=False):
         """
         docstring
         """
@@ -170,27 +170,12 @@ class miningModel:
         else:
             cols = [i for i in include if mines.dtypes[i] not in [object, str]]
 
-        byprod_labels = {0: 'Primary', 1: 'Host 1', 2: 'Host 2', 3: 'Host 3'}
-        if self.byproduct:
-            mines['byprod int'] = mines.copy()['Byproduct ID']
-            mines['Byproduct ID'] = mines['Byproduct ID'].replace(byprod_labels)
-
         fig, ax = easy_subplots(len(cols) + plot_recovery_grade_correlation + plot_minesite_supply_curve +
                                 plot_margin_supply_curve + plot_primary_minesite_supply_curve + plot_primary_margin_supply_curve)
         for i, a in zip(cols, ax):
             colors = ['#d7191c', '#fdae61', '#abd9e9', '#2c7bb6']
-            if self.byproduct and i not in ['Byproduct ID', 'Byproduct cash flow ($M)']:
-                colors = [colors[int(i)] for i in mines['byprod int'].unique()]
-                sns.histplot(mines, x=i, hue='Byproduct ID', palette=colors, bins=50, log_scale=log_scale, ax=a)
-                a.set(title=i.replace('Primary', 'Host'))
-            elif self.byproduct and i == 'Byproduct cash flow ($M)':
-                colors = [colors[int(i)] for i in mines.dropna()['byprod int'].unique()]
-                sns.histplot(mines.dropna(), x=i, hue='Byproduct ID', palette=colors, bins=50, log_scale=log_scale,
-                             ax=a)
-                a.set(title=i)
-            else:
-                mines[i].replace({'Primary': 0, 'Host 1': 1, 'Host 2': 2, 'Host 3': 3}).plot.hist(ax=a, title=i.replace(
-                    'Primary', 'Host'), bins=50)
+            mines[i].replace({'Primary': 0}).plot.hist(ax=a, title=i.replace(
+                'Primary', 'Host'), bins=50)
             if i == 'Recovery rate (%)' and self.hyperparam['primary_rr_negative']:
                 a.text(0.05, 0.95, 'Reset to default,\nnegative values found.\nPrice and grade too low.',
                        va='top', ha='left', transform=a.transAxes)
@@ -213,8 +198,7 @@ class miningModel:
                               xlabel='Cumulative production (kt)',
                               ylim=ylim, ylabel='Total cash cost (USD/t)',
                               title='Total cash cost supply curve\nMean: {:.2f}'.format(
-                                  mines['Total cash cost (USD/t)'].mean()),
-                              byproduct=byproduct)
+                                  mines['Total cash cost (USD/t)'].mean()))
 
         if plot_margin_supply_curve:
             a = ax[-(plot_margin_supply_curve)]
@@ -224,37 +208,8 @@ class miningModel:
                               width_scale=1.2, line_only=True, ax=a, xlabel='Cumulative production (kt)',
                               ylim=ylim, ylabel='Total cash margin (USD/t)',
                               title='Cash margin supply curve\nMean: {:.2f}'.format(
-                                  mines['Total cash margin (USD/t)'].mean()),
-                              byproduct=byproduct)
+                                  mines['Total cash margin (USD/t)'].mean()))
             a.plot([0, mines['Production (kt)'].sum()], [0, 0], 'k')
-
-        if plot_primary_minesite_supply_curve and self.byproduct:
-            a = ax[-(plot_minesite_supply_curve + plot_margin_supply_curve + plot_primary_minesite_supply_curve)]
-            minn, maxx = mines['Primary Minesite cost (USD/t)'].min(), mines['Primary Minesite cost (USD/t)'].max()
-            minn, maxx = min(minn, mines['Primary Commodity price (USD/t)'].min()), max(maxx, mines[
-                'Primary Commodity price (USD/t)'].max())
-            supply_curve_plot(mines, 'Primary Production (kt)', ['Primary Total cash cost (USD/t)'],
-                              price_col='Primary Commodity price (USD/t)', width_scale=1.2, line_only=True, ax=a,
-                              xlabel='Cumulative production (kt)',
-                              ylim=(minn - (maxx - minn) / 10, maxx + (maxx - minn) / 10),
-                              ylabel='Total cash cost (USD/t)',
-                              title='Host total cash cost supply curve\nMean: {:.2f}'.format(
-                                  mines['Primary Total cash cost (USD/t)'].mean()),
-                              byproduct=byproduct)
-
-        if plot_primary_margin_supply_curve and self.byproduct:
-            a = ax[-(
-                        plot_minesite_supply_curve + plot_margin_supply_curve + plot_primary_minesite_supply_curve + plot_primary_margin_supply_curve)]
-            minn, maxx = mines['Primary Total cash margin (USD/t)'].min(), mines[
-                'Primary Total cash margin (USD/t)'].max()
-            supply_curve_plot(mines, 'Primary Production (kt)', ['Primary Total cash margin (USD/t)'],
-                              width_scale=1.2, line_only=True, ax=a, xlabel='Cumulative production (kt)',
-                              ylim=(minn - (maxx - minn) / 10, maxx + (maxx - minn) / 10),
-                              ylabel='Total cash margin (USD/t)',
-                              title='Host cash margin supply curve\nMean: {:.2f}'.format(
-                                  mines['Primary Total cash margin (USD/t)'].mean()),
-                              byproduct=byproduct)
-            a.plot([0, mines['Primary Production (kt)'].sum()], [0, 0], 'k')
 
         fig.tight_layout()
         if dontplot:
@@ -273,7 +228,6 @@ class miningModel:
 
             if 'parameters for operating mine pool generation, mass':
                 hyperparameters['verbosity'] = self.verbosity
-                hyperparameters['byproduct'] = self.byproduct
                 hyperparameters['primary_production'] = 1  # kt
                 hyperparameters['primary_production_mean'] = 0.001  # kt
                 hyperparameters['primary_production_var'] = 1
@@ -381,9 +335,6 @@ class miningModel:
                 hyperparameters['ramp_up_cu'] = 0.4  # currently replacing this s.t. linear ramp up to 100% instead
                 hyperparameters['ramp_up_years'] = 3
                 hyperparameters['ramp_up_exponent'] = 1
-                hyperparameters['byproduct_ramp_down_rr'] = 0.4
-                hyperparameters['byproduct_ramp_up_rr'] = 0.4
-                hyperparameters['byproduct_ramp_up_years'] = 1
                 hyperparameters['close_price_method'] = 'probabilistic'
                 hyperparameters['close_years_back'] = 3
                 hyperparameters['close_probability_split_max'] = 0.3
@@ -415,172 +366,13 @@ class miningModel:
 
                 hyperparameters['primary_commodity_price_option'] = 'constant'
                 hyperparameter_notes['primary_commodity_price_option'] = 'str, how commodity prices are meant to evolve. Options: constant, yoy, step, input. Input requires setting the variable primary_price_series after model initialization'
-                hyperparameters['byproduct_commodity_price_option'] = 'constant'
-                hyperparameter_notes['byproduct_commodity_price_option'] = 'str, how commodity prices are meant to evolve. Options: constant, yoy, step, input. Input requires setting the variable byproduct_price_series after model initialization'
                 hyperparameters['primary_commodity_price_change'] = 10
                 hyperparameter_notes['primary_commodity_price_change'] = 'percentage value, percent change in commodity price year-over-year (yoy) or in its one-year step.'
-                hyperparameters['byproduct_commodity_price_change'] = 10
-                hyperparameter_notes['byproduct_commodity_price_change'] = 'percentage value, percent change in commodity price year-over-year (yoy) or in its one-year step.'
                 #             hyperparameters['',['Value','Notes']] = np.array([],dtype='object')
                 #             hyperparameters['',['Value','Notes']] = np.array([],dtype='object')
                 #             hyperparameters['',['Value','Notes']] = np.array([],dtype='object')
 
                 hyperparameters['random_state'] = 20220208
-
-            if 'parameters for byproducts' and self.byproduct:
-                if 'parameters for byproduct production and grade':
-                    hyperparameters['byproduct_pri_production_fraction'] = 0.1
-                    hyperparameters['byproduct_host3_production_fraction'] = 0
-                    hyperparameters['byproduct_host2_production_fraction'] = 0.4
-                    hyperparameters['byproduct_host1_production_fraction'] = 1 - np.sum([hyperparameters[i] for i in ['byproduct_pri_production_fraction','byproduct_host3_production_fraction','byproduct_host2_production_fraction']])
-
-                    hyperparameters['byproduct0_rr0'] = 80
-                    hyperparameters['byproduct1_rr0'] = 80
-                    hyperparameters['byproduct1_mine_rrmax'] = 90
-                    hyperparameters['byproduct1_mine_tcm0'] = 25
-                    hyperparameters['byproduct2_rr0'] = 85
-                    hyperparameters['byproduct2_mine_rrmax'] = 95
-                    hyperparameters['byproduct2_mine_tcm0'] = 25
-                    hyperparameters['byproduct3_rr0'] = 80
-                    hyperparameters['byproduct3_mine_rrmax'] = 95
-                    hyperparameters['byproduct3_mine_tcm0'] = 25
-                    hyperparameters['byproduct_rr_margin_elas'] = 0.01
-                    hyperparameter_notes['byproduct0_rr0'] = 'byproduct median recovery rate at simulation start'
-                    hyperparameter_notes['byproduct1_rr0'] = 'byproduct median recovery rate at simulation start'
-                    hyperparameter_notes['byproduct1_mine_rrmax'] = 'byproduct median recovery rate at simulation start'
-                    hyperparameter_notes['byproduct1_mine_tcm0'] = 'byproduct median total cash margin at simulation start'
-                    hyperparameter_notes['byproduct2_rr0'] = 'byproduct median recovery rate at simulation start'
-                    hyperparameter_notes['byproduct2_mine_rrmax'] = 'byproduct median recovery rate at simulation start'
-                    hyperparameter_notes['byproduct2_mine_tcm0'] = 'byproduct median total cash margin at simulation start'
-                    hyperparameter_notes['byproduct3_rr0'] = 'byproduct median recovery rate at simulation start'
-                    hyperparameter_notes['byproduct3_mine_rrmax'] = 'byproduct median recovery rate at simulation start'
-                    hyperparameter_notes['byproduct3_mine_tcm0'] = 'byproduct median total cash margin at simulation start'
-                    hyperparameter_notes['byproduct_rr_margin_elas'] = 'byproduct recovery rate elasticity to total cash margin'
-
-                    hyperparameters['byproduct_production'] = 4  # kt
-                    hyperparameters['byproduct_production_mean'] = 0.03  # kt
-                    hyperparameters['byproduct_production_var'] = 0.5
-                    hyperparameters['byproduct_production_distribution'] = 'lognorm'
-
-                    hyperparameters['byproduct_host1_grade_ratio_mean'] = 20
-                    hyperparameters['byproduct_host2_grade_ratio_mean'] = 2
-                    hyperparameters['byproduct_host3_grade_ratio_mean'] = 10
-                    hyperparameters['byproduct_host1_grade_ratio_var'] = 1
-                    hyperparameters['byproduct_host2_grade_ratio_var'] = 1
-                    hyperparameters['byproduct_host3_grade_ratio_var'] = 1
-                    hyperparameters['byproduct_host1_grade_ratio_distribution'] = 'norm'
-                    hyperparameters['byproduct_host2_grade_ratio_distribution'] = 'norm'
-                    hyperparameters['byproduct_host3_grade_ratio_distribution'] = 'norm'
-
-                    hyperparameters['byproduct_pri_ore_grade_mean'] = 0.1
-                    hyperparameters['byproduct_host1_ore_grade_mean'] = 0.1
-                    hyperparameters['byproduct_host2_ore_grade_mean'] = 0.1
-                    hyperparameters['byproduct_host3_ore_grade_mean'] = 0.1
-                    hyperparameters['byproduct_pri_ore_grade_var'] = 0.3
-                    hyperparameters['byproduct_host1_ore_grade_var'] = 0.3
-                    hyperparameters['byproduct_host2_ore_grade_var'] = 0.3
-                    hyperparameters['byproduct_host3_ore_grade_var'] = 0.3
-                    hyperparameters['byproduct_pri_ore_grade_distribution'] = 'lognorm'
-                    hyperparameters['byproduct_host1_ore_grade_distribution'] = 'lognorm'
-                    hyperparameters['byproduct_host2_ore_grade_distribution'] = 'lognorm'
-                    hyperparameters['byproduct_host3_ore_grade_distribution'] = 'lognorm'
-
-                    hyperparameters['byproduct_pri_sxew_fraction'] = 0.5
-                    hyperparameters['byproduct_host1_sxew_fraction'] = 0.2
-                    hyperparameters['byproduct_host2_sxew_fraction'] = 0.5
-                    hyperparameters['byproduct_host3_sxew_fraction'] = 0.5
-
-                    hyperparameters['byproduct_pri_cu_mean'] = 0.85
-                    hyperparameters['byproduct_host1_cu_mean'] = 0.85
-                    hyperparameters['byproduct_host2_cu_mean'] = 0.85
-                    hyperparameters['byproduct_host3_cu_mean'] = 0.85
-                    hyperparameters['byproduct_pri_cu_var'] = 0.06
-                    hyperparameters['byproduct_host1_cu_var'] = 0.06
-                    hyperparameters['byproduct_host2_cu_var'] = 0.06
-                    hyperparameters['byproduct_host3_cu_var'] = 0.06
-                    hyperparameters['byproduct_pri_cu_distribution'] = 'lognorm'
-                    hyperparameters['byproduct_host1_cu_distribution'] = 'lognorm'
-                    hyperparameters['byproduct_host2_cu_distribution'] = 'lognorm'
-                    hyperparameters['byproduct_host3_cu_distribution'] = 'lognorm'
-
-                    hyperparameters['byproduct_pri_payable_percent_mean'] = 0.63
-                    hyperparameters['byproduct_host1_payable_percent_mean'] = 0.63
-                    hyperparameters['byproduct_host2_payable_percent_mean'] = 0.63
-                    hyperparameters['byproduct_host3_payable_percent_mean'] = 0.63
-                    hyperparameters['byproduct_pri_payable_percent_var'] = 1.83
-                    hyperparameters['byproduct_host1_payable_percent_var'] = 1.83
-                    hyperparameters['byproduct_host2_payable_percent_var'] = 1.83
-                    hyperparameters['byproduct_host3_payable_percent_var'] = 1.83
-                    hyperparameters['byproduct_pri_payable_percent_distribution'] = 'weibull_min'
-                    hyperparameters['byproduct_host1_payable_percent_distribution'] = 'weibull_min'
-                    hyperparameters['byproduct_host2_payable_percent_distribution'] = 'weibull_min'
-                    hyperparameters['byproduct_host3_payable_percent_distribution'] = 'weibull_min'
-
-                    hyperparameters['byproduct_pri_rr_default_mean'] = 13.996
-                    hyperparameters['byproduct_host1_rr_default_mean'] = 13.996
-                    hyperparameters['byproduct_host2_rr_default_mean'] = 13.996
-                    hyperparameters['byproduct_host3_rr_default_mean'] = 13.996
-                    hyperparameters['byproduct_pri_rr_default_var'] = 0.675
-                    hyperparameters['byproduct_host1_rr_default_var'] = 0.675
-                    hyperparameters['byproduct_host2_rr_default_var'] = 0.675
-                    hyperparameters['byproduct_host3_rr_default_var'] = 0.675
-                    hyperparameters['byproduct_pri_rr_default_distribution'] = 'lognorm'
-                    hyperparameters['byproduct_host1_rr_default_distribution'] = 'lognorm'
-                    hyperparameters['byproduct_host2_rr_default_distribution'] = 'lognorm'
-                    hyperparameters['byproduct_host3_rr_default_distribution'] = 'lognorm'
-
-                if 'byproduct costs':
-                    hyperparameters['byproduct_commodity_price'] = 1000  # USD/t
-                    hyperparameters['byproduct_minesite_cost_mean'] = 0  # USD/t
-                    hyperparameters['byproduct_minesite_cost_var'] = 1
-                    hyperparameters['byproduct_minesite_cost_distribution'] = 'lognorm'
-
-                    hyperparameters['byproduct_host1_commodity_price'] = 2000
-                    hyperparameters['byproduct_host2_commodity_price'] = 3000
-                    hyperparameters['byproduct_host3_commodity_price'] = 1000
-
-                    hyperparameters['byproduct_host1_minesite_cost_ratio_mean'] = 20
-                    hyperparameters['byproduct_host2_minesite_cost_ratio_mean'] = 2
-                    hyperparameters['byproduct_host3_minesite_cost_ratio_mean'] = 10
-                    hyperparameters['byproduct_host1_minesite_cost_ratio_var'] = 1
-                    hyperparameters['byproduct_host2_minesite_cost_ratio_var'] = 1
-                    hyperparameters['byproduct_host3_minesite_cost_ratio_var'] = 1
-                    hyperparameters['byproduct_host1_minesite_cost_ratio_distribution'] = 'norm'
-                    hyperparameters['byproduct_host2_minesite_cost_ratio_distribution'] = 'norm'
-                    hyperparameters['byproduct_host3_minesite_cost_ratio_distribution'] = 'norm'
-
-                    hyperparameters['byproduct_host1_sus_capex_ratio_mean'] = 20
-                    hyperparameters['byproduct_host2_sus_capex_ratio_mean'] = 2
-                    hyperparameters['byproduct_host3_sus_capex_ratio_mean'] = 10
-                    hyperparameters['byproduct_host1_sus_capex_ratio_var'] = 1
-                    hyperparameters['byproduct_host2_sus_capex_ratio_var'] = 1
-                    hyperparameters['byproduct_host3_sus_capex_ratio_var'] = 1
-                    hyperparameters['byproduct_host1_sus_capex_ratio_distribution'] = 'norm'
-                    hyperparameters['byproduct_host2_sus_capex_ratio_distribution'] = 'norm'
-                    hyperparameters['byproduct_host3_sus_capex_ratio_distribution'] = 'norm'
-
-                    hyperparameters['byproduct_host1_tcrc_ratio_mean'] = 20
-                    hyperparameters['byproduct_host2_tcrc_ratio_mean'] = 2
-                    hyperparameters['byproduct_host3_tcrc_ratio_mean'] = 10
-                    hyperparameters['byproduct_host1_tcrc_ratio_var'] = 1
-                    hyperparameters['byproduct_host2_tcrc_ratio_var'] = 1
-                    hyperparameters['byproduct_host3_tcrc_ratio_var'] = 1
-                    hyperparameters['byproduct_host1_tcrc_ratio_distribution'] = 'norm'
-                    hyperparameters['byproduct_host2_tcrc_ratio_distribution'] = 'norm'
-                    hyperparameters['byproduct_host3_tcrc_ratio_distribution'] = 'norm'
-
-                    hyperparameters['byproduct_pri_minerisk_mean'] = 9.4  # value for copper → ranges from 4 to 20, cutoffs are enforced
-                    hyperparameters['byproduct_host1_minerisk_mean'] = 9.4
-                    hyperparameters['byproduct_host2_minerisk_mean'] = 9.4
-                    hyperparameters['byproduct_host3_minerisk_mean'] = 9.4
-                    hyperparameters['byproduct_pri_minerisk_var'] = 1.35
-                    hyperparameters['byproduct_host1_minerisk_var'] = 1.35
-                    hyperparameters['byproduct_host2_minerisk_var'] = 1.35
-                    hyperparameters['byproduct_host3_minerisk_var'] = 1.35
-                    hyperparameters['byproduct_pri_minerisk_distribution'] = 'norm'
-                    hyperparameters['byproduct_host1_minerisk_distribution'] = 'norm'
-                    hyperparameters['byproduct_host2_minerisk_distribution'] = 'norm'
-                    hyperparameters['byproduct_host3_minerisk_distribution'] = 'norm'
 
             if 'parameters for the incentive pool':
                 hyperparameters['simulate_opening'] = True
@@ -601,10 +393,8 @@ class miningModel:
                 hyperparameter_notes['incentive_use_resources_contained_series'] = 'whether to use the incentive_resources_contained_series series for determining incentive pool size or to use the incentive_subsample_series series for the number of mines in each year'
                 hyperparameters['primary_price_resources_contained_elas'] = 0.5
                 hyperparameter_notes['primary_price_resources_contained_elas'] = 'percent increase in the resources conatined/incentive pool size when price rises by 1%'
-                hyperparameters['byproduct_price_resources_contained_elas'] = 0.05
-                hyperparameter_notes['byproduct_price_resources_contained_elas'] = 'percent increase in the resources conatined/incentive pool size when price rises by 1%'
                 hyperparameters['reserves_ratio_price_lag'] = 5
-                hyperparameter_notes['reserves_ratio_price_lag'] = 'lag on price change price(t-lag)/price(t-lag-1) used for informing incentive pool size change, paired with resources_contained_elas_primary_price (and byproduct if byproduct==True)'
+                hyperparameter_notes['reserves_ratio_price_lag'] = 'lag on price change price(t-lag)/price(t-lag-1) used for informing incentive pool size change, paired with resources_contained_elas_primary_price'
                 hyperparameters['incentive_subsample_series'] = pd.Series(hyperparameters['incentive_subsample_init'], self.simulation_time)
                 hyperparameter_notes['incentive_subsample_series'] = 'series with number of mines to select for subsample used for the incentive pool'
                 hyperparameters['incentive_perturbation_percent'] = 10
@@ -790,31 +580,13 @@ class miningModel:
             if not hyperparameters['opening_flag_for_cu0']:
                 hyperparameters['mine_cu0'] = mines['Capacity utilization'].median()
                 hyperparameters['mine_tcm0'] = mines['Total cash margin (USD/t)'].median()
-            if self.byproduct:
-                byp = 'Byproduct ' if 'Byproduct Total cash margin (USD/t)' in mines.columns else ''
-                for i in np.arange(1, 4):
-                    hyperparameters['byproduct' + str(i) + '_rr0'] = mines.loc[
-                        (mines['Byproduct ID'] == i) & (
-                                    mines[byp + 'Total cash margin (USD/t)'] > 0), 'Recovery rate (%)'].median()
-                    hyperparameters['byproduct' + str(i) + '_mine_tcm0'] = mines.loc[
-                        (mines['Byproduct ID'] == i) & (mines[
-                                                            byp + 'Total cash margin (USD/t)'] > 0), byp + 'Total cash margin (USD/t)'].median()
+            
         else:
             mines = innie.copy()
             if not hyperparameters['opening_flag_for_cu0']:
                 hyperparameters['mine_cu0'] = np.median(mines.capacity_utilization)
                 hyperparameters['mine_tcm0'] = np.median(mines.total_cash_margin_usdpt)
-            if self.byproduct:
-                byp = 'byproduct_' if 'byproduct_total_cash_margin_usdpt' in mines.columns else ''
-                for i in np.arange(1, 4):
-                    hyperparameters['byproduct' + str(i) + '_rr0'] = np.median(mines.recovery_rate_pct[(
-                                                                                                                                mines.byproduct_id == i) & (
-                                                                                                                                getattr(
-                                                                                                                                    mines,
-                                                                                                                                    byp + 'total_cash_margin_usdpt') > 0)])
-                    hyperparameters['byproduct' + str(i) + '_mine_tcm0'] = np.median(
-                        getattr(mines, byp + 'total_cash_margin_usdpt')[
-                            (mines['Byproduct ID'] == i) & (getattr(mines, byp + 'total_cash_margin_usdpt') > 0)])
+            
 
         # if hyperparameters['commodity']!='Au':
         #     hyperparameters['annual_reserves_ratio_with_initial_production_const','Value'] = 8
@@ -1005,9 +777,7 @@ class miningModel:
         hyperparameters = self.hyperparam
         hyperparameters['production_frac_region5'] = 1 - np.sum([hyperparameters[i] for i in ['production_frac_region1','production_frac_region2','production_frac_region3','production_frac_region4']])
         hyperparameters['minetype_prod_frac_placer'] = 1 - np.sum([hyperparameters[i] for i in ['minetype_prod_frac_underground','minetype_prod_frac_openpit','minetype_prod_frac_tailings','minetype_prod_frac_stockpile']])
-        if self.byproduct:
-            hyperparameters['byproduct_host1_production_fraction'] = 1 - np.sum([hyperparameters[i] for i in ['byproduct_pri_production_fraction','byproduct_host3_production_fraction','byproduct_host2_production_fraction']])
-
+        
 
         hyperparameters = self.add_minesite_cost_regression_params(hyperparameters)
         hyperparameters['primary_tcm_flag'] = 'tcm' in hyperparameters[
@@ -1373,17 +1143,16 @@ class miningModel:
         elif param == 'Sustaining CAPEX ($M)':
             #         log(sCAPEX) = alpha + beta*log(commodity price) + gamma*log(head grade)
             #            + delta*log(capacity) + epsilon*placer + theta*stockpile + eta*tailings + rho*underground + zeta*sxew
-            prefix = 'Primary ' if self.byproduct else ''
             log_minesite_cost = \
                 h['primary_scapex_alpha'] + \
-                h['primary_scapex_beta'] * np.log(mines[prefix + 'Commodity price (USD/t)']) + \
-                h['primary_scapex_gamma'] * np.log(mines[prefix + 'Head grade (%)']) + \
+                h['primary_scapex_beta'] * np.log(mines['Commodity price (USD/t)']) + \
+                h['primary_scapex_gamma'] * np.log(mines['Head grade (%)']) + \
                 h['primary_scapex_delta'] * np.log(mines['Capacity (kt)']) + \
                 h['primary_scapex_epsilon'] * (mines['Mine type string'] == 'placer') + \
                 h['primary_scapex_theta'] * (mines['Mine type string'] == 'stockpile') + \
                 h['primary_scapex_eta'] * (mines['Mine type string'] == 'tailings') + \
                 h['primary_scapex_rho'] * (mines['Mine type string'] == 'underground') + \
-                h['primary_scapex_zeta'] * (mines[prefix + 'Payable percent (%)'] == 100)
+                h['primary_scapex_zeta'] * (mines['Payable percent (%)'] == 100)
             if 'norm' in h['primary_scapex_regression2use']:
                 mines[param] = np.exp(log_minesite_cost) * mines['Capacity (kt)']
             else:
@@ -1391,47 +1160,37 @@ class miningModel:
         elif param == 'Development CAPEX ($M)':
             #         log(sCAPEX) = alpha + beta*log(commodity price) + gamma*log(head grade)
             #            + delta*log(capacity) + epsilon*placer + theta*stockpile + eta*tailings + rho*underground + zeta*sxew
-            prefix = 'Primary ' if self.byproduct else ''
-            if 'Primary Commodity price (USD/t)' in mines.columns:
-                pri = mines.loc[mines['Byproduct ID'] != 0].index
-            else:
-                pri = mines.index
             log_minesite_cost = \
                 h['primary_dcapex_alpha'] + \
-                h['primary_dcapex_beta'] * np.log(mines.loc[pri, prefix + 'Commodity price (USD/t)'].astype(float)) + \
-                h['primary_dcapex_gamma'] * np.log(mines.loc[pri, prefix + 'Head grade (%)'].astype(float)) + \
-                h['primary_dcapex_delta'] * np.log(mines.loc[pri, 'Capacity (kt)'].astype(float)) + \
-                h['primary_dcapex_epsilon'] * (mines.loc[pri, 'Mine type string'] == 'placer') + \
-                h['primary_dcapex_theta'] * (mines.loc[pri, 'Mine type string'] == 'stockpile') + \
-                h['primary_dcapex_eta'] * (mines.loc[pri, 'Mine type string'] == 'tailings') + \
-                h['primary_dcapex_rho'] * (mines.loc[pri, 'Mine type string'] == 'underground') + \
-                h['primary_dcapex_zeta'] * (mines.loc[pri, prefix + 'Payable percent (%)'] == 100)
+                h['primary_dcapex_beta'] * np.log(mines['Commodity price (USD/t)'].astype(float)) + \
+                h['primary_dcapex_gamma'] * np.log(mines['Head grade (%)'].astype(float)) + \
+                h['primary_dcapex_delta'] * np.log(mines['Capacity (kt)'].astype(float)) + \
+                h['primary_dcapex_epsilon'] * (mines['Mine type string'] == 'placer') + \
+                h['primary_dcapex_theta'] * (mines['Mine type string'] == 'stockpile') + \
+                h['primary_dcapex_eta'] * (mines['Mine type string'] == 'tailings') + \
+                h['primary_dcapex_rho'] * (mines['Mine type string'] == 'underground') + \
+                h['primary_dcapex_zeta'] * (mines['Payable percent (%)'] == 100)
             if 'norm' in h['primary_dcapex_regression2use']:
-                mines.loc[pri, param] = np.exp(log_minesite_cost) * mines.loc[pri, 'Capacity (kt)'].astype(float)
+                mines.loc[:,param] = np.exp(log_minesite_cost) * mines['Capacity (kt)'].astype(float)
             else:
-                mines.loc[pri, param] = np.exp(log_minesite_cost)
+                mines.loc[:,param] = np.exp(log_minesite_cost)
         elif param == 'Overhead ($M)':
             #             log(Overhead ($M)) = alpha + beta*log(commodity price) + gamma*log(head grade)
             #                 + delta*log(ore treated) + epsilon*placer + theta*stockpile + eta*tailings + rho*underground + zeta*sxew
-            prefix = 'Primary ' if self.byproduct else ''
-            if 'Primary Commodity price (USD/t)' in mines.columns:
-                pri = mines.loc[mines['Byproduct ID'] != 0].index
-            else:
-                pri = mines.index
             log_minesite_cost = \
                 h['primary_overhead_alpha'] + \
-                h['primary_overhead_beta'] * np.log(mines.loc[pri, prefix + 'Commodity price (USD/t)'].astype(float)) + \
-                h['primary_overhead_gamma'] * np.log(mines.loc[pri, prefix + 'Head grade (%)'].astype(float)) + \
-                h['primary_overhead_delta'] * np.log(mines.loc[pri, 'Ore treated (kt)'].astype(float)) + \
-                h['primary_overhead_epsilon'] * (mines.loc[pri, 'Mine type string'] == 'placer') + \
-                h['primary_overhead_theta'] * (mines.loc[pri, 'Mine type string'] == 'stockpile') + \
-                h['primary_overhead_eta'] * (mines.loc[pri, 'Mine type string'] == 'tailings') + \
-                h['primary_overhead_rho'] * (mines.loc[pri, 'Mine type string'] == 'underground') + \
-                h['primary_overhead_zeta'] * (mines.loc[pri, prefix + 'Payable percent (%)'] == 100)
+                h['primary_overhead_beta'] * np.log(mines['Commodity price (USD/t)'].astype(float)) + \
+                h['primary_overhead_gamma'] * np.log(mines['Head grade (%)'].astype(float)) + \
+                h['primary_overhead_delta'] * np.log(mines['Ore treated (kt)'].astype(float)) + \
+                h['primary_overhead_epsilon'] * (mines['Mine type string'] == 'placer') + \
+                h['primary_overhead_theta'] * (mines['Mine type string'] == 'stockpile') + \
+                h['primary_overhead_eta'] * (mines['Mine type string'] == 'tailings') + \
+                h['primary_overhead_rho'] * (mines['Mine type string'] == 'underground') + \
+                h['primary_overhead_zeta'] * (mines['Payable percent (%)'] == 100)
             if 'norm' in h['primary_overhead_regression2use']:
-                mines.loc[pri, param] = np.exp(log_minesite_cost) * mines.loc[pri, 'Capacity (kt)'].astype(float)
+                mines.loc[param] = np.exp(log_minesite_cost) * mines.loc['Capacity (kt)'].astype(float)
             else:
-                mines.loc[pri, param] = np.exp(log_minesite_cost)
+                mines.loc[param] = np.exp(log_minesite_cost)
 
         self.mines = mines.copy()
 
@@ -1512,8 +1271,6 @@ class miningModel:
                 self.rs_add+=1
                 i += 1
                 print('mines with OGE>0, this is a problem')
-        if self.byproduct:
-            self.mines['Primary OGE'] = self.mines['OGE']
 
     def generate_annual_costs(self):
         h = self.hyperparam
@@ -1537,285 +1294,7 @@ class miningModel:
         if self.not_in_loaded_mines('Development CAPEX ($M)'):
             mines['Development CAPEX ($M)'] = 0
 
-        if h['byproduct']:
-            mines['Byproduct Total cash margin (USD/t)'] = mines['Total cash margin (USD/t)']
-            mines['Byproduct Cash flow ($M)'] = 1e-3 * mines['Paid metal production (kt)'] * mines[
-                'Byproduct Total cash margin (USD/t)'] - mines['Sustaining CAPEX ($M)']
         self.mines = mines.copy()
-
-    def generate_byproduct_mines(self):
-        if self.byproduct:
-            h = self.hyperparam
-            mines = pd.DataFrame()
-            pri = miningModel(byproduct=True)
-            pri.hyperparam = self.hyperparam.copy()
-            pri.update_hyperparams_from_byproducts('byproduct')
-            pri.update_hyperparams_from_byproducts('byproduct_pri')
-            pri.byproduct = False
-
-            if pri.hyperparam['byproduct_pri_production_fraction'] > 0:
-                pri.initialize_mines()
-                pri.mines['Byproduct ID'] = 0
-                self.pri = pri
-                byproduct_mine_models = [pri]
-                byproduct_mines = [pri.mines]
-            else:
-                byproduct_mine_models = []
-                byproduct_mines = []
-            for param in np.unique([i.split('_')[1] for i in h if 'host' in i]):
-                if self.hyperparam['byproduct_' + param + '_production_fraction'] != 0:
-                    byproduct_model = self.generate_byproduct_params(param)
-                    byproduct_mine_models += [byproduct_model]
-                    byproduct_mines += [byproduct_model.mines]
-            self.byproduct_mine_models = byproduct_mine_models
-            self.mines = pd.concat(byproduct_mines).reset_index(drop=True)
-            self.update_operation_hyperparams()
-
-    def update_hyperparams_from_byproducts(self, param):
-        h = self.hyperparam
-        if param == 'byproduct':
-            replace_h = [i for i in h if 'byproduct' in i and 'host' not in i and i != 'byproduct']
-        else:
-            replace_h = [i for i in h if param in i]
-        replace_h_split = [i.split(param)[1] for i in replace_h]
-        to_replace_h = [i for i in h if 'primary' in i and i.split('primary')[1] in replace_h_split]
-        if param == 'byproduct':
-            matched = [(i, j) for i in replace_h for j in to_replace_h if
-                            '_'.join(i.split('_')[1:]) == '_'.join(j.split('_')[1:])]
-        else:
-            matched = [(i, j) for i in replace_h for j in to_replace_h if
-                            '_'.join(i.split('_')[2:]) == '_'.join(j.split('_')[1:])]
-        for i,j in matched:
-            if j in matched:
-                self.hyperparam[j] = self.hyperparam[i]
-        # self.hyperparam[to_replace_h] = self.hyperparam.drop(to_replace_h).rename(matched).loc[
-        #     to_replace_h]
-        if self.verbosity > 1:
-            display(matched)
-
-    def generate_byproduct_params(self, param):
-        ''' '''
-        self.generate_byproduct_production(param)
-        self.generate_byproduct_costs(param)
-        self.correct_byproduct_production(param)
-        self.generate_byproduct_total_costs(param)
-        return getattr(self, param)
-
-    def generate_byproduct_production(self, param):
-        by_param = 'byproduct_' + param
-        host1 = miningModel(byproduct=True, simulation_time=self.simulation_time, verbosity=self.verbosity)
-        h = self.hyperparam
-        host1.hyperparam = h
-        h = h
-        host1_params = [i for i in h if param in i]
-        host1.update_hyperparams_from_byproducts(by_param)
-
-        production_fraction = h[by_param + '_production_fraction']
-
-        by_dist = getattr(stats, h['byproduct_production_distribution'])
-        prod_mean_frac = h['byproduct_production_mean'] / h['byproduct_production']
-        prod_var_frac = h['byproduct_production_var'] / h['byproduct_production']
-
-        host1_prod_frac_dist = by_dist.rvs(
-            loc=0,
-            scale=prod_mean_frac,
-            s=prod_var_frac,
-            size=int(np.ceil(2 / prod_mean_frac)),
-            random_state=self.hyperparam['random_state']+self.rs_add)
-        self.rs_add+=1
-        mines = pd.DataFrame(
-            host1_prod_frac_dist,
-            index=np.arange(0, int(np.ceil(2 / prod_mean_frac))),
-            columns=['Production fraction'])
-        mines = mines.loc[mines['Production fraction'].cumsum() < production_fraction, :]
-        mines.loc[mines.index[-1] + 1, 'Production fraction'] = production_fraction - mines['Production fraction'].sum()
-        mines['Production (kt)'] = mines['Production fraction'] * h['byproduct_production']
-
-        regions = [i for i in h if 'production_frac_region' in i]
-        region_fractions = [h[i] for i in h if 'production_frac_region' in i]
-        mines['Region'] = np.nan
-        for i in regions:
-            int_version = int(i.replace('production_frac_region', ''))
-            ind = mines.loc[(mines.Region.isna()), 'Production fraction'].cumsum()
-            ind = ind.loc[ind < h[i] * production_fraction].index
-            mines.loc[ind, 'Region'] = int_version
-        mines.loc[mines.Region.isna(), 'Region'] = int(
-            h[regions].astype(float).idxmax().replace('production_frac_region', ''))
-
-#         regions = [i for i in hyperparam if 'production_frac_region' in i]
-#         region_fractions = [hyperparam[i] for i in hyperparam if 'production_frac_region' in i]
-# int(
-#             regions[np.argmax(region_fractions)].replace('production_frac_region', ''))
-
-        host1.mines = mines.copy()
-        host1.assign_mine_types()
-        host1.mines['Risk indicator'] = host1.values_from_dist(by_param + '_minerisk').round(0)
-        host1.mines['Head grade (%)'] = host1.values_from_dist(by_param + '_ore_grade')
-
-        mines = host1.mines.copy()
-        mines['Capacity utilization'] = host1.values_from_dist(by_param + '_cu')
-        mines['Recovery rate (%)'] = 100. - host1.values_from_dist(by_param + '_rr_default')
-        mines['Production capacity (kt)'] = mines[['Capacity utilization', 'Production (kt)']].product(axis=1)
-        mines['Production capacity fraction'] = mines['Production capacity (kt)'] / mines[
-            'Production capacity (kt)'].sum()
-        mines['Payable percent (%)'] = 100. - host1.values_from_dist(by_param + '_payable_percent')
-        mines.loc[mines['Production fraction'].cumsum() <= h[by_param + '_sxew_fraction'], 'Payable percent (%)'] = 100.
-        if h[by_param+'_sxew_fraction']==1: mines['Payable percent (%)']=100.
-        mines.loc[mines['Payable percent (%)']==100,'TCRC (USD/t)'] = 0
-        mines['Commodity price (USD/t)'] = h[by_param + '_commodity_price']
-
-        host1.mines = mines.copy()
-        setattr(self, param, host1)
-
-    def generate_byproduct_costs(self, param):
-        by_param = 'byproduct_' + param
-        host1 = getattr(self, param)
-        h = host1.hyperparam
-
-        host1.generate_total_cash_margin()
-        mines = host1.mines.copy()
-
-        mines['Byproduct ID'] = int(param.split('host')[1])
-        host1.mines = mines.copy()
-
-        pri_main = [i for i in h if 'byproduct' in i and 'host' not in i and 'pri' not in i and i != 'byproduct']
-        setattr(self, param, host1)
-        return host1
-
-    def correct_byproduct_production(self, param):
-        by_param = 'byproduct_' + param
-        host1 = getattr(self, param)
-        h = host1.hyperparam
-        mines = host1.mines.copy()
-
-        primary_relocate = ['Commodity price (USD/t)', 'Recovery rate (%)', 'Head grade (%)', 'Payable percent (%)',
-                            'Minesite cost (USD/t)', 'Total cash margin (USD/t)', 'Total cash cost (USD/t)',
-                            'TCRC (USD/t)']
-        for i in primary_relocate:
-            mines['Primary ' + i] = mines[i]
-            if i == 'Commodity price (USD/t)':
-                mines['Primary ' + i] = mines[i].replace(0, h['byproduct_commodity_price'])
-        mines['Commodity price (USD/t)'] = h['byproduct_commodity_price']
-        for j in np.arange(0, 4):
-            mines.loc[mines['Byproduct ID'] == j, 'Recovery rate (%)'] = h['byproduct' + str(j) + '_rr0']
-        mines['Byproduct grade ratio'] = host1.values_from_dist(by_param + '_grade_ratio')
-        mines.loc[mines['Byproduct grade ratio'] < 0, 'Byproduct grade ratio'] = mines['Byproduct grade ratio'].sample(
-            n=(mines['Byproduct grade ratio'] < 0).sum(), random_state=self.hyperparam['random_state']+self.rs_add).values
-        self.rs_add+=1
-        mines['Head grade (%)'] = mines['Primary Head grade (%)'] / mines['Byproduct grade ratio']
-        mines['Payable percent (%)'] = 100.
-
-        mines['Byproduct minesite cost ratio'] = host1.values_from_dist(by_param + '_minesite_cost_ratio')
-        mines.loc[mines['Byproduct minesite cost ratio'] < 0, 'Byproduct minesite cost ratio'] = mines[
-            'Byproduct minesite cost ratio'].sample(n=(mines['Byproduct minesite cost ratio'] < 0).sum(),
-                                                    random_state=self.hyperparam['random_state']+self.rs_add).values
-        self.rs_add+=1
-        mines['Minesite cost (USD/t)'] = mines['Primary Minesite cost (USD/t)'] / mines[
-            'Byproduct minesite cost ratio']
-
-        mines['Byproduct TCRC ratio'] = host1.values_from_dist(by_param + '_tcrc_ratio')
-        mines.loc[mines['Byproduct TCRC ratio'] < 0, 'Byproduct TCRC ratio'] = mines['Byproduct TCRC ratio'].sample(
-            n=(mines['Byproduct TCRC ratio'] < 0).sum(), random_state=self.hyperparam['random_state']+self.rs_add).values
-        self.rs_add+=1
-        mines['TCRC (USD/t)'] = mines['Primary TCRC (USD/t)'] / mines['Byproduct TCRC ratio']
-
-        #         mines['Total cash cost (USD/t)'] = mines[['TCRC (USD/t)','Minesite cost (USD/t)']].sum(axis=1)
-        #         mines['Total cash margin (USD/t)'] = mines['Commodity price (USD/t)'] - mines['Total cash cost (USD/t)']
-
-        if self.verbosity > 1:
-            print(
-                'Currently assuming 95% byproduct recovery rate and 100% byproduct payable percent. Byproduct recovery rate is multiplied by primary recovery rate in future calculations.')
-
-        mines.loc[mines['Byproduct ID'] == 0, 'Primary Recovery rate (%)'] = 100.
-        mines['Ore treated (kt)'] = mines['Production (kt)'] / (
-                    mines[['Recovery rate (%)', 'Head grade (%)', 'Primary Recovery rate (%)']].product(axis=1) / 1e6)
-        mines['Primary Production (kt)'] = mines[['Ore treated (kt)', 'Primary Recovery rate (%)',
-                                                         'Primary Head grade (%)']].product(axis=1) / 1e4
-        mines['Capacity (kt)'] = mines['Ore treated (kt)'] / mines['Capacity utilization']
-        mines['Paid metal production (kt)'] = mines[
-                                                         ['Capacity (kt)', 'Capacity utilization', 'Head grade (%)',
-                                                          'Recovery rate (%)', 'Primary Recovery rate (%)',
-                                                          'Payable percent (%)']].product(axis=1) / 1e8
-        mines['Primary Paid metal production (kt)'] = mines[
-                                                                 ['Capacity (kt)', 'Capacity utilization',
-                                                                  'Primary Head grade (%)', 'Primary Recovery rate (%)',
-                                                                  'Primary Payable percent (%)']].product(axis=1) / 1e6
-
-        mines['Reserves ratio with ore treated'] = host1.values_from_dist('primary_reserves')
-
-        mines['Reserves (kt)'] = mines[['Ore treated (kt)', 'Reserves ratio with ore treated']].product(axis=1)
-        mines['Reserves potential metal content (kt)'] = mines[['Reserves (kt)', 'Head grade (%)']].product(
-            axis=1) * 1e-2
-
-        mines['Cumulative ore treated ratio with ore treated'] = host1.values_from_dist('primary_ot_cumu')
-        mines['Cumulative ore treated (kt)'] = mines['Cumulative ore treated ratio with ore treated'] * mines[
-            'Ore treated (kt)']
-        mines['Initial ore treated (kt)'] = mines['Ore treated (kt)'] / h['ramp_up_years']
-        mines['Opening'] = host1.simulation_time[0] - mines[
-            'Cumulative ore treated ratio with ore treated'].round(0)
-
-        # calibrating reserves to input values if needed
-        primary_reserves_reported_basis = h['primary_reserves_reported_basis']
-        primary_reserves_reported = h['primary_reserves_reported']
-        if primary_reserves_reported_basis == 'ore' and primary_reserves_reported > 0:
-            ratio = primary_reserves_reported / mines['Reserves (kt)'].sum()
-        elif primary_reserves_reported_basis == 'metal' and primary_reserves_reported > 0:
-            ratio = primary_reserves_reported / mines['Reserves potential metal content (kt)'].sum()
-        else:
-            ratio = 1
-        mines['Reserves (kt)'] *= ratio
-        mines['Reserves potential metal content (kt)'] *= ratio
-
-        host1.mines = mines.copy()
-        host1.generate_oges()
-
-        pri_main = [i for i in h if 'byproduct' in i and 'host' not in i and 'pri' not in i and i != 'byproduct']
-        setattr(self, param, host1)
-
-    def generate_byproduct_total_costs(self, param):
-        by_param = 'byproduct_' + param
-        host1 = getattr(self, param)
-        host1.generate_costs_from_regression('Sustaining CAPEX ($M)')
-        h = host1.hyperparam
-        mines = host1.mines.copy()
-
-        mines['Development CAPEX ($M)'] = 0
-        mines['Primary Sustaining CAPEX ($M)'] = mines['Sustaining CAPEX ($M)']
-        mines['Byproduct sCAPEX ratio'] = host1.values_from_dist(by_param + '_sus_capex_ratio')
-        mines.loc[mines['Byproduct sCAPEX ratio'] < 0, 'Byproduct sCAPEX ratio'] = mines[
-            'Byproduct sCAPEX ratio'].sample(n=(mines['Byproduct sCAPEX ratio'] < 0).sum(), random_state=self.hyperparam['random_state']+self.rs_add).values
-        self.rs_add+=1
-        mines['Sustaining CAPEX ($M)'] = mines['Primary Sustaining CAPEX ($M)'] / mines['Byproduct sCAPEX ratio']
-
-        mines['Byproduct Total cash margin (USD/t)'] = mines['Commodity price (USD/t)'] - mines[
-            'Minesite cost (USD/t)'] - mines['TCRC (USD/t)']
-        mines['Byproduct Cash flow ($M)'] = 1e-3 * mines['Paid metal production (kt)'] * mines[
-            'Byproduct Total cash margin (USD/t)'] - mines['Sustaining CAPEX ($M)']
-        mines['Primary Total cash margin (USD/t)'] = mines['Primary Commodity price (USD/t)'] - mines[
-            'Primary Minesite cost (USD/t)'] - mines['Primary TCRC (USD/t)']
-        mines['Total cash margin (USD/t)'] = (mines['Byproduct Total cash margin (USD/t)'] * mines[
-            'Paid metal production (kt)'] + mines['Primary Total cash margin (USD/t)'] * mines[
-                                                         'Primary Paid metal production (kt)']) / mines[
-                                                        'Primary Paid metal production (kt)']
-        by_only = mines['Byproduct ID'][mines['Byproduct ID'] == 0].index
-        mines.loc[by_only, 'Total cash margin (USD/t)'] = mines['Byproduct Total cash margin (USD/t)']
-        mines['Cash flow ($M)'] = mines['Byproduct Cash flow ($M)'] + 1e-3 * mines[
-            'Primary Paid metal production (kt)'] * mines['Primary Total cash margin (USD/t)'] - mines[
-                                             'Primary Sustaining CAPEX ($M)'] - mines['Overhead ($M)'] - mines[
-                                             'Development CAPEX ($M)']
-        mines.loc[by_only, 'Cash flow ($M)'] = mines['Byproduct Cash flow ($M)'] - mines['Overhead ($M)'] - mines[
-            'Development CAPEX ($M)']
-
-        mines['Total reclamation cost ($M)'] = np.exp(h['primary_reclamation_constant'] +
-                                                             h['primary_reclamation_slope'] * np.log(
-            mines['Capacity (kt)'] / 1e3))
-
-        mines['Byproduct ID'] = int(param.split('host')[1])
-        host1.mines = mines.copy()
-
-        pri_main = [i for i in h.index if 'byproduct' in i and 'host' not in i and 'pri' not in i and i != 'byproduct']
-        setattr(self, param, host1)
-        return host1
 
     def values_from_dist(self, param):
         hyperparam = self.hyperparam
@@ -1861,18 +1340,14 @@ class miningModel:
         function of hyperparam[reinitialize]'''
         self.load_variables_from_hyperparam()
         if self.hyperparam['generate_mines']:
-            if self.byproduct:
-                self.generate_byproduct_mines()
-                # out: self.mines
-            else:
-                if self.i == self.simulation_time[0]:
-                    self.recalculate_hyperparams()
-                self.generate_production_region()
-                self.generate_grade_and_masses()
-                self.generate_total_cash_margin()
-                self.generate_oges()
-                self.generate_annual_costs()
-                # out: self.mines
+            if self.i == self.simulation_time[0]:
+                self.recalculate_hyperparams()
+            self.generate_production_region()
+            self.generate_grade_and_masses()
+            self.generate_total_cash_margin()
+            self.generate_oges()
+            self.generate_annual_costs()
+            # out: self.mines
 
             self.mine_life_init = self.mines.copy()
             if hasattr(self,'load_mine_file'):
@@ -1880,28 +1355,16 @@ class miningModel:
                 self.hyperparam['generate_mines'] = False
 
         elif self.hyperparam['load_mine_file']:
-            if self.byproduct:
-                try:
-                    if type(self.hyperparam['load_mine_file']) != str:
-                        self.mine_life_init = pd.read_pickle('input_files/user_defined/mine_life_init_byproduct.pkl')
-                        self.mines = self.mine_life_init.copy()
-                    else:
-                        self.mine_life_init = pd.read_pickle(self.hyperparam['load_mine_file'])
-                        self.mines = self.mine_life_init.copy()
-                except:
-                    raise Exception(
-                        'Save an initialized mine file as input_files/user_defined/mine_life_init_byproduct.pkl or set hyperparam[\'load_mine_life_init\'] to a string value corresponding to your excel file with mine data')
-            else:
-                try:
-                    if type(self.hyperparam['load_mine_file']) != str:
-                        self.mine_life_init = pd.read_excel('input_files/user_defined/mine_life_init_primary.xlsx')
-                        self.mines = self.mine_life_init.copy()
-                    else:
-                        self.mine_life_init = pd.read_excel(self.hyperparam['load_mine_file'])
-                        self.mines = self.mine_life_init.copy()
-                except:
-                    raise Exception(
-                        'Save an initialized mine file as input_files/user_defined/mine_life_init_primary.pkl or set hyperparam[\'load_mine_life_init\'] to a string value corresponding to your excel file with mine data')
+            try:
+                if type(self.hyperparam['load_mine_file']) != str:
+                    self.mine_life_init = pd.read_excel('input_files/user_defined/mine_life_init_primary.xlsx')
+                    self.mines = self.mine_life_init.copy()
+                else:
+                    self.mine_life_init = pd.read_excel(self.hyperparam['load_mine_file'])
+                    self.mines = self.mine_life_init.copy()
+            except:
+                raise Exception(
+                    'Save an initialized mine file as input_files/user_defined/mine_life_init_primary.pkl or set hyperparam[\'load_mine_life_init\'] to a string value corresponding to your excel file with mine data')
             self.hyperparam['generate_mines'] = True
             self.loaded_mines = self.mines.copy()
             self.load_mine_file = self.hyperparam['load_mine_file']
@@ -1915,22 +1378,16 @@ class miningModel:
     def op_initialize_prices(self):
         '''
         relevant hyperparams:
-        - primary_commodity_price/byproduct
-        - primary_commodity_price_option/byproduct
-        - primary_commodity_price_change/byproduct
+        - primary_commodity_price
+        - primary_commodity_price_option
+        - primary_commodity_price_change
 
-        Can bypass price series generation for pri/by
+        Can bypass price series generation
         by assigning series to primary_price_series
-        or byproduct_price_series.
         '''
         h = self.hyperparam
         for price_or_tcrc in ['price', 'tcrc']:
-            if self.byproduct and not hasattr(self, f'primary_{price_or_tcrc}_series') and not hasattr(self,
-                                                                                                       f'byproduct_{price_or_tcrc}_series'):
-                strings = ['primary_', 'byproduct_']
-            elif self.byproduct and not hasattr(self, f'byproduct_{price_or_tcrc}_series'):
-                strings = ['byproduct_']
-            elif not hasattr(self, f'primary_{price_or_tcrc}_series'):
+            if not hasattr(self, f'primary_{price_or_tcrc}_series'):
                 strings = ['primary_']
             else:
                 # TODO Check why price series doesn't go back to 1900 like it's supposed to...
@@ -1976,22 +1433,7 @@ class miningModel:
             mine_life_init['Discount'] = 1
             mine_life_init['Initial price (USD/t)'] = np.nan
 
-            if self.byproduct:
-                mine_life_init['Primary Total cash margin expect (USD/t)'] = np.nan
-                mine_life_init['Byproduct Cash flow expect ($M)'] = np.nan
-                mine_life_init['Byproduct production flag'] = True
-                mine_life_init['Byproduct Ramp up flag'] = False
-                mine_life_init['Byproduct Ramp down flag'] = False
-                mine_life_init['Primary Initial head grade (%)'] = mine_life_init['Primary Head grade (%)'] / (
-                            mine_life_init['Cumulative ore treated (kt)'] / mine_life_init[
-                        'Initial ore treated (kt)']) ** mine_life_init['OGE']
-                mine_life_init = mine_life_init.fillna(0)
-                mine_life_init['Primary Recovery rate (%)'] = mine_life_init[
-                    'Primary Recovery rate (%)'].replace(0, 100)
-                mine_life_init.loc[mine_life_init['Primary OGE'] == 0, 'Primary OGE'] = mine_life_init['OGE']
-                mine_life_init['Primary Initial price (USD/t)'] = np.nan
-            to_drop = ['Byproduct TCRC ratio', 'Byproduct minesite cost ratio', 'Byproduct sCAPEX ratio',
-                       'Cumulative ore treated ratio with ore treated', 'Reserves ratio with ore treated']
+            to_drop = ['Cumulative ore treated ratio with ore treated', 'Reserves ratio with ore treated']
             to_drop = mine_life_init.columns[mine_life_init.columns.isin(to_drop)]
             for j in to_drop:
                 mine_life_init.drop(columns=j, inplace=True)
@@ -2044,10 +1486,9 @@ class miningModel:
         h = self.hyperparam
         i = self.i
 
-        self.hstrings = ['primary_', 'byproduct_'] if self.byproduct else ['primary_']
-        self.istrings = ['Primary ', ''] if self.byproduct else ['Primary ']
+        self.hstrings = ['primary_']
+        self.istrings = ['Primary ']
         primary_price_series = self.primary_price_series.copy()
-        byproduct_price_series = self.byproduct_price_series if self.byproduct else 0
 
         ml_yr = self.ml.loc[i].copy() if i == simulation_time[0] else self.ml.loc[i - 1].copy()
         ml_last = ml_yr.copy()
@@ -2080,33 +1521,17 @@ class miningModel:
 
             # print(1978,len(ml_yr.commodity_price_usdpt))
             # if h['internal_price_formation']==False:
-            if self.byproduct:
-                if h['incentive_tune_tcrc']:
-                    ml_yr.primary_commodity_price_usdpt = ml_yr.primary_commodity_price_usdpt * \
-                                                          (primary_price_series.pct_change().fillna(0) + 1).replace(0,1e-6)[i]
-                    ml_yr.commodity_price_usdpt = ml_yr.commodity_price_usdpt * \
-                                                  (byproduct_price_series.pct_change().fillna(0) + 1).replace(0,1e-6)[i]
-                else:
-                    ml_yr.primary_tcrc_usdpt = ml_yr.primary_tcrc_usdpt * \
-                                               (self.primary_tcrc_series.pct_change().fillna(0) + 1).replace(0,1e-6)[i]
-                    ml_yr.tcrc_usdpt = ml_yr.tcrc_usdpt * (self.byproduct_tcrc_series.pct_change().fillna(0) + 1).replace(0,1e-6)[i]
-                if i == simulation_time[0]:
-                    ml_yr.initial_price_usdpt = np.repeat(byproduct_price_series[i], len(ml_yr.index))
-                    ml_yr.primary_initial_price_usdpt = np.repeat(primary_price_series[i], len(ml_yr.index))
+            if h['incentive_tune_tcrc']:
+                ml_yr.commodity_price_usdpt = ml_yr.commodity_price_usdpt * \
+                                                (primary_price_series.pct_change().fillna(0) + 1).replace(0,1e-6)[i]
             else:
-                if h['incentive_tune_tcrc']:
-                    ml_yr.commodity_price_usdpt = ml_yr.commodity_price_usdpt * \
-                                                  (primary_price_series.pct_change().fillna(0) + 1).replace(0,1e-6)[i]
-                else:
-                    ml_yr.tcrc_usdpt = ml_yr.tcrc_usdpt * (self.primary_tcrc_series.pct_change().fillna(0) + 1).replace(0,1e-6)[i]
-                if i == simulation_time[0]:
-                    ml_yr.initial_price_usdpt = np.repeat(primary_price_series[i], len(ml_yr.index))
+                ml_yr.tcrc_usdpt = ml_yr.tcrc_usdpt * (self.primary_tcrc_series.pct_change().fillna(0) + 1).replace(0,1e-6)[i]
+            if i == simulation_time[0]:
+                ml_yr.initial_price_usdpt = np.repeat(primary_price_series[i], len(ml_yr.index))
 
             self.sxew_mines = ml_yr.index[ml_yr.payable_percent_pct == 100]
             self.conc_mines = ml_yr.index[((ml_yr.payable_percent_pct != 100)&(~np.isnan(ml_yr.payable_percent_pct.astype(float)))).astype(bool)]
             ml_yr.tcrc_usdpt[self.sxew_mines] = 0
-            if self.byproduct:
-                ml_yr.primary_tcrc_usdpt[self.sxew_mines] = 0
             closing_mines = ml_last.index[ml_last.ramp_down_flag.astype(bool)]
             opening_mines = ml_yr.index[(ml_yr.ramp_up_flag != 0)&(~np.isnan(ml_yr.ramp_up_flag.astype(float)))]
             not_new_opening = ml_yr.index[(ml_yr.ramp_up_flag!=2)&(~np.isnan(ml_yr.ramp_up_flag.astype(float)))] if i>self.simulation_time[1] else ml_yr.index
@@ -2117,26 +1542,13 @@ class miningModel:
             end_ramp_up = ml_yr.index[ml_yr.ramp_up_flag == h['ramp_up_years'] + 1]
             if len(opening_mines) > 0:
                 ml_yr.opening[np.intersect1d(opening_mines, ml_yr.index[np.isnan(ml_yr.opening.astype(float))])] = i
-                if self.byproduct:
-                    ml_yr.initial_price_usdpt[ml_yr.opening == i] = byproduct_price_series[i]
-                    ml_yr.primary_initial_price_usdpt[ml_yr.opening == i] = primary_price_series[i]
-                else:
-                    ml_yr.initial_price_usdpt[ml_yr.opening == i] = primary_price_series[i]
+                ml_yr.initial_price_usdpt[ml_yr.opening == i] = primary_price_series[i]
 
                 if h['ramp_up_exponent'] != 0:
                     ramp_up_exp = h['ramp_up_exponent']
-                    if self.byproduct:
-                        for b in ml_yr['Byproduct ID'].unique():
-                            print(1470, 'could be a spot for error if ml0 does not have the right CU value')
-                            id_zero = ml0.index[ml0.byproduct_id == b]
-                            by_open = np.intersect1d(id_zero, opening_mines)
-                            ml_yr.capacity_utilization[by_open] = np.nanmean(ml0.capacity_utilization[id_zero]) * (
-                                        h['ramp_up_cu'] + (1 - h['ramp_up_cu']) / (
-                                h['ramp_up_years']) ** ramp_up_exp * (ml_yr.ramp_up_flag[by_open] - 1) ** ramp_up_exp)
-                    else:
-                        ml_yr.capacity_utilization[opening_mines] = h['mine_cu0'] * (
-                                    h['ramp_up_cu'] + (1 - h['ramp_up_cu']) / (h['ramp_up_years']) ** ramp_up_exp * (
-                                        ml_yr.ramp_up_flag[opening_mines] - 1) ** ramp_up_exp)
+                    ml_yr.capacity_utilization[opening_mines] = h['mine_cu0'] * (
+                        h['ramp_up_cu'] + (1 - h['ramp_up_cu']) / (h['ramp_up_years']) ** ramp_up_exp * (
+                        ml_yr.ramp_up_flag[opening_mines] - 1) ** ramp_up_exp)
                 else:
                     ml_yr.capacity_utilization[opening_mines] = h['ramp_up_cu']
                 ml_yr.ramp_up_flag[opening_mines] = ml_yr.ramp_up_flag[opening_mines] + 1
@@ -2173,47 +1585,11 @@ class miningModel:
             # This section handles opening mines, since with the ore treated-based minesite cost calculation, prices were rising far too quickly if the actual simulation start ore treated was used. The normal-operation value is our target anyway.
             first_opening = ml_yr.ramp_up_flag == 2
             if np.nansum(first_opening) > 0 and h['minesite_cost_response_to_grade_price']:
-                if self.byproduct:
-                    for b in ml_yr['Byproduct ID'].unique():
-                        id_zero = ml0.index[ml0.byproduct_id == b]
-                        by_open = np.intersect1d(id_zero, opening_mines)
-                        print(1501, 'could be a spot for error if ml0 does not have the right CU value')
-                        ml_yr.simulation_start_ore_treated_kt[by_open] = ml_yr.ore_treated_kt[by_open] * np.nanmean(
-                            ml0.capacity_utilization[ml0.byproduct_id == b]) / ml_yr.capacity_utilization
-                else:
-                    ml_yr.simulation_start_ore_treated_kt[opening_mines] = ml_yr.ore_treated_kt[opening_mines] * h[
-                        'mine_cu0'] / ml_yr.capacity_utilization[opening_mines]
+                ml_yr.simulation_start_ore_treated_kt[opening_mines] = ml_yr.ore_treated_kt[opening_mines] * h[
+                    'mine_cu0'] / ml_yr.capacity_utilization[opening_mines]
 
             ml_yr.head_grade_pct = self.calculate_grade(ml_yr.initial_head_grade_pct, ml_yr.cumulative_ore_treated_kt,
                                                         ml_yr.initial_ore_treated_kt, ml_yr.oge)
-
-            if self.byproduct:
-                if i != simulation_time[0]:
-                    for j in np.arange(1, 4):
-                        by_id = ml_yr.byproduct_id == j
-                        ml_yr.recovery_rate_pct[by_id] = (ml_last.recovery_rate_pct[by_id] * (
-                                    ml_last.byproduct_total_cash_margin_usdpt[by_id] / h[
-                                'byproduct' + str(j) + '_mine_tcm0']) ** h['byproduct_rr_margin_elas'])
-                        ml_yr.recovery_rate_pct[ml_yr.recovery_rate_pct == np.nan] = -1
-                        ml_yr.recovery_rate_pct[
-                            (by_id) & (ml_yr.recovery_rate_pct > h['byproduct' + str(j) + '_mine_rrmax'])] = h[
-                            'byproduct' + str(j) + '_mine_rrmax']
-                        problem = ml_yr.recovery_rate[by_id] == -1
-                        problem = ml_yr.index[by_id][problem]
-                        if len(problem) > 0:
-                            ml_yr.recovery_rate_pct[problem] = ml_last.recovery_rate_pct[problem]
-                #                         print('Last recovery')
-                #                         display(ml_last.loc[problem,'Recovery rate (%)'])
-                #                         print('last tcm')
-                #                         display(ml_last.loc[problem,'Byproduct Total cash margin (USD/t)'])
-                #                         print('other')
-                #                         print(h['byproduct'+str(j)+'_mine_tcm0'],h['byproduct_rr_margin_elas'])
-                ml_yr.primary_head_grade_pct = self.calculate_grade(ml_yr.primary_initial_head_grade_pct,
-                                                                    ml_yr.cumulative_ore_treated_kt,
-                                                                    ml_yr.initial_ore_treated_kt, ml_yr.oge)
-                ml_yr.primary_head_grade_pct[ml_yr.primary_head_grade_pct == np.nan] = 0
-                ml_yr.head_grade_pct[ml_yr.byproduct_id != 0] = ml_yr.primary_head_grade[ml_yr.byproduct_id != 0] / \
-                                                                ml_yr.byproduct_grade_ratio[ml_yr.byproduct_id != 0]
 
             ml_yr.closed_flag[closing_mines] = True
             ml_yr.simulated_closure[closing_mines] = i
@@ -2228,71 +1604,33 @@ class miningModel:
                 ml_last.minesite_cost_usdpt, ml_yr.head_grade_pct, ml_last.head_grade_pct,
                 ml_yr.commodity_price_usdpt, ml_last.commodity_price_usdpt,
                 ml_yr.ore_treated_kt, ml_yr.simulation_start_ore_treated_kt, i)
-            if self.byproduct:
-                ml_yr.primary_minesite_cost_usdpt = self.calculate_minesite_cost(
-                    ml_last.primary_minesite_cost_usdpt, ml_yr.primary_head_grade_pct, ml_last.primary_head_grade_pct,
-                    ml_yr.primary_commodity_price_usdpt, ml_last.primary_commodity_price_usdpt,
-                    ml_yr.ore_treated_kt, ml_yr.simulation_start_ore_treated_kt, i)
+            
 
             ml_yr.production_kt = self.calculate_production(ml_yr)
             ml_yr.paid_metal_production_kt = self.calculate_paid_metal_prod(ml_yr)
-            if self.byproduct:
-                ml_yr.production_kt = ml_yr.production_kt * ml_yr.primary_recovery_rate_pct / 100
-                ml_yr.paid_metal_production_kt = ml_yr.paid_metal_production_kt * ml_yr.primary_recovery_rate_pct / 100
-
-                ml_yr.primary_production_kt = ml_yr.ore_treated_kt * ml_yr.primary_recovery_rate_pct * ml_yr.primary_head_grade_pct / 1e4
-                ml_yr.primary_paid_metal_production_kt = ml_yr.ore_treated_kt * ml_yr.primary_recovery_rate_pct * ml_yr.primary_head_grade_pct * ml_yr.primary_payable_percent_pct / 1e6
-                ml_yr.byproduct_total_cash_margin_usdpt = ml_yr.commodity_price_usdpt - ml_yr.minesite_cost_usdpt - ml_yr.tcrc_usdpt
-                ml_yr.byproduct_cash_flow_usdm = 1e-3 * ml_yr.paid_metal_production_kt * ml_yr.byproduct_total_cash_margin_usdpt - ml_yr.sustaining_capex_usdm
-                ml_yr.primary_total_cash_margin_usdpt = ml_yr.primary_commodity_price_usdpt - ml_yr.primary_minesite_cost_usdpt - ml_yr.primary_tcrc_usdpt
-                ml_yr.total_cash_margin_usdpt = (
-                                                            ml_yr.byproduct_total_cash_margin_usdpt * ml_yr.paid_metal_production_kt + ml_yr.primary_total_cash_margin_usdpt * ml_yr.primary_paid_metal_production_kt) / ml_yr.primary_paid_metal_production_kt
-                by_only = ml_yr.index[ml_yr.byproduct_id == 0]
-                ml_yr.total_cash_margin_usdpt[by_only] = ml_yr.byproduct_total_cash_margin_usdpt[by_only]
-                ml_yr.cash_flow_usdm = ml_yr.byproduct_cash_flow_usdm + 1e-3 * ml_yr.primary_paid_metal_production_kt * ml_yr.primary_total_cash_margin_usdpt - ml_yr.primary_sustaining_capex_usdm - ml_yr.overhead_usdm - ml_yr.development_capex_usdm
-                ml_yr.cash_flow_usdm[by_only] = ml_yr.byproduct_cash_flow_usdm[by_only] - ml_yr.overhead_usdm[by_only] - \
-                                                ml_yr.development_capex_usdm[by_only]
-
-                ml_yr.primary_revenue_usdm = ml_yr.primary_paid_metal_production_kt * ml_yr.primary_total_cash_margin_usdpt * 1e-3
-                ml_yr.byproduct_revenue_usdm = 1e-3 * ml_yr.paid_metal_production_kt * ml_yr.byproduct_total_cash_margin_usdpt
-                ml_yr.byproduct_revenue_fraction = ml_yr.byproduct_revenue_usdm / (
-                            ml_yr.byproduct_revenue_usdm + ml_yr.primary_revenue_usdm)
-                ml_yr.byproduct_revenue_fraction[
-                    (ml_yr.byproduct_revenue_fraction > 1) | (ml_yr.byproduct_revenue_fraction < 0)] = np.nan
-            else:
-                ml_yr.total_cash_margin_usdpt = ml_yr.commodity_price_usdpt - ml_yr.minesite_cost_usdpt - ml_yr.tcrc_usdpt
-                ml_yr.cash_flow_usdm = 1e-3 * ml_yr.paid_metal_production_kt * ml_yr.total_cash_margin_usdpt - ml_yr.overhead_usdm - ml_yr.sustaining_capex_usdm - ml_yr.development_capex_usdm
+            ml_yr.total_cash_margin_usdpt = ml_yr.commodity_price_usdpt - ml_yr.minesite_cost_usdpt - ml_yr.tcrc_usdpt
+            ml_yr.cash_flow_usdm = 1e-3 * ml_yr.paid_metal_production_kt * ml_yr.total_cash_margin_usdpt - ml_yr.overhead_usdm - ml_yr.sustaining_capex_usdm - ml_yr.development_capex_usdm
 
             self.govt_mines = ml_yr.index[ml_yr.operate_with_negative_cash_flow.astype(bool)]
 
             self.ml_yr = ml_yr.copy()
-            if self.byproduct:
-                price_df = byproduct_price_series.copy()
-            else:
-                price_df = primary_price_series.copy()
+            price_df = primary_price_series.copy()
             # price_df = self.ml['Commodity price (USD/t)'].unstack().copy()
             # price_df.loc[i,:] = ml_yr['Commodity price (USD/t)']
             price_expect = self.calculate_price_expect(price_df, i)
             ml_yr.price_expect_usdpt = ml_yr.commodity_price_usdpt * price_expect / np.nanmean(ml_yr.commodity_price_usdpt)
 
-            # Simplistic byproduct production approach: no byprod prod when byprod cash flow<0 for that year
-            if i > simulation_time[0]:
-                if self.byproduct: ml_yr = self.byproduct_closure(ml_yr)
-
             # Check for mines with negative cash flow that should ramp down next year
             ml_yr = self.check_ramp_down(ml_yr, price_df, ml_yr.price_expect_usdpt)
             # 2 is for NPV following
             ml_yr.ramp_down_flag[[q == 2 for q in ml_yr.close_method]] = True
+
 # TODO check up on overhead_usdm, appears it is getting generated and has quite the range
         ml_yr.index = ml_yr.real_index
         ml_last.index = ml_last.real_index
         self.ml_yr = ml_yr.copy()
         self.ml.add_mines(ml_yr.copy())
 
-        # TODO DELETE
-        if i>2024 and hasattr(self,'inc'):
-            if self.verbosity>5:
-                print('value')
         if i > self.simulation_time[0]:
             self.cumulative_ore_treated.loc[i] = self.cumulative_ore_treated.loc[i - 1] + np.nansum(ml_yr.ore_treated_kt)
         else:
@@ -2326,20 +1664,9 @@ class miningModel:
                 self.ml_yr.concat(opening)
                 self.ml.add_mines(self.ml_yr)
         ml_yr_ph = self.ml.loc[i]
-        if self.byproduct:
-            self.primary_price_series.loc[i] = np.nanmean(ml_yr_ph.primary_commodity_price_usdpt)
-            self.primary_tcrc_series.loc[i] = np.nanmean(ml_yr_ph.primary_tcrc_usdpt)
-            self.byproduct_price_series.loc[i] = np.nanmean(ml_yr_ph.commodity_price_usdpt)
-            self.byproduct_tcrc_series.loc[i] = np.nanmean(ml_yr_ph.tcrc_usdpt)
-            if np.isnan(self.byproduct_price_series[i]):
-                self.byproduct_price_series.loc[i] = self.byproduct_price_series[i - 1]
-            if np.isnan(self.byproduct_tcrc_series[i]):
-                self.byproduct_tcrc_series.loc[i] = self.byproduct_tcrc_series[i - 1]
-        else:
-            self.primary_price_series.loc[i] = np.nanmean(ml_yr_ph.commodity_price_usdpt)
-            # print(2225,ml_yr_ph.tcrc_usdpt)
-            ml_yr_ph.tcrc_usdpt = ml_yr_ph.tcrc_usdpt.astype(float)
-            self.primary_tcrc_series.loc[i] = np.nanmean(ml_yr_ph.tcrc_usdpt)
+        self.primary_price_series.loc[i] = np.nanmean(ml_yr_ph.commodity_price_usdpt)
+        ml_yr_ph.tcrc_usdpt = ml_yr_ph.tcrc_usdpt.astype(float)
+        self.primary_tcrc_series.loc[i] = np.nanmean(ml_yr_ph.tcrc_usdpt)
         if np.isnan(self.primary_price_series[i]):
             self.primary_price_series.loc[i] = self.primary_price_series[i-1]
         if np.isnan(self.primary_tcrc_series[i]):
@@ -2470,18 +1797,7 @@ class miningModel:
             ml_yr.tcrc_expect_usdpt[self.conc_mines] = ml_yr.tcrc_usdpt[self.conc_mines]*tcrc_expect/np.nanmean(ml_yr.tcrc_usdpt[self.conc_mines])
         tcrc_expect = ml_yr.tcrc_expect_usdpt
 
-        if self.byproduct:
-            # pri_price_df = self.ml['Primary Commodity price (USD/t)'].unstack()
-            # pri_price_df.loc[i,:] = ml_yr['Primary Commodity price (USD/t)']
-            pri_price_expect = self.calculate_price_expect(self.primary_price_series.copy(), i)
-            pri_initial_price = ml_yr.primary_initial_price_usdpt
-            ml_yr.primary_price_expect_usdpt = pri_price_expect
-
-            # pri_tcrc_df = self.ml['Primary TCRC (USD/t)'].unstack()
-            # pri_tcrc_df.loc[i,:] = ml_yr['Primary TCRC (USD/t)']
-            pri_tcrc_expect = self.calculate_price_expect(self.primary_tcrc_series.copy(), i)
-        else:
-            pri_initial_price, pri_price_expect, pri_tcrc_expect = 0, 0, 0
+        pri_initial_price, pri_price_expect, pri_tcrc_expect = 0, 0, 0
         if hasattr(self,'inc') and self.i>2001:
             if self.verbosity>5:
                 print('2376 stop')
@@ -2503,10 +1819,7 @@ class miningModel:
 
         ml_yr.cash_flow_expect_usdm = cash_flow_expect
         ml_yr.total_cash_margin_expect_usdpt = tcm_expect
-        if self.byproduct:
-            ml_yr.byproduct_total_cash_margin_expect_usdpt = by_tcm_expect
-            ml_yr.byproduct_cash_flow_expect_usdm = by_cash_flow_expect
-
+        
         if ml_yr.shape()[0] == 0 or np.nansum(np.isnan(ml_yr.reserves_kt.astype(float)) == len(ml_yr.reserves_kt)):
             return ml_yr
 
@@ -2556,25 +1869,8 @@ class miningModel:
             sustaining_capex = sustaining_capex[neg_cash_flow]
             development_capex = development_capex[neg_cash_flow]
 
-            if self.byproduct:
-                pri_initial_price = pri_initial_price[neg_cash_flow]
-
             # Back to all neg_cash_flow mines, evaluate cash flow for ramp following
             cumu_ot_ramp_following = cumu_ot_expect + ot_ramp_following
-            # print(2432,
-            #                                                                                                  len(cumu_ot_ramp_following),
-            #                                                                                                  len(ot_ramp_following),
-            #                                                                                                  len(initial_ore_treated),
-            #                                                                                                  len(initial_grade),
-            #                                                                                                  len(price_expect),
-            #                                                                                                  len(tcrc_expect),
-            #                                                                                                  len(initial_price),
-            #                                                                                                  len(overhead),
-            #                                                                                                  len(sustaining_capex),
-            #                                                                                                  len(development_capex))
-            if self.i>2023 and hasattr(self,'inc'):
-                if self.verbosity>5:
-                    print('2432, delete thing')
             cash_flow_ramp_following, by_cash_flow_ramp_following, tcm_rf, by_tcm_rf, _ = self.get_cash_flow(ml_yr,
                                                                                                              cumu_ot_ramp_following,
                                                                                                              ot_ramp_following,
@@ -2621,29 +1917,11 @@ class miningModel:
             ramp_down_following = npv_ramp_next < npv_ramp_following
             ramp_down_following = ml_yr.index[neg_cash_flow][ramp_down_following]
             ml_yr.ramp_down_flag[ramp_down_next] = True
-            # ml_yr.drop(columns=['CU ramp following','Ore treat ramp following','Ore treat expect'],inplace=True)
 
             # 1 is for 'NPV next', 2 is for 'NPV following'
             ml_yr.close_method[ramp_down_next] = 1
             ml_yr.close_method[ramp_down_following] = 2
 
-        return ml_yr
-
-    def byproduct_closure(self, ml_yr_):
-        ml_yr = ml_yr_.copy()
-        byp1 = ml_yr['Byproduct Cash flow ($M)'][ml_yr['Byproduct Cash flow ($M)'] < 0].index
-        byp2 = ml_yr['Byproduct ID'][ml_yr['Byproduct ID'] != 0].index
-        byp = np.intersect1d(byp1, byp2)
-
-        if len(byp) != 0:
-            ml_yr.loc[byp, 'Production (kt)'] = 0
-            ml_yr.loc[byp, 'Paid metal production (kt)'] = 0
-
-            ml_yr.loc[byp, 'Byproduct Cash flow ($M)'] = 0
-            ml_yr.loc[byp, 'Total cash margin (USD/t)'] = ml_yr['Primary Total cash margin (USD/t)']
-            ml_yr.loc[byp, 'Cash flow ($M)'] = ml_yr['Primary Paid metal production (kt)'] * ml_yr[
-                'Primary Total cash margin (USD/t)'] - ml_yr['Overhead ($M)'] - ml_yr['Primary Sustaining CAPEX ($M)'] - \
-                                               ml_yr['Development CAPEX ($M)']
         return ml_yr
 
     def get_cash_flow(self, ml_yr_, cumu_ot_expect, ot_expect, initial_ore_treated, initial_grade, price_expect, tcrc_expect, initial_price, overhead, sustaining_capex, development_capex, pri_initial_price, pri_price_expect, pri_tcrc_expect, neg_cash_flow):
@@ -2658,25 +1936,6 @@ class miningModel:
         grade_expect = self.calculate_grade(initial_grade, cumu_ot_expect, initial_ore_treated, oge=oge)
         sxew_index = ml_yr.index[ml_yr.payable_percent_pct == 100]
 
-        if self.byproduct:
-            if self.i != self.simulation_time[0]:
-                for j in np.arange(1, 4):
-                    byprod_id = ml_yr.index[ml_yr.byproduct_id == j]
-                    ml_yr.recovery_rate_pct[byprod_id] = (ml_yr.recovery_rate_pct[byprod_id] * (
-                                ml_yr.byproduct_total_cash_margin_usdpt[byprod_id] / h[
-                            'byproduct' + str(j) + '_mine_tcm0']) ** h['byproduct_rr_margin_elas'])
-                    rec_rate_exceed = ml_yr.index[
-                        ml_yr.recovery_rate_pct[byprod_id] > h['byproduct' + str(j) + '_mine_rrmax']]
-                    ml_yr.recovery_rate_pct[np.intersect1d(byprod_id, rec_rate_exceed)] = h[
-                        'byproduct' + str(j) + '_mine_rrmax']
-            pri_grade_expect = self.calculate_grade(ml_yr.primary_initial_head_grade_pct, cumu_ot_expect,
-                                                    ml_yr.initial_ore_treated_kt, ml_yr.oge)
-            grade_expect[ml_yr.byproduct_id != 0] = pri_grade_expect / ml_yr.byproduct_grade_ratio
-
-        #         ml_yr['Head grade expect (%)'] = grade_expect
-        # print(2529,neg_cash_flow)
-        # print(2530, len(grade_expect), len(price_expect),
-        #                                                     len(initial_price), len(ot_expect))
         if type(neg_cash_flow)!=int:
             minesite_cost = ml_yr.minesite_cost_usdpt[neg_cash_flow]
             grade = ml_yr.head_grade_pct[neg_cash_flow]
@@ -2690,8 +1949,7 @@ class miningModel:
                                                             initial_price, ot_expect,
                                                             sim_start_ot,
                                                             self.i + 1)
-        #         ml_yr['Minesite cost expect (USD/t)'] = minesite_cost_expect
-        #         ml_yr['Price expect (USD/t)'] = price_expect
+        
         if type(neg_cash_flow)!=int:
             recovery_rate = ml_yr.recovery_rate_pct[neg_cash_flow]
             payable_pct = ml_yr.payable_percent_pct[neg_cash_flow]
@@ -2703,28 +1961,6 @@ class miningModel:
         tcm_expect = price_expect - minesite_cost_expect - tcrc_expect
         cash_flow_expect = 1e-3 * paid_metal_expect * tcm_expect - overhead - sustaining_capex - development_capex
 
-        if self.byproduct:
-            paid_metal_expect = paid_metal_expect * ml_yr.primary_recovery_rate_pct[neg_cash_flow] / 100
-            by_cash_flow_expect = 1e-3 * paid_metal_expect * tcm_expect - sustaining_capex
-
-            pri_paid_metal_expect = ot_expect * pri_grade_expect * ml_yr.primary_recovery_rate_pct[neg_cash_flow] * \
-                                    ml_yr.primary_payable_percent_pct[neg_cash_flow] / 1e6
-            pri_minesite_cost_expect = self.calculate_minesite_cost(ml_yr.primary_minesite_cost_usdpt[neg_cash_flow],
-                                                                    pri_grade_expect,
-                                                                    ml_yr.primary_head_grade_pct[neg_cash_flow],
-                                                                    pri_price_expect, pri_initial_price, ot_expect,
-                                                                    ml_yr.simulation_start_ore_treated_kt, self.i + 1)
-
-            pri_tcm_expect = pri_price_expect - pri_minesite_cost_expect - pri_tcrc_expect
-            by_tcm_expect = tcm_expect.copy()
-            tcm_expect = (
-                                     by_tcm_expect * paid_metal_expect + pri_tcm_expect * pri_paid_metal_expect) / pri_paid_metal_expect
-            by_only = ml_yr.index[neg_cash_flow][ml_yr.byproduct_id[neg_cash_flow] == 0]
-            tcm_expect[by_only] = by_tcm_expect
-            cash_flow_expect = by_cash_flow_expect + 1e-3 * pri_paid_metal_expect * pri_tcm_expect - \
-                               ml_yr.primary_sustaining_capex_usdm[neg_cash_flow] - overhead - development_capex
-            cash_flow_expect[by_only] = by_cash_flow_expect - overhead - development_capex
-
         return cash_flow_expect, by_cash_flow_expect, tcm_expect, by_tcm_expect, ml_yr
 
     def initialize_incentive_mines(self):
@@ -2733,8 +1969,7 @@ class miningModel:
         i = self.i
 
         incentive_sim_time = np.arange(self.i, self.i + self.hyperparam['incentive_roi_years'])
-        inc = miningModel(simulation_time=incentive_sim_time,
-                          byproduct=self.byproduct)
+        inc = miningModel(simulation_time=incentive_sim_time)
         inc.hyperparam = self.hyperparam.copy()
         inc.simulation_time = np.arange(self.i, self.i + inc.hyperparam['incentive_roi_years'])
         inc.hyperparam['simulate_opening'] = False
@@ -2752,22 +1987,9 @@ class miningModel:
         # tcrc_expect = tcrc_expect.fillna(tcrc_expect.mean())
 
         inc.hyperparam['primary_commodity_price_option'] = 'constant'
-        if self.byproduct:
-            # pri_price_df = self.ml['Primary Commodity price (USD/t)'].unstack()
-            pri_price_expect = self.calculate_price_expect(self.primary_price_series, i)
-            incentive_mines['Primary Commodity price (USD/t)'] = pri_price_expect
-            incentive_mines['Commodity price (USD/t)'] = price_expect
-            inc.hyperparam['byproduct_commodity_price'] = np.nanmean(price_expect)
-            inc.hyperparam['primary_commodity_price'] = np.nanmean(pri_price_expect)
-            inc.pri_price_expect = pri_price_expect
-            inc.hyperparam['byproduct_commodity_price_option'] = 'constant'
-            # pri_tcrc_df = self.ml.copy()['Primary TCRC (USD/t)'].unstack()
-            pri_tcrc_expect = self.calculate_price_expect(self.primary_tcrc_series, i)
-            pri_tcrc_expect = pri_tcrc_expect.fillna(pri_tcrc_expect.mean())
-        else:
-            incentive_mines['Commodity price (USD/t)'] *= price_expect / incentive_mines[
-                'Commodity price (USD/t)'].mean()
-            inc.hyperparam['primary_commodity_price'] = float(price_expect)
+        incentive_mines['Commodity price (USD/t)'] *= price_expect / incentive_mines[
+            'Commodity price (USD/t)'].mean()
+        inc.hyperparam['primary_commodity_price'] = float(price_expect)
 
         if i == self.simulation_time[0] and False:
             self.grade_decline.loc[i] = 1
@@ -2798,30 +2020,13 @@ class miningModel:
         #         incentive_mines['Commodity price (USD/t)'] *= self.ml['Commodity price (USD/t)'].unstack(0)[i].mean()/incentive_mines['Commodity price (USD/t)'].mean()
         if self.verbosity > 4:
             print(1958, 'incentive tcrc mean', incentive_mines['TCRC (USD/t)'].mean())
-        if self.byproduct:
-            incentive_mines['Primary Head grade (%)'] = incentive_mines[
-                                                                   'Primary Initial head grade (%)'] * grade_decline
-            incentive_mines.loc[incentive_mines['Primary Head grade (%)'] > 80, 'Primary Head grade (%)'] = 80
-            incentive_mines['Primary Total cash margin (USD/t)'] *= h['ramp_up_cu'] / incentive_mines[
-                'Capacity utilization'] / cost_improve
-            incentive_mines['Byproduct Total cash margin (USD/t)'] *= h['ramp_up_cu'] / incentive_mines[
-                'Capacity utilization'] / cost_improve
-            incentive_mines['Primary Minesite cost (USD/t)'] *= h['ramp_up_cu'] / incentive_mines[
-                'Capacity utilization'] * cost_improve
-            incentive_mines['Primary Commodity price (USD/t)'] *= pri_price_expect.mean() / incentive_mines[
-                'Primary Commodity price (USD/t)'].mean()
-            if incentive_mines['Primary TCRC (USD/t)'].mean() != 0:
-                incentive_mines['Primary TCRC (USD/t)'] *= pri_tcrc_expect.mean() / incentive_mines[
-                    'Primary TCRC (USD/t)'].mean()
-
+        
         inc.mine_life_init = incentive_mines.copy()
         if hasattr(self,'primary_price_series'):
             inc.primary_price_series = self.primary_price_series.copy()
             # inc.primary_price_series.loc[i:] = inc.hyperparam['primary_commodity_price']
             # TODO consider whether we should implement this change to incentive price series, or if it is necessary,
             #  and make sure the incentive price series goes beyond end of simulation
-        if hasattr(self,'byproduct_price_series'):
-            inc.byproduct_price_series = self.byproduct_price_series.copy()
         inc.op_initialize_prices()
         inc.incentive_mines = incentive_mines.copy()
         self.incentive_mines = incentive_mines.copy()
@@ -2871,15 +2076,6 @@ class miningModel:
                                                          'annual_reserves_ratio_with_initial_production_slope']) * \
                                                      (p_lag0 / p_lag1) ** h[
                                                          'primary_price_resources_contained_elas']
-
-            if self.byproduct:
-                self.resources_contained_series.loc[i] = self.resources_contained_series[i - 1] * \
-                                                         self.demand_series[i] / self.demand_series[i - 1] * \
-                                                         (1 + h[
-                                                             'annual_reserves_ratio_with_initial_production_slope']) * \
-                                                         (self.byproduct_price_series[i - lag] /
-                                                          self.byproduct_price_series[i - lag - 1]) ** h[
-                                                             'byproduct_price_resources_contained_elas']
 
         max_res = self.demand_series[self.simulation_time[0]] * h[
             'annual_reserves_ratio_with_initial_production_const'] * 100
@@ -3290,16 +2486,6 @@ class miningModel:
                 self.rs_add+=1
                 self.subset1 = subset.copy()
 
-                if count >= 2:
-                    opener_predict_knc, accuracy = run_mine_ml_model(KNeighborsClassifier, self.all_inc_mines, subset,
-                                                                     verbosity=3)
-                    opener_predict_lda, accuracy = run_mine_ml_model(LinearDiscriminantAnalysis, self.all_inc_mines,
-                                                                     subset, verbosity=3)
-                    opener_predict_gnb, accuracy = run_mine_ml_model(GaussianNB, self.all_inc_mines, subset,
-                                                                     verbosity=3)
-                    opener_predict_dtc, accuracy = run_mine_ml_model(DecisionTreeClassifier, self.all_inc_mines, subset,
-                                                                     verbosity=3)
-
                 error = subset.loc[subset['NPV ($M)'] > 0, 'Production (kt)'].sum() - target_new
                 price = inc_mines[price_select].mean()
                 error_series.loc[price] = error
@@ -3401,9 +2587,8 @@ class miningModel:
             inc.inc_mines = inc_mines.copy()
             inc.mines_to_open = inc_mines.loc[inc_mines['NPV ($M)'] > 0]
             self.inc = inc
-
         else:
-            self.bayesian_tune()
+            raise ValueError('no alternative method supplied for calibrating incentive opening method, ensure hyperparameter `incentive_opening_method` is set to True or edit mining_class.py, on this line')
 
     def run_karan_generalization(self, price):
         inc = self.inc
@@ -3458,87 +2643,10 @@ class miningModel:
 
         return error, n_mines, opening_sim
 
-    def bayesian_tune(self):
-        init_samples = 4
-        scale = 2500
-        slope = 0.00001
-        prices = np.linspace(0, scale, init_samples)
-        epo = [self.run_karan_generalization(p) for p in prices]
-        errors, n_opening, opening_sim_list = [o[0] for o in epo], [o[1] for o in epo], [o[2] for o in epo]
-        errors = np.array([e + p * slope for e, p in zip(errors, prices)])
-
-        prices_scaled = prices / scale
-
-        X, y = [x.reshape(len(x), 1) for x in [prices_scaled, errors]]
-
-        model = GaussianProcessRegressor()
-        model.fit(X, y)
-
-        if self.verbosity > 3:
-            plot(X, y, model)
-
-        for i in np.arange(0, 20):
-            if min([i - p * slope for i, p in zip(y, X * scale)]) > 0:
-                x = max(X) * 2
-                print('49')
-            else:
-                x = optimize_acquisition(X, y, model)
-            while x in X and i < 15:
-                x = x - 0.05
-            if x in X:
-                break
-            x_rescaled = x * scale
-            actual, n_open, os_ph = self.run_karan_generalization(x_rescaled)
-            self.opening_sim_list = opening_sim_list
-            opening_sim_list = opening_sim_list + [os_ph]
-            actual += slope * x_rescaled
-            est, _ = surrogate(model, [[x]])
-
-            # add the data to the dataset
-            X = np.vstack((X, [[x]]))
-            y = np.vstack((y, [[actual]]))
-
-            if self.verbosity > 3:
-                print(
-                    '  x = {:.3f}, predicted = {:.3f}, actual = {:.3f}, rescaled price: {:.1f}\nCurrent best: {:.1f}:'.format(
-                        x, est[0][0], actual, x_rescaled, X[:, 0][np.argmin(abs(y))] * scale))
-
-            if n_open == 0:
-                argminy = np.argmin(y)
-                y = y[X <= X[argminy]]
-                X = X[X <= X[argminy]]
-                X, y = [x.reshape(len(x), 1) for x in [X, y]]
-
-            # update the model
-            model.fit(X, y)
-
-            if self.verbosity > 3:
-                plt.figure()
-                plt.title(i)
-                plot(X, y, model)
-
-        self.new_price_select = X[:, 0][np.argmin(abs(y))] * scale
-        opening_sim = opening_sim_list[np.argmin(abs(y))]
-
-        opening_sim['Discount rate (divisor)'] = [
-            (1 + self.inc.hyperparam['discount_rate']) ** (j[0] - self.simulation_time[0]) for j in
-            opening_sim.index]
-        inc_mines = opening_sim.copy().loc[self.i]
-        inc_mines['NPV ($M)'] = (opening_sim['Cash flow ($M)'] / opening_sim['Discount rate (divisor)']).groupby(
-            level=1).sum()
-
-        self.inc.opening_sim = opening_sim.copy()
-        self.inc.inc_mines = inc_mines.copy()
-        self.inc.mines_to_open = inc_mines.loc[inc_mines['NPV ($M)'] > 0]
-
-        if not hasattr(self, 'error_df'):
-            self.error_df = pd.DataFrame(dtype=float)
-        self.error_df = pd.concat([self.error_df, pd.concat([self.error_series], keys=[self.i])])
-        delattr(self, 'error_series')
-
-    def update_price_tcrc(self, byproduct=False):
+    def update_price_tcrc(self):
         h = self.hyperparam
         opening = self.mines_to_open.copy()
+        ml = self.ml
         i = self.i
 
         if h['internal_price_formation']:
@@ -3548,8 +2656,6 @@ class miningModel:
             else:
                 price_select = 'commodity_price_usdpt'
                 elas = h['price_sd_elas']
-            if byproduct:
-                price_select = 'primary_' + price_select
 
             if h['incentive_opening_method'] == 'karan_generalization':
                 ml_ot = self.ml.loc[i].ore_treated_kt
@@ -3629,41 +2735,25 @@ class miningModel:
         else:
             for price_select, alt_select in zip(['TCRC (USD/t)', 'Commodity price (USD/t)'],
                                                 ['tcrc_usdpt', 'commodity_price_usdpt']):
-                if byproduct:
-                    new_price = self.byproduct_price_series[i] if price_select == 'Commodity price (USD/t)' else \
-                    self.byproduct_tcrc_series[i]
-                    self.ml.loc[idx[self.i, :], price_select] *= new_price / self.ml.loc[
-                        idx[self.i, :], price_select].mean()
-                    opening[price_select] *= new_price / opening[price_select].mean()
-
-                    price_select = 'Primary ' + price_select
-                    new_price = self.primary_price_series[i] if price_select == 'Primary Commodity price (USD/t)' else \
-                    self.primary_tcrc_series[i]
-                    self.ml.loc[idx[self.i, :], price_select] *= new_price / self.ml.loc[
-                        idx[self.i, :], price_select].mean()
-                    opening[price_select] *= new_price / opening[price_select].mean()
-                else:
-                    new_price = self.primary_price_series[i] if price_select == 'Commodity price (USD/t)' else \
-                    self.primary_tcrc_series[i]
-                    if True:#'TCRC' in price_select:
-                        year_i_mines = self.ml.loc[i]
-                        conc_mines = (year_i_mines.payable_percent_pct!=100)&(~np.isnan(year_i_mines.payable_percent_pct.astype(float)))
+                new_price = self.primary_price_series[i] if price_select == 'Commodity price (USD/t)' else \
+                self.primary_tcrc_series[i]
+                if True:#'TCRC' in price_select:
+                    year_i_mines = self.ml.loc[i]
+                    conc_mines = (year_i_mines.payable_percent_pct!=100)&(~np.isnan(year_i_mines.payable_percent_pct.astype(float)))
+                    if np.sum(conc_mines)>0:
+                        setattr(self.ml.loc[i], alt_select, getattr(year_i_mines, alt_select) * new_price / np.nanmean(
+                            getattr(year_i_mines, alt_select)[conc_mines]))
+                    if len(opening.index)>0:
+                        conc_mines = (opening.payable_percent_pct != 100) & (~np.isnan(opening.payable_percent_pct.astype(float)))
                         if np.sum(conc_mines)>0:
-                            setattr(self.ml.loc[i], alt_select, getattr(year_i_mines, alt_select) * new_price / np.nanmean(
-                                getattr(year_i_mines, alt_select)[conc_mines]))
-                        if len(opening.index)>0:
-                            conc_mines = (opening.payable_percent_pct != 100) & (~np.isnan(opening.payable_percent_pct.astype(float)))
-                            if np.sum(conc_mines)>0:
-                                setattr(opening, alt_select,
-                                        getattr(opening, alt_select) * new_price / np.nanmean(getattr(opening, alt_select).astype(float)[conc_mines]))
-                    else:
-                        setattr(self.ml.loc[i], alt_select, new_price)
-                        setattr(opening, alt_select, new_price)
-                        # print(3437,opening.commodity_price_usdpt)
+                            setattr(opening, alt_select,
+                                    getattr(opening, alt_select) * new_price / np.nanmean(getattr(opening, alt_select).astype(float)[conc_mines]))
+                else:
+                    setattr(self.ml.loc[i], alt_select, new_price)
+                    setattr(opening, alt_select, new_price)
+                    # print(3437,opening.commodity_price_usdpt)
 
         self.opening = opening.copy()
-        if self.byproduct and byproduct == False:
-            self.update_price_tcrc(byproduct=True)
 
     def simulate_history(self):
         self.simulate_history_bool = False
@@ -3671,7 +2761,7 @@ class miningModel:
         h = sh.hyperparam
         h.loc['simulate_history_bool'] = False
         demand_growth = h['demand_series_pct_change'] / 100 + 1
-        final_demand = h['byproduct_production'] if self.byproduct else h['primary_production']
+        final_demand = h['primary_production']
         years_back = 20 if demand_growth < 0.1 else 50
 
         sh.simulation_time = np.arange(self.simulation_time[0] - years_back, self.simulation_time[0] + 1)
@@ -3679,11 +2769,9 @@ class miningModel:
 
         h['demand_series_method'] = 'yoy'
         initial_demand = final_demand * demand_growth ** (-1 * years_back)
-        print(2536, initial_demand, final_demand)
-        if self.byproduct:
-            h.loc['byproduct_production'] = initial_demand
-        else:
-            h.loc['primary_production'] = initial_demand;
+        if self.verbosity > 3:
+            print(2536, initial_demand, final_demand)
+        h.loc['primary_production'] = initial_demand;
 
         h.loc['initial_ore_grade_decline'] = 0
         h.loc['mine_cost_change_per_year'] = 0
@@ -3693,8 +2781,6 @@ class miningModel:
         sh.hyperparam = h
         sh.recalculate_hyperparams()
         sh.primary_price_series = pd.Series(float(h['primary_commodity_price']), sh.simulation_time)
-        if self.byproduct: sh.byproduct_price_series = pd.Series(float(h['byproduct_commodity_price']),
-                                                                 sh.simulation_time)
 
         sh.simulate_mine_life_all_years()
         self.mine_history = sh.ml.copy()
@@ -3723,7 +2809,7 @@ class miningModel:
     def price_vs_subsample_size(self):
         with warnings.catch_warnings():
             warnings.simplefilter('error')
-            m = miningModel(byproduct=False, verbosity=0)
+            m = miningModel(verbosity=0)
             m.hyperparam['minesite_cost_response_to_grade_price'] = True
             m.hyperparam['primary_commodity_price'] = 7000
             m.hyperparam['primary_ore_grade_mean'] = 0.1
@@ -3787,16 +2873,13 @@ class miningModel:
                                                                         'minetype_prod_frac_openpit',
                                                                         'minetype_prod_frac_tailings',
                                                                         'minetype_prod_frac_stockpile']])
-            if self.byproduct:
-                self.hyperparam['byproduct_host1_production_fraction'] = 1 - np.sum([self.hyperparam[i] for i in [
-                    'byproduct_pri_production_fraction', 'byproduct_host3_production_fraction',
-                    'byproduct_host2_production_fraction']])
+            
         if np.any(['regression2use' in j for j in changed_params]):
             self.hyperparam = self.add_minesite_cost_regression_params(self.hyperparam)
             self.hyperparam['primary_tcm_flag'] = 'tcm' in self.hyperparam[
                 'primary_minesite_cost_regression2use']
             self.hyperparam['primary_rr_negative'] = False
-        if np.any([np.any([k in j for k in ['primary_','byproduct_','mine_cu','ramp_up_','load_mine_file']]) for j in changed_params]):
+        if np.any([np.any([k in j for k in ['primary_','mine_cu','ramp_up_','load_mine_file']]) for j in changed_params]):
             self.hyperparam['ramp_up_fraction'] = 0
             if not self.in_history:
                 self.op_initialize_mine_life()        # reinitialize mine_life_init?

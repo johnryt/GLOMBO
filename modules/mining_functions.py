@@ -121,7 +121,7 @@ def supply_curve_plot(df, x_col, stack_cols, ax=0, dividing_line_width=0.2,
                       price_col='', price_line_width=4,legend=True,legend_fontsize=19,legend_cols=2,
                       title='Cost supply curve',xlabel='Cumulative bauxite production (kt)',
                       ylabel='Total minesite cost ($/t)',unit_split=True,line_only=False,ylim=(0,71.5),
-                      byproduct=False, **kwargs):
+                      **kwargs):
     '''Creates a stacked supply curve
     df: dataframe with time index
     x_col: str, name of column in dataframe to use as
@@ -163,28 +163,7 @@ def supply_curve_plot(df, x_col, stack_cols, ax=0, dividing_line_width=0.2,
     
     ph2 = pd.concat([ph,ph1]).sort_index()
     if line_only:
-        if byproduct:
-            n = 0
-            for i in ph2['Byproduct ID'].unique():
-                ph4 = ph2.loc[ph2['Byproduct ID']==i]
-                ii = all_non_consecutive(ph4.index)
-                for j in ii:
-                    ph2.loc[j['start']:j['end'],'Cat'] = n
-                    n+=1
-            index_ph = ['Primary','Host 1','Host 2','Host 3'][:len(ph2['Byproduct ID'].unique())]
-            colors = dict(zip(index_ph,['#d7191c','#fdae61','#abd9e9','#2c7bb6']))
-            custom_lines = []
-            for i in ph2.Cat.unique():
-                if i!=ph2.Cat.iloc[-1]:
-                    ind = ph2.loc[ph2.Cat==i].index
-                    ax.vlines(ph2.loc[ind[-1],'x plot'], ph2.loc[ind[-1],'Sort by'], ph2.loc[ind[-1]+1,'Sort by'],color='k',linewidth=1)
-                ax.step(ph2.loc[ph2.Cat==i,'x plot'],ph2.loc[ph2.Cat==i,'Sort by'],color = colors[ph2.loc[ph2.Cat==i,'Byproduct ID'].iloc[0]], label=ph2.loc[ph2.Cat==i,'Byproduct ID'].iloc[0])
-            
-            for i in index_ph:
-                custom_lines += [Line2D([0],[0],color=colors[i])]
-            ax.legend(custom_lines,index_ph)
-        else:
-            ax.plot(ph2['x plot'], ph2.loc[:,'Sort by'])
+        ax.plot(ph2['x plot'], ph2.loc[:,'Sort by'])
     else:
         ax.stackplot(ph2['x plot'],
                  ph2.loc[:,stack_cols].T,

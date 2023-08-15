@@ -3154,6 +3154,7 @@ class SHAP():
 
     def __init__(self, many, commodity=None, standard_scaler=True, dummies=False, split_frac=0.5,
                  Regressor=RandomForestRegressor, use_train_data=False, objective=None, processing_option=None):
+        import shap
         self.many = many
         if commodity != None:
             commodity = commodity.lower()
@@ -3467,6 +3468,7 @@ class SHAP():
         fig.tight_layout()
         return fig
 
+    # TODO Delete gamma facet function and dependencies?
     def gamma_facet(self):
         '''
         see the feature_interactions function
@@ -3638,7 +3640,7 @@ def plot_sri_matrices(self, n_param=3, width_scale=1, width_ratio_scale=0.83, dp
 
 def plot_all_sri_matrices(many, commodities=None, standard_scaler=True, dummies=False, split_frac=0.6,
                           Regressor=RandomForestRegressor, use_train_data=False, objective=None, n_param=3,
-                          width_scale=1, cmap='viridis_r', dpi=50):
+                          width_scale=1, width_ratio_scale=0.83, cmap='viridis_r', dpi=50):
     """
     Rather than needing to initialize the SHAP function every time,
     can just run this function to get all the SRI matrices. Takes
@@ -3943,7 +3945,7 @@ def make_parameter_mean_std_table(many, n_best, value_in_parentheses='standard e
 
     if stars == 'ttest':
         pvals = best_n.apply(lambda x: stats.ttest_1samp(x, popmean=0)[1], axis=1)
-        display(pvals)
+        print(pvals)
     elif stars == 'uniform':
         pvals = get_difference_from_uniform(rmse_df)
     else:

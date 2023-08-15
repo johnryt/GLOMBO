@@ -46,7 +46,7 @@ class Integration():
         to see the actual methods
     '''
 
-    def __init__(self, static_data_folder=None, user_data_folder=None, simulation_time=np.arange(2019, 2041), verbosity=0, byproduct=False,
+    def __init__(self, static_data_folder=None, user_data_folder=None, simulation_time=np.arange(2019, 2041), verbosity=0,
                  input_hyperparam=0, scenario_name='', commodity=None, price_to_use=None,
                  historical_price_rolling_window=1, force_integration_historical_price=False,
                  use_historical_price_for_mine_initialization=True):
@@ -63,7 +63,6 @@ class Integration():
         self.static_data_folder = 'input_files/static' if user_data_folder is None else static_data_folder
         self.simulation_time = simulation_time
         self.verbosity = verbosity
-        self.byproduct = byproduct
         self.input_hyperparam = input_hyperparam
         self.scenario_name = scenario_name
         self.historical_price_rolling_window = historical_price_rolling_window
@@ -417,7 +416,7 @@ class Integration():
                                                                                     'This is for setting up the so-called demand series, which is what the mining module tries to tune mine production to match when historical presimulation is done. This value is normally either yoy or target, and setting it to anything else allows us to ensure the demand_series used for mine tuning is the one from our historical data file.'],
                                                                                    dtype='object')
         hyperparameters.loc['reserves_ratio_price_lag',
-        :] = 5, 'lag on price change price(t-lag)/price(t-lag-1) used for informing incentive pool size change, paired with resources_contained_elas_primary_price (and byproduct if byproduct==True)'
+        :] = 5, 'lag on price change price(t-lag)/price(t-lag-1) used for informing incentive pool size change, paired with resources_contained_elas_primary_price'
 
         # demand
         hyperparameters.loc['demand only', :] = np.nan
@@ -813,11 +812,10 @@ class Integration():
             mine_simulation_time = np.arange(end_yr - h['presimulate_n_years'], self.simulation_time[-1] + 1)
         else:
             mine_simulation_time = self.simulation_time
-        self.mining = miningModel(simulation_time=mine_simulation_time, byproduct=self.byproduct,
-                                  verbosity=self.verbosity)
+
+        self.mining = miningModel(simulation_time=mine_simulation_time, verbosity=self.verbosity)
+
         self.mining.primary_price_series = self.primary_commodity_price.copy()
-        if hasattr(self,
-                   'byproduct_price_series'): self.mining.byproduct_price_series = self.byproduct_commodity_price.copy()
         m = self.mining
         if self.verbosity > 1: print('Mining parameters updated:')
         for param in [j for j in h.index if j in m.hyperparam]:

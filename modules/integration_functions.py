@@ -247,7 +247,6 @@ class Sensitivity():
                  notes='Initial run',
                  simulation_time = np.arange(2019,2041),
                  train_time = np.arange(2001,2020),
-                 byproduct=False,
                  verbosity=0,
                  param_scale=0.5,
                  scenarios=[''],
@@ -300,8 +299,6 @@ class Sensitivity():
             train_time (approx. 75% of historical period we have), but default is set to 2001-2019 so that
             demand and mining pre-tuning and integration pre-tuning are not disturbed unless intentionally
             (train-test split is not the default)
-        byproduct: bool, whether we are simulating a mono-product mined commodity or a multi-product mined
-            commodity. Have not yet had the chance to test out the True setting
         verbosity: int, tells how much we print as the model runs. Can be anything including -1 which suppresses
             nearly all output, and I think the highest value (above which nothing changes) is 4.
         param_scale: float, used in conjunction with params_to_change and n_per_param in the run() simple
@@ -398,7 +395,6 @@ class Sensitivity():
         self.element_commodity_map = {'Al':'Aluminum','Au':'Gold','Cu':'Copper','Steel':'Steel','Co':'Cobalt','REEs':'REEs','W':'Tungstate','Sn':'Tin','Ta':'Tantalum','Ni':'Nickel','Ag':'Silver','Zn':'Zinc','Pb':'Lead','Mo':'Molybdenum','Pt':'Platinum','Te':'Telllurium','Li':'Lithium'}
         self.update_changing_base_parameters_series()
 
-        self.byproduct = byproduct
         self.verbosity = verbosity
         self.param_scale = param_scale
         self.pkl_filename = pkl_filename
@@ -522,7 +518,7 @@ class Sensitivity():
         else:
             self.mod = Integration(static_data_folder=self.static_data_folder, user_data_folder=self.user_data_folder,
                                    simulation_time=self.simulation_time,
-                                   verbosity=self.verbosity,byproduct=self.byproduct,scenario_name='',
+                                   verbosity=self.verbosity,scenario_name='',
                                    commodity=self.material, price_to_use=self.price_to_use,
                                    historical_price_rolling_window=self.historical_price_rolling_window,
                                    force_integration_historical_price=self.force_integration_historical_price,
@@ -691,7 +687,7 @@ class Sensitivity():
         if type(self.params_to_change)==int:
             self.mod = Integration(static_data_folder=self.static_data_folder, user_data_folder=self.user_data_folder,
                                     simulation_time=self.simulation_time,
-                                   verbosity=self.verbosity,byproduct=self.byproduct, commodity=self.material,
+                                   verbosity=self.verbosity, commodity=self.material,
                                    price_to_use=self.price_to_use,
                                    historical_price_rolling_window=self.historical_price_rolling_window,
                                    force_integration_historical_price=self.force_integration_historical_price,
@@ -750,7 +746,7 @@ class Sensitivity():
                 self.val = val
                 self.mod = Integration(static_data_folder=self.static_data_folder, user_data_folder=self.user_data_folder,
                                        simulation_time=self.simulation_time,
-                                       verbosity=self.verbosity,byproduct=self.byproduct,commodity=self.material,
+                                       verbosity=self.verbosity,commodity=self.material,
                                        price_to_use=self.price_to_use,
                                        historical_price_rolling_window=self.historical_price_rolling_window,
                                        force_integration_historical_price=self.force_integration_historical_price,
@@ -827,7 +823,7 @@ class Sensitivity():
         if np.all(['++' not in q for q in self.scenarios]):
             self.mod = Integration(static_data_folder=self.static_data_folder, user_data_folder=self.user_data_folder,
                                    simulation_time=self.simulation_time,
-                                   verbosity=self.verbosity,byproduct=self.byproduct,commodity=self.material,
+                                   verbosity=self.verbosity,commodity=self.material,
                                    price_to_use=self.price_to_use,
                                    historical_price_rolling_window=self.historical_price_rolling_window,
                                    force_integration_historical_price=self.force_integration_historical_price,
@@ -907,7 +903,7 @@ class Sensitivity():
                         print(f'\tSub-scenario {enum+1}/{len(self.scenarios)}: {scenario_name} checking if exists...')
                     self.mod = Integration(static_data_folder=self.static_data_folder, user_data_folder=self.user_data_folder,
                                            simulation_time=self.simulation_time,
-                                           verbosity=self.verbosity,byproduct=self.byproduct,
+                                           verbosity=self.verbosity,
                                            scenario_name=pass_scenario_name,commodity=self.material,
                                            price_to_use=self.price_to_use,
                                            historical_price_rolling_window=self.historical_price_rolling_window,
@@ -1485,10 +1481,10 @@ class Sensitivity():
             default_bounds = (0.001,1) if self.constrain_tuning_to_sign else (0.001,2)
             dimensions = [default_bounds if i not in cannot_unconstrain else (0.001,1) for i in params_to_change]
         else:
-            # self.mod = miningModel(verbosity=self.verbosity, simulation_time=self.simulation_time,byproduct=self.byproduct)
+            # self.mod = miningModel(verbosity=self.verbosity, simulation_time=self.simulation_time)
             self.mod = Integration(static_data_folder=self.static_data_folder, user_data_folder=self.user_data_folder,
                                     simulation_time=self.simulation_time,
-                                   verbosity=self.verbosity,byproduct=self.byproduct,commodity=self.material,
+                                   verbosity=self.verbosity,commodity=self.material,
                                    price_to_use=self.price_to_use,
                                    historical_price_rolling_window=self.historical_price_rolling_window,
                                    force_integration_historical_price=self.force_integration_historical_price,
@@ -1549,10 +1545,10 @@ class Sensitivity():
                     mod.commodity_price_series = pd.concat([pd.Series(mod.commodity_price_series.iloc[0],np.arange(1900,self.historical_data['Primary commodity price'].dropna().index[0])),
                                                             mod.commodity_price_series]).sort_index()
                 else:
-                    # mod = miningModel(verbosity=self.verbosity, simulation_time=self.simulation_time,byproduct=self.byproduct)
+                    # mod = miningModel(verbosity=self.verbosity, simulation_time=self.simulation_time)
                     mod = Integration(static_data_folder=self.static_data_folder, user_data_folder=self.user_data_folder,
                                       simulation_time=self.simulation_time,
-                                      verbosity=self.verbosity,byproduct=self.byproduct,commodity=self.material,
+                                      verbosity=self.verbosity,commodity=self.material,
                                       price_to_use=self.price_to_use,
                                       historical_price_rolling_window=self.historical_price_rolling_window,
                                       force_integration_historical_price=self.force_integration_historical_price,
@@ -2078,8 +2074,6 @@ def generate_commodity_inputs(commodity_inputs, random_state):
     through a Monte Carlo using the run_multiple_integration_models() method.
     '''
     ci = commodity_inputs.copy()
-    if 'Byproduct status' in ci.index:
-        ci = ci.drop('Byproduct status')
     if 'mine_cu_margin_elas' in ci.index:
         ci = ci.drop('mine_cu_margin_elas')
         # this one already gets covered in the Sensitivity class

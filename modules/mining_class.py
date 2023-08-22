@@ -230,23 +230,23 @@ class miningModel:
                 hyperparameters['verbosity'] = self.verbosity
                 hyperparameters['primary_production'] = 1  # kt
                 hyperparameters['primary_production_mean'] = 0.001  # kt
-                hyperparameters['primary_production_var'] = 1
+                hyperparameters['primary_production_std'] = 1
                 hyperparameters['primary_production_distribution'] = 'lognorm'
                 hyperparameters['primary_production_fraction'] = 1
                 hyperparameters['primary_ore_grade_mean'] = 0.01
-                hyperparameters['primary_ore_grade_var'] = 0.3
+                hyperparameters['primary_ore_grade_std'] = 0.3
                 hyperparameters['primary_ore_grade_distribution'] = 'lognorm'
                 hyperparameters['primary_cu_mean'] = 0.85
-                hyperparameters['primary_cu_var'] = 0.06
+                hyperparameters['primary_cu_std'] = 0.06
                 hyperparameters['primary_cu_distribution'] = 'lognorm'
                 hyperparameters['primary_payable_percent_mean'] = 0.63
-                hyperparameters['primary_payable_percent_var'] = 1.83
+                hyperparameters['primary_payable_percent_std'] = 1.83
                 hyperparameters['primary_payable_percent_distribution'] = 'weibull_min'
                 hyperparameters['primary_rr_default_mean'] = 13.996
-                hyperparameters['primary_rr_default_var'] = 0.675
+                hyperparameters['primary_rr_default_std'] = 0.675
                 hyperparameters['primary_rr_default_distribution'] = 'lognorm'
                 hyperparameters['primary_ot_cumu_mean'] = 14.0018
-                hyperparameters['primary_ot_cumu_var'] = 0.661
+                hyperparameters['primary_ot_cumu_std'] = 0.661
                 hyperparameters['primary_ot_cumu_distribution'] = 'lognorm'
 
                 hyperparameters['primary_rr_alpha'] = 39.2887
@@ -259,11 +259,11 @@ class miningModel:
                 hyperparameters['primary_rr_rho'] = -10.7094
                 hyperparameters['primary_rr_negative'] = False
 
-                hyperparameters['primary_recovery_rate_var'] = 0.6056  # default value of 0.6056 comes from the mean across all materials in snl
+                hyperparameters['primary_recovery_rate_std'] = 0.6056  # default value of 0.6056 comes from the mean across all materials in snl
                 hyperparameters['primary_recovery_rate_distribution'] = 'lognorm'
                 hyperparameters['primary_recovery_rate_shuffle_param'] = 0.4
                 hyperparameters['primary_reserves_mean'] = 11.04953  # these values are from https://countertop.mit.edu:3048/notebooks/SQL/Second%20round%20generalization%20mine%20parameters.ipynb
-                hyperparameters['primary_reserves_var'] = 0.902357  # use the ratio between reserves and ore treated in each year, finding lognormal distribution
+                hyperparameters['primary_reserves_std'] = 0.902357  # use the ratio between reserves and ore treated in each year, finding lognormal distribution
                 hyperparameters['primary_reserves_distribution'] = 'lognorm'
                 hyperparameters['primary_reserves_reported'] = 30
                 hyperparameters['primary_reserves_reported_basis'] = 'none'  # ore, metal, or none basis - ore: mass of ore reported as reserves (SNL style), metal: metal content of reserves reported, none: use the generated values without adjustment
@@ -277,7 +277,7 @@ class miningModel:
             if 'parameters for operating mine pool generation, cost':
                 hyperparameters['primary_commodity_price'] = 6000  # USD/t
                 hyperparameters['primary_minesite_cost_mean'] = 0
-                hyperparameters['primary_minesite_cost_var'] = 1
+                hyperparameters['primary_minesite_cost_std'] = 1
                 hyperparameters['primary_minesite_cost_distribution'] = 'lognorm'
 
                 hyperparameters['minetype_prod_frac_underground'] = 0.3
@@ -287,7 +287,7 @@ class miningModel:
                 hyperparameters['minetype_prod_frac_placer'] = 1 - np.sum([hyperparameters[i] for i in ['minetype_prod_frac_underground','minetype_prod_frac_openpit','minetype_prod_frac_tailings','minetype_prod_frac_stockpile']])
 
                 hyperparameters['primary_minerisk_mean'] = 9.4  # values for copper → ranges from 4 to 20
-                hyperparameters['primary_minerisk_var'] = 1.35
+                hyperparameters['primary_minerisk_std'] = 1.35
                 hyperparameters['primary_minerisk_distribution'] = 'norm'
 
                 hyperparameters['primary_minesite_cost_regression2use'] = 'linear_113_price_tcm_sx'  # options: linear_107, bayesian_108, linear_110_price, linear_111_price_tcm, linear_112_price_tcm_sx, linear_112_price_tcm_sx; not used if primary_minesite_cost_mean>0
@@ -458,25 +458,25 @@ class miningModel:
                 # operating pool mass values
                 hyperparameter_notes['primary_production'] = 'Total mine production in whatever units we are using, metal content of the primary (host) commodity'
                 hyperparameter_notes['primary_production_mean'] = 'Mean mine production in whatever units we are using, metal content of the primary (host) commodity'
-                hyperparameter_notes['primary_production_var'] = 'Variance of the mine production in whatever units we are using, metal content of the primary (host) commodity'
+                hyperparameter_notes['primary_production_std'] = 'Standard deviation of the mine production in whatever units we are using, metal content of the primary (host) commodity'
                 hyperparameter_notes['primary_production_distribution'] = 'valid stats.distribution distribution name, e.g. lognorm, norm, etc. Should be something with loc and scale parameters'
                 hyperparameter_notes['primary_ore_grade_mean'] = 'mean ore grade (%) for the primary commodity'
-                hyperparameter_notes['primary_ore_grade_var'] = 'ore grade variance (%) for the primary commodity'
+                hyperparameter_notes['primary_ore_grade_std'] = 'ore grade std dev (%) for the primary commodity'
                 hyperparameter_notes['primary_ore_grade_distribution'] = 'distribution used for primary commodity ore grade, default lognormal'
                 hyperparameter_notes['primary_cu_mean'] = 'mean capacity utilization of the primary mine (likely not necessary to consider this as just the primary, or at least secondary total CU would be the product of this and the secondary CU)'
-                hyperparameter_notes['primary_cu_var'] = 'capacity utilization of primary mine variance'
+                hyperparameter_notes['primary_cu_std'] = 'capacity utilization of primary mine variance'
                 hyperparameter_notes['primary_cu_distribution'] = 'distirbution for primary mine capacity utilization, default lognormal'
                 hyperparameter_notes['primary_payable_percent_mean'] = 'mean for 100-(payable percent): 0.63 value from https://countertop.mit.edu:3048/notebooks/SQL/Mining%20database%20read.ipynb, section 12.3 Payable Percent, for weibull minimum distribution of 100-(payable percent)'
-                hyperparameter_notes['primary_payable_percent_var'] = 'variance for 100-(payable percent): 1.83 value from https://countertop.mit.edu:3048/notebooks/SQL/Mining%20database%20read.ipynb, section 12.3 Payable Percent, for weibull minimum distribution of 100-(payable percent)'
+                hyperparameter_notes['primary_payable_percent_std'] = 'variance for 100-(payable percent): 1.83 value from https://countertop.mit.edu:3048/notebooks/SQL/Mining%20database%20read.ipynb, section 12.3 Payable Percent, for weibull minimum distribution of 100-(payable percent)'
                 hyperparameter_notes['primary_payable_percent_distribution'] = 'distribution for 100-(payable percent): from https://countertop.mit.edu:3048/notebooks/SQL/Mining%20database%20read.ipynb, section 12.3 Payable Percent, for weibull minimum distribution of 100-(payable percent)'
                 hyperparameter_notes['primary_rr_grade_corr_slope'] = 'slope used for calculating log(100-recovery rate) from log(head grade), referencing slide 41 of 20210825 Generalization.pptx and section 10 Recovery rate, https://countertop.mit.edu:3048/notebooks/SQL/Second%20round%20generalization%20mine%20parameters.ipynb'
                 hyperparameter_notes['primary_rr_grade_corr_slope'] = 'constant used for calculating log(100-recovery rate) from log(head grade), referencing slide 41 of 20210825 Generalization.pptx and section 10 Recovery rate, https://countertop.mit.edu:3048/notebooks/SQL/Second%20round%20generalization%20mine%20parameters.ipynb'
                 hyperparameter_notes['primary_recovery_rate_mean'] = 'mean for 100-(recovery rate): lognormal distribution, using the mean of head grade to calculate the mean recovery rate value with constant standard deviation (average from each material), referencing slide 41 of 20210825 Generalization.pptx and section 10 Recovery rate (https://countertop.mit.edu:3048/notebooks/SQL/Mining%20database%20read.ipynb)as a function of ore grade. '
-                hyperparameter_notes['primary_recovery_rate_var'] = 'variance for 100-(recovery rate): lognormal distribution, using the mean of head grade to calculate the mean recovery rate value with constant standard deviation (average from each material), referencing slide 41 of 20210825 Generalization.pptx and section 10 Recovery rate (https://countertop.mit.edu:3048/notebooks/SQL/Mining%20database%20read.ipynb) as a function of ore grade. '
+                hyperparameter_notes['primary_recovery_rate_std'] = 'variance for 100-(recovery rate): lognormal distribution, using the mean of head grade to calculate the mean recovery rate value with constant standard deviation (average from each material), referencing slide 41 of 20210825 Generalization.pptx and section 10 Recovery rate (https://countertop.mit.edu:3048/notebooks/SQL/Mining%20database%20read.ipynb) as a function of ore grade. '
                 hyperparameter_notes['primary_recovery_rate_distribution'] = 'distribution for (100-recovery rate): lognormal distribution, using the mean of head grade to calculate the mean recovery rate value with constant standard deviation (average from each material), referencing slide 41 of 20210825 Generalization.pptx and section 10 Recovery rate (https://countertop.mit.edu:3048/notebooks/SQL/Mining%20database%20read.ipynb) as a function of ore grade. '
                 hyperparameter_notes['primary_recovery_rate_shuffle_param'] = 'recovery rates are ordered to match the order of grade to retain correlation, then shuffled so the correlation is not perfect. This parameter (called part) passed to the partial shuffle function for the correlation between recovery rate and head grade; higher value = more shuffling'
                 hyperparameter_notes['primary_reserves_mean'] = 'mean for primary reserves divided by ore treated. 11.04953 value from https://countertop.mit.edu:3048/notebooks/SQL/Second%20round%20generalization%20mine%20parameters.ipynb, use the ratio between reserves and ore treated in each year, finding lognormal distribution'
-                hyperparameter_notes['primary_reserves_var'] = 'variance for primary reserves divided by ore treated. 0.902357 value from https://countertop.mit.edu:3048/notebooks/SQL/Second%20round%20generalization%20mine%20parameters.ipynb, use the ratio between reserves and ore treated in each year, finding lognormal distribution'
+                hyperparameter_notes['primary_reserves_std'] = 'variance for primary reserves divided by ore treated. 0.902357 value from https://countertop.mit.edu:3048/notebooks/SQL/Second%20round%20generalization%20mine%20parameters.ipynb, use the ratio between reserves and ore treated in each year, finding lognormal distribution'
                 hyperparameter_notes['primary_reserves_distribution'] = 'distribution for primary reserves divided by ore treated. lognormal values from https://countertop.mit.edu:3048/notebooks/SQL/Second%20round%20generalization%20mine%20parameters.ipynb, use the ratio between reserves and ore treated in each year, finding lognormal distribution'
                 hyperparameter_notes['primary_reserves_reported'] = 'reserves reported for that year; tunes the operating mine pool such that its total reserves matches this value. Can be given in terms of metal content or total ore available, just have to adjust the primary_reserves_reported_basis variable in this df. Setting it to zero allows the generated value to be used.'
                 hyperparameter_notes['primary_reserves_reported_basis'] = 'ore, metal, or none basis - ore: mass of ore reported as reserves (SNL style), metal: metal content of reserves reported, none: use the generated values without adjustment'
@@ -490,7 +490,7 @@ class miningModel:
 
                 # Prices
                 hyperparameter_notes['primary_minesite_cost_mean'] = 'mean minesite cost for the primary commodity. Set to zero to use mine type, risk, and ore grade to generate the cost distribution instead'
-                hyperparameter_notes['primary_minesite_cost_var'] = 'minesite cost variance for the primary commodity. Is not used if the mean value is set to zero'
+                hyperparameter_notes['primary_minesite_cost_std'] = 'minesite cost variance for the primary commodity. Is not used if the mean value is set to zero'
                 hyperparameter_notes['primary_minesite_cost_distribution'] = 'minesite cost distribution type (e.g. lognormal) for the primary commodity. Is not used if the mean value is set to zero'
 
                 hyperparameter_notes['minetype_prod_frac_underground'] = 'fraction of mines using mine type underground; not used if primary_minesite_cost_mean is nonzero'
@@ -500,7 +500,7 @@ class miningModel:
                 hyperparameter_notes['minetype_prod_frac_placer'] = 'fraction of mines using mine type placer; not used if primary_minesite_cost_mean is nonzero'
 
                 hyperparameter_notes['minerisk_mean'] = 'mean value. Risk indicator is the sum of political, operational, terrorism, and security risks, which range from insignificant (1) to extreme (5). Therefore the minimum value is 4 and the maximum value is 20. Not used if primary_minesite_cost_mean is nonzero'
-                hyperparameter_notes['minerisk_var'] = 'variance. Risk indicator is the sum of political, operational, terrorism, and security risks, which range from insignificant (1) to extreme (5). Therefore the minimum value is 4 and the maximum value is 20. Not used if primary_minesite_cost_mean is nonzero'
+                hyperparameter_notes['minerisk_std'] = 'variance. Risk indicator is the sum of political, operational, terrorism, and security risks, which range from insignificant (1) to extreme (5). Therefore the minimum value is 4 and the maximum value is 20. Not used if primary_minesite_cost_mean is nonzero'
                 hyperparameter_notes['minerisk_distribution'] = 'distribution, assumed normal. Risk indicator is the sum of political, operational, terrorism, and security risks, which range from insignificant (1) to extreme (5). Therefore the minimum value is 4 and the maximum value is 20. Not used if primary_minesite_cost_mean is nonzero'
 
                 hyperparameter_notes['primary_minesite_cost_regression2use'] = 'options: linear_107, bayesian_108, linear_110_price, linear_111_price_tcm; not used if primary_minesite_cost_mean>0. First component (linear/bayesian) references regression type, number references slide in Displacement\04 Presentations\John\Weekly Updates\20210825 Generalization.pptx. Inclusion of \'price\' at the end indicates to use the regression that included commodity price. Inclusion of \'tcm\' indicates the regression was performed on total cash margin excl tcrc rather than minesite cost, and determines the primary_minesite_cost_flag'
@@ -825,14 +825,14 @@ class miningModel:
         pri_dist = getattr(stats, h['primary_production_distribution'])
         pri_prod = h['primary_production']
         pri_prod_mean_frac = h['primary_production_mean']
-        pri_prod_var_frac = h['primary_production_var']
+        pri_prod_std_frac = h['primary_production_std']
         production_fraction = h['primary_production_fraction']
 
         self.hyperparam['random_state'] = int(self.hyperparam['random_state'])
         pri_prod_frac_dist = pri_dist.rvs(
             loc=0,
             scale=pri_prod_mean_frac,
-            s=pri_prod_var_frac,
+            s=pri_prod_std_frac,
             size=int(np.ceil(2 * pri_prod / pri_prod_mean_frac)),
             random_state=self.hyperparam['random_state']+self.rs_add)
         self.rs_add+=1
@@ -1306,24 +1306,24 @@ class miningModel:
             if len([i for i in params if 'distribution' in i]) > 1:
                 raise Exception('993' + param + str(params))
             mean_name = [i for i in params if 'mean' in i][0]
-            var_name = [i for i in params if 'var' in i][0]
+            std_name = [i for i in params if 'std' in i][0]
             pri_dist = getattr(stats, hyperparam[dist_name])
             pri_mean = hyperparam[mean_name]
-            pri_var = hyperparam[var_name]
+            pri_std = hyperparam[std_name]
 
             np.random.seed(self.hyperparam['random_state']+self.rs_add)
             self.rs_add+=1
             if hyperparam[dist_name] == 'norm':
                 dist_rvs = pri_dist.rvs(
                     loc=pri_mean,
-                    scale=pri_var,
+                    scale=pri_std,
                     size=self.mines.shape[0],
                     random_state=self.hyperparam['random_state']+self.rs_add)
                 dist_rvs[dist_rvs < 0] = np.random.choice(dist_rvs[dist_rvs > 0], len(dist_rvs[dist_rvs < 0]))
                 self.rs_add+=1
             else:
                 dist_rvs = pri_dist.rvs(
-                    pri_var,
+                    pri_std,
                     loc=0,
                     scale=pri_mean,
                     size=self.mines.shape[0],

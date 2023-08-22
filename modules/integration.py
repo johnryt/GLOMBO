@@ -382,8 +382,8 @@ class Integration():
         hyperparameters.loc['incentive_tuning_option', 'Value'] = 'pid-2019'
         hyperparameters.loc['internal_price_formation', 'Value'] = False
         hyperparameters.loc['primary_production_mean', 'Value'] = 0.001
-        hyperparameters.loc['primary_production_var', 'Value'] = 0.5
-        hyperparameters.loc['primary_ore_grade_var', 'Value'] = 1
+        hyperparameters.loc['primary_production_std', 'Value'] = 0.5
+        hyperparameters.loc['primary_ore_grade_std', 'Value'] = 1
         hyperparameters.loc['incentive_opening_probability', 'Value'] = 0.05
         hyperparameters.loc['incentive_require_tune_years',
         :] = 20, 'requires incentive tuning for however many years such that supply=demand, with no requirements on incentive_opening_probability and allowing the given incentive_opening_probability to be used'

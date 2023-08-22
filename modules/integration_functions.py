@@ -2097,9 +2097,9 @@ def generate_commodity_inputs(commodity_inputs, random_state):
         dists.loc['Secondary refinery fraction of recycled content, Global'] = 'uniform',0,1
         dists.loc['SX-EW fraction of production, Global'] = 'uniform',0,0.5
         dists.loc['primary_production_mean'] = 'uniform',1e-4,1e-2
-        dists.loc['primary_production_var'] = 'uniform',0.5,2
+        dists.loc['primary_production_std'] = 'uniform',0.5,2
         dists.loc['primary_ore_grade_mean'] = 'norm',1,0.2
-        dists.loc['primary_ore_grade_var'] = 'uniform',0.01,1.5
+        dists.loc['primary_ore_grade_std'] = 'uniform',0.01,1.5
         dists.loc['primary_commodity_price'] = 'uniform',100,1e8
         dists.loc['initial_scrap_spread'] = 'uniform',0,0.4
         dists.loc['lifetime_mean_construction'] = 'uniform',10,50

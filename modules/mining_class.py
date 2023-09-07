@@ -678,7 +678,7 @@ class miningModel:
 
         reg2use = hyperparameters['primary_tcrc_regression2use']
         #             log(tcrc) = alpha + beta*log(commodity price) + gamma*log(head grade)
-        #                 + delta*risk + epsilon*sxew + theta*dore (refining type)
+        #                 + delta*risk + epsilon*sxew + theta*dore (refining type) + eta*tailings + rho*underground
         if reg2use == 'linear_114_reftype':  # see slide 113 left-hand-side table in C:\Users\ryter\Dropbox (MIT)\Group Research Folder_Olivetti\Displacement\04 Presentations\John\Weekly Updates\20210825 Generalization.pptx
             hyperparameters['primary_tcrc_alpha'] = -2.4186
             hyperparameters['primary_tcrc_beta'] = 0.9314
@@ -687,6 +687,7 @@ class miningModel:
             hyperparameters['primary_tcrc_epsilon'] = -0.1199
             hyperparameters['primary_tcrc_theta'] = -2.3439
             hyperparameters['primary_tcrc_eta'] = 0
+            hyperparameters['primary_tcrc_rho'] = 0
         elif reg2use == 'linear_114':  # see slide 113 upper-right table in C:\Users\ryter\Dropbox (MIT)\Group Research Folder_Olivetti\Displacement\04 Presentations\John\Weekly Updates\20210825 Generalization.pptx
             hyperparameters['primary_tcrc_alpha'] = -2.3840
             hyperparameters['primary_tcrc_beta'] = 0.9379
@@ -695,6 +696,16 @@ class miningModel:
             hyperparameters['primary_tcrc_epsilon'] = -0.0820
             hyperparameters['primary_tcrc_theta'] = -2.3451
             hyperparameters['primary_tcrc_eta'] = 0
+            hyperparameters['primary_tcrc_rho'] = 0
+        elif reg2use == 'revised_09_01_23': 
+            hyperparameters['primary_tcrc_alpha'] = -5.6416
+            hyperparameters['primary_tcrc_beta'] = 0.8313
+            hyperparameters['primary_tcrc_gamma'] = 0.9625
+            hyperparameters['primary_tcrc_delta'] = 0
+            hyperparameters['primary_tcrc_epsilon'] = 0.4592
+            hyperparameters['primary_tcrc_theta'] = 0
+            hyperparameters['primary_tcrc_eta'] = -0.8975
+            hyperparameters['primary_tcrc_rho'] = 0.1060
 
         reg2use = hyperparameters['primary_scapex_regression2use']
         #             log(sCAPEX) = alpha + beta*log(commodity price) + gamma*log(head grade)
@@ -729,6 +740,16 @@ class miningModel:
             hyperparameters['primary_scapex_eta'] = -0.5690
             hyperparameters['primary_scapex_rho'] = 0.7977
             hyperparameters['primary_scapex_zeta'] = 0.6478
+        elif reg2use == 'revised_09_01_23':  
+            hyperparameters['primary_scapex_alpha'] = -12.9129
+            hyperparameters['primary_scapex_beta'] = 0.7533
+            hyperparameters['primary_scapex_gamma'] = 0.6888
+            hyperparameters['primary_scapex_delta'] = 0
+            hyperparameters['primary_scapex_epsilon'] = 0
+            hyperparameters['primary_scapex_theta'] = -0.4231
+            hyperparameters['primary_scapex_eta'] = -0.7330
+            hyperparameters['primary_scapex_rho'] = 0.7745
+            hyperparameters['primary_scapex_zeta'] = 1.1287
 
         reg2use = hyperparameters['primary_dcapex_regression2use']
         if reg2use == 'linear_124_norm':
@@ -1100,7 +1121,6 @@ class miningModel:
         '''Called inside generate_total_cash_margin'''
         mines = self.mines.copy()
         h = self.hyperparam
-
         if h['primary_minesite_cost_mean'] > 0 and param == 'Minesite cost (USD/t)':
             mines[param] = self.values_from_dist('primary_minesite_cost')
         elif param in ['Minesite cost (USD/t)', 'Total cash margin (USD/t)']:
@@ -1130,14 +1150,15 @@ class miningModel:
             mines[param] = minesite_cost
         elif param == 'TCRC (USD/t)':
             #             log(tcrc) = alpha + beta*log(commodity price) + gamma*log(head grade)
-            #                 + delta*risk + epsilon*sxew + theta*dore (refining type)
+            #                 + delta*risk + epsilon*sxew + theta*dore (refining type) + eta*tailings + rho*underground
             log_minesite_cost = h['primary_tcrc_alpha'] + \
                                 h['primary_tcrc_beta'] * np.log(mines['Commodity price (USD/t)']) + \
                                 h['primary_tcrc_gamma'] * np.log(mines['Head grade (%)']) + \
                                 h['primary_tcrc_delta'] * mines['Risk indicator'] + \
                                 h['primary_tcrc_epsilon'] * (mines['Payable percent (%)'] == 100) + \
                                 h['primary_tcrc_theta'] * h['primary_tcrc_dore_flag'] + \
-                                h['primary_tcrc_eta'] * (mines['Mine type string'] == 'tailings')
+                                h['primary_tcrc_eta'] * (mines['Mine type string'] == 'tailings') +\
+                                h['primary_tcrc_rho'] * (mines['Mine type string'] == 'underground')
             mines[param] = np.exp(log_minesite_cost)
             mines.loc[mines['Payable percent (%)']==100,param]=0
         elif param == 'Sustaining CAPEX ($M)':
@@ -1171,9 +1192,9 @@ class miningModel:
                 h['primary_dcapex_rho'] * (mines['Mine type string'] == 'underground') + \
                 h['primary_dcapex_zeta'] * (mines['Payable percent (%)'] == 100)
             if 'norm' in h['primary_dcapex_regression2use']:
-                mines.loc[:,param] = np.exp(log_minesite_cost) * mines['Capacity (kt)'].astype(float)
+                mines[param] = np.exp(log_minesite_cost) * mines['Capacity (kt)'].astype(float)
             else:
-                mines.loc[:,param] = np.exp(log_minesite_cost)
+                mines[param] = np.exp(log_minesite_cost)
         elif param == 'Overhead ($M)':
             #             log(Overhead ($M)) = alpha + beta*log(commodity price) + gamma*log(head grade)
             #                 + delta*log(ore treated) + epsilon*placer + theta*stockpile + eta*tailings + rho*underground + zeta*sxew
@@ -1188,9 +1209,9 @@ class miningModel:
                 h['primary_overhead_rho'] * (mines['Mine type string'] == 'underground') + \
                 h['primary_overhead_zeta'] * (mines['Payable percent (%)'] == 100)
             if 'norm' in h['primary_overhead_regression2use']:
-                mines.loc[param] = np.exp(log_minesite_cost) * mines.loc['Capacity (kt)'].astype(float)
+                mines[param] = np.exp(log_minesite_cost) * mines['Capacity (kt)'].astype(float)
             else:
-                mines.loc[param] = np.exp(log_minesite_cost)
+                mines[param] = np.exp(log_minesite_cost)
 
         self.mines = mines.copy()
 
@@ -1789,7 +1810,7 @@ class miningModel:
         # tcrc_df = self.ml['TCRC (USD/t)'].unstack()
         # tcrc_df.loc[i,:] = ml_yr['TCRC (USD/t)']
         tcrc_expect = self.calculate_price_expect(self.primary_tcrc_series.copy(), i)
-        ml_yr.tcrc_expect_usdpt = np.repeat(0, len(ml_yr.index)) # SX-EW mines have tcrc of zero so only set conc mines below
+        ml_yr.tcrc_expect_usdpt = np.repeat(0., len(ml_yr.index)) # SX-EW mines have tcrc of zero so only set conc mines below
         if len(self.conc_mines)>0:
             if tcrc_expect>1e12: tcrc_expect=1e12
             ml_yr.tcrc_usdpt[ml_yr.tcrc_usdpt>1e12] = 1e12

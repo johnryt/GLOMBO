@@ -22,6 +22,21 @@ from modules.Individual import *
 from datetime import datetime
 import warnings
 
+# hopefully fixing joblib windows error:
+import joblib
+def change_joblib_parallel_prefer(prefer='threads'):
+    # https://github.com/joblib/joblib/issues/1002, thanks mx2048
+    _original_init = joblib.parallel.Parallel.__init__
+
+    def _monkey_patched_init(self, *args, **kwargs):
+        kwargs['prefer'] = prefer
+        _original_init(self, *args, **kwargs)
+
+    joblib.parallel.Parallel.__init__ = _monkey_patched_init
+from sys import platform
+if platform=='win32':
+    change_joblib_parallel_prefer()
+
 
 # warnings.filterwarnings('error')
 # np.seterr(all='raise')
@@ -457,7 +472,7 @@ class Many():
             output = run_individual_integration(self, commodities[0])
             print(
                 f'commodity info not updated in {self.output_data_folder}/tuned_rmse_df_out{tuned_rmse_df_out_append}.csv')
-
+        improve_historical_data_save(self)
         print(f'time elapsed: {str(datetime.now() - t1)}')
         # add 'response','growth' to sensitivity_parameters input to allow demand parameters to change again
 
@@ -955,6 +970,7 @@ class Many():
         lod = LoadFolderContents(folder_path)
         lod.load_scenario_data()
         lod.get_sorted_dataframes()
+        self.folder_path = lod.folder_path
         dataframes_to_pull = ['results', 'rmse_df', 'hyperparam', 'historical_data', 'results_sorted', 'rmse_df_sorted',
                               'hyperparam_sorted']
 
@@ -4142,8 +4158,107 @@ def run_mining_pretuning():
     mod.run_all_mining(200, commodities=to_run, constrain_tuning_to_sign=True, filename_modifier='_constrain_mcpe0',
                        n_parallel=2)
 
+def run_integration_tuning(commodities='all', n_parallel=2):
+    """
+    Tuning process for producing all initial publication data.
+    ---------------------------
+    Inputs:
+    commodities: str | list | tuple | array. Either a list/tuple/array of commodities in the set
+    ['Cu', 'Al', 'Au', 'Sn', 'Ni', 'Ag', 'Zn', 'Pb', 'Steel'] or a string. Acceptable strings are:
+        - `all`: runs Cu, Al, Au, Sn, Ni, Ag, Zn, Pb, Steel
+        - `half1`: runs Cu, Al, Au, Sn
+        - `half2`: runs Ni, Ag, Zn, Pb, Steel
 
-def run_integration_tuning():
+    ---------------------------
+    Outputs: files in the generalization/output_files/Historical tuning/%& folder, 
+    where % is a prefix corresponding to the datetime the code was run and & is the 
+    scenario name. In this case, the folders are:
+    - %_main: standard run, 2001-2040, with training performance calculated on the time period 2001-2019
+    - %_split_2017: standard run, but training performance is calculated using only the time period 2001-2017 
+    - %_split_2016: standard run, but training performance is calculated using only the time period 2001-2016 
+    - %_split_2015: standard run, but training performance is calculated using only the time period 2001-2015
+    where % remains the datetime prefix
+    """
+    if type(commodities)==str:
+        if commodities=='all':
+            to_run = ['Cu', 'Al', 'Au', 'Sn', 'Ni', 'Ag', 'Zn', 'Pb', 'Steel']
+        elif commodities=='half1':
+            to_run = ['Cu', 'Al', 'Au', 'Sn']
+        elif commodities=='half2':
+            to_run = ['Ni', 'Ag', 'Zn', 'Pb', 'Steel']
+        elif commodities=='debug':
+            to_run = ['Au', 'Sn']
+        elif commodities=='debug2':
+            to_run = ['Pb', 'Steel']
+        else:
+            raise ValueError('Acceptable commodity inputs are: `all`, `half1`, `half2`; see docstring for more information')
+    elif type(commodities) in [list, tuple, np.ndarray]:
+        to_run = list(commodities)
+    elif commodities is None:
+        to_run = ['Cu', 'Al', 'Au', 'Sn', 'Ni', 'Ag', 'Zn', 'Pb', 'Steel']
+    else:
+        raise ValueError('Unsure what happened with your `commodities` input, but see docstring for acceptable inputs')
+    print('Input given: ', commodities)
+    print('Running commodities: ', to_run)
+
+    mod = Many()
+    mod.run_all_integration(n_runs=200, n_params=3, n_jobs=3,
+                            filename_modifier='_main',
+                            tuned_rmse_df_out_append='_main',
+                            train_time=np.arange(2001,2020),
+                            simulation_time=np.arange(2001,2041),
+                            normalize_objectives=True,
+                            constrain_previously_tuned=False,
+                            commodities=to_run,
+                            force_integration_historical_price=False,
+                            save_mining_info=False,
+                            use_historical_price_for_mine_initialization=True,
+                            n_parallel=n_parallel,
+                            verbosity=0)
+    mod = Many()
+    mod.run_all_integration(n_runs=200, n_params=3, n_jobs=3,
+                            filename_modifier='_split_2017',
+                            tuned_rmse_df_out_append='_split_2017',
+                            train_time=np.arange(2001,2017),
+                            simulation_time=np.arange(2001,2041),
+                            normalize_objectives=True,
+                            constrain_previously_tuned=False,
+                            commodities=to_run,
+                            force_integration_historical_price=False,
+                            save_mining_info=False,
+                            use_historical_price_for_mine_initialization=True,
+                            n_parallel=n_parallel,
+                            verbosity=0)
+    mod = Many()
+    mod.run_all_integration(n_runs=200, n_params=3, n_jobs=3,
+                            filename_modifier='_split_2016',
+                            tuned_rmse_df_out_append='_split_2016',
+                            train_time=np.arange(2001,2016),
+                            simulation_time=np.arange(2001,2041),
+                            normalize_objectives=True,
+                            constrain_previously_tuned=False,
+                            commodities=to_run,
+                            force_integration_historical_price=False,
+                            save_mining_info=False,
+                            use_historical_price_for_mine_initialization=True,
+                            n_parallel=n_parallel,
+                            verbosity=0)
+    mod = Many()
+    mod.run_all_integration(n_runs=200, n_params=3, n_jobs=3,
+                            filename_modifier='_split_2015',
+                            tuned_rmse_df_out_append='_split_2015',
+                            train_time=np.arange(2001,2015),
+                            simulation_time=np.arange(2001,2041),
+                            normalize_objectives=True,
+                            constrain_previously_tuned=False,
+                            commodities=to_run,
+                            force_integration_historical_price=False,
+                            save_mining_info=False,
+                            use_historical_price_for_mine_initialization=True,
+                            n_parallel=n_parallel,
+                            verbosity=0)
+
+def run_integration_tuning_old():
     """
     Mostly for keeping track of everything
 
@@ -4274,3 +4389,121 @@ def update_tuned_rmse_df_out_with_new_data(folder_name, element, tuned_rmse_df_o
         tuned.drop(commodity, inplace=True)
     rmse = pd.concat([tuned, rmse_ph]).fillna(0)
     rmse.to_csv(filename)
+
+from scipy.interpolate import interp1d
+from scipy.optimize import minimize_scalar
+from scipy.interpolate import splrep, splev, UnivariateSpline
+
+def pi0est(p, lambda_seq=np.arange(0.05, 0.96, 0.05), pi0_method='smoother',
+           smooth_df=3, smooth_log_pi0=False, plot=False):
+    """
+    Adapted from https://github.com/StoreyLab/qvalue, see folder R, filename
+    pi0est.R. Part of the port from R was done using translation by chatGPT. 
+    
+    Estimates the proportion of true null p-values, 
+    i.e., those following the Uniform(0,1) distribution.
+    
+    Storey JD, Bass AJ, Dabney A, Robinson D (2022). qvalue: Q-value estimation 
+    for false discovery rate control. R package version 2.30.0, 
+    http://github.com/jdstorey/qvalue.
+    
+    Originally described in:
+    https://www.ncbi.nlm.nih.gov/pmc/articles/PMC170937/
+    Storey JD, Tibshirani R. Statistical significance for genomewide studies. 
+    Proc Natl Acad Sci USA. 2003 Aug 5;100(16):9440-5. 
+    doi: 10.1073/pnas.1530509100. Epub 2003 Jul 25. PMID: 12883005; PMCID: PMC170937.
+    
+    Full documentation at: 
+    https://www.bioconductor.org/packages/release/bioc/html/qvalue.html
+    
+    Additional nice explanation here:
+    http://varianceexplained.org/statistics/interpreting-pvalue-histogram/
+    """
+    
+    # Check input arguments
+    p = np.array(p)
+    p = p[~np.isnan(p)]
+    m = len(p)
+    lambda_seq = np.sort(lambda_seq)  # guard against user input
+
+    ll = len(lambda_seq)
+
+    # Determines pi0
+    if ll == 1:
+        pi0 = np.mean(p >= lambda_seq) / (1 - lambda_seq)
+        pi0_lambda = pi0
+        pi0 = min(pi0, 1)
+        pi0Smooth = None
+    else:
+#         print(np.searchsorted(lambda_seq,p))
+#         print(np.bincount(np.searchsorted(lambda_seq,p))[::-1][:-1])
+#         print((m * (1 - lambda_seq[::-1])))
+#         pi0 = np.cumsum(np.digitize(x=np.searchsorted(lambda_seq,p), 
+#                                     bins=lambda_seq)[::-1]) / (m * (1 - lambda_seq[::-1]))
+        pi0 = np.cumsum(np.bincount(np.searchsorted(lambda_seq,p),minlength=len(lambda_seq)+1)[::-1][:-1]) / (m * (1 - lambda_seq[::-1]))
+        pi0 = pi0[::-1]
+        pi0_lambda = pi0
+        # Smoother method approximation
+        if pi0_method == 'smoother':
+            if smooth_log_pi0:
+                pi0 = np.log(pi0)
+                spl = splrep(lambda_seq, pi0, k=smooth_df)
+                pi0Smooth = np.exp(splev(lambda_seq, spl))
+                pi0 = min(pi0Smooth[-1], 1)
+            else:
+                spl = UnivariateSpline(lambda_seq, pi0, k=smooth_df)
+#                 spl.set_smoothing_factor(10)
+                pi0Smooth = spl(lambda_seq)
+#                 print(pi0Smooth)
+                if plot:
+                    plt.figure()
+                    plt.scatter(lambda_seq, pi0)
+                    plt.plot(lambda_seq, pi0Smooth)
+                    plt.show()
+                r_version = [0.86135727, 0.80143108, 0.74204924, 0.68383418, 0.62729461, 0.57278862, 0.52043101, 0.47048902, 0.42318349, 0.37826941, 0.33546801, 0.29498387, 0.25722865, 0.22212778, 0.18938777, 0.15892771, 0.13070403, 0.10428954, 0.07883342,]
+#                 plt.plot(lambda_seq, r_version)
+#                 spi0 = splrep(lambda_seq, pi0, k=smooth_df, s=len(lambda_seq)-10)
+#                 pi0Smooth = splev(lambda_seq, spi0)
+                pi0 = min(max(pi0Smooth[-1],0), 1)
+        elif pi0_method == 'bootstrap':
+            # Bootstrap method closed form solution by David Robinson
+            minpi0 = np.percentile(pi0, q=10)
+            W = np.array([np.sum(p >= l) for l in lambda_seq])
+            mse = (W / (m ** 2 * (1 - lambda_seq) ** 2)) * (1 - W / m) + (pi0 - minpi0) ** 2
+            pi0 = min(pi0[np.argmin(mse)], 1)
+            pi0Smooth = None
+        if pi0 < 0:
+            warnings.warn("The estimated pi0 < 0. Setting the pi0 estimate to be 1. Check that you have valid p-values or use a different range of lambda.")
+            pi0 = 1
+            pi0_lambda = 1
+            pi0Smooth = 0
+            lambda_seq = 0
+        return {'pi0': pi0, 'pi0.lambda': pi0_lambda, 'lambda': lambda_seq, 'pi0.smooth': pi0Smooth}
+
+def improve_historical_data_save(many):
+    out = pd.DataFrame()
+    for ele in many.results.index.get_level_values(0).unique():
+        comm = many.element_commodity_map[ele]
+        hist_data = pd.read_excel(f'{many.folder_path}/input_files/case study data.xlsx', 
+                    sheet_name=ele, index_col=0)
+        sources = pd.DataFrame(hist_data.copy().loc['Source(s)'])
+        if 'Source(s)' in hist_data.index: 
+            hist_data.drop('Source(s)',inplace=True)
+        hist_data = hist_data.sort_index()
+
+        hist_prices = pd.read_csv(f'{many.folder_path}/input_files/price adjustment results.csv',index_col=0)
+        hist_prices = hist_prices.loc[:,[i for i in hist_prices.columns if 
+                                        comm in i and 'diff' not in i]].sort_index()
+        hist_prices = hist_prices.rename(columns={
+            f'log({comm})':'Refined price, inflation, oil price adjusted', 
+            f'{comm} original':'Refined price, unadjusted'}).dropna(how='all')
+        hist_prices['Refined price, inflation, oil price adjusted, rolling mean'] = hist_prices[
+            'Refined price, inflation, oil price adjusted'].rolling(5,min_periods=1, center=True).mean()
+        out_data = pd.concat([hist_data,hist_prices],axis=1).sort_index().dropna(how='all')
+        out_data = pd.concat([sources.T,out_data])
+        for i in out_data.columns:
+            if 'price' in i and out_data.isna()[i]['Source(s)']:
+                out_data.loc['Source(s)',i] = 'Fastmarkets AMM through 2018, combined with data from real-time-capital.com and investing.com to extrapolate to most recent years'
+        out = pd.concat([out, pd.concat([out_data],keys=[ele],axis=1)],axis=1)
+
+    out.to_csv(f'{many.folder_path}/input_files/compiled historical data.csv')

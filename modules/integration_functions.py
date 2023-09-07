@@ -17,6 +17,7 @@ from datetime import datetime
 
 from skopt import Optimizer
 from joblib import Parallel, delayed
+
 from sklearn.metrics import mean_squared_error, r2_score
 
 from multiprocessing import Pool, freeze_support
@@ -772,7 +773,7 @@ class Sensitivity():
 
                 ###### UPDATING FROM params_to_change_ind ######
                 self.mod.hyperparam.loc[i,'Value'] = val
-                print(f'Scenario {count}/{total_num_scenarios}: {i} = {val}')
+                print(f'{self.material} Scenario {count}/{total_num_scenarios}: {i} = {val}')
                 count += 1
 
                 self.check_run_append()
@@ -866,7 +867,7 @@ class Sensitivity():
 
             self.scenario_number = n-1
             if self.verbosity>-1:
-                print(f'Scenario {n+1}/{n_scenarios}')
+                print(f'{self.material} Scenario {n+1}/{n_scenarios}')
 
             if bayesian_tune:
                 next_parameters = self.opt.ask(n_points=self.n_jobs)
@@ -1150,7 +1151,7 @@ class Sensitivity():
             n_jobs=self.n_jobs,
             acq_func='gp_hedge',
             acq_optimizer='auto',
-            acq_func_kwargs={"kappa": 1.96},
+            acq_func_kwargs={"kappa": 1.96,},
             random_state=self.random_state
         )
 
@@ -1430,7 +1431,7 @@ class Sensitivity():
 
         return rmse_list, r2_list
 
-    def historical_sim_check_demand(self, n_scenarios, surrogate_model='ET', log=True, demand_or_mining='demand'):
+    def historical_sim_check_demand(self, n_scenarios, surrogate_model='GBRT', log=True, demand_or_mining='demand'):
         '''
         Varies the parameters for demand (sector_specific_dematerialization_tech_growth,
         sector_specific_price_response, region_specific_price_response, and
@@ -1536,7 +1537,7 @@ class Sensitivity():
                 if self.timer is not None: self.timer.start_iter()
 
                 if self.verbosity>-1:
-                    print(f'Scenario {n+1}/{n_scenarios}')
+                    print(f'{self.material} Scenario {n+1}/{n_scenarios}')
                 if demand_or_mining=='demand':
                     mod = demandModel(verbosity=self.verbosity, simulation_time=self.simulation_time,
                                       static_data_folder=self.static_data_folder,
@@ -1814,7 +1815,7 @@ class Sensitivity():
         fig.tight_layout()
         plt.show()
 
-    def run_historical_multiple_integration_models(self, n_scenarios, random_state=220621,sensitivity_parameters=['elas','incentive_opening_probability','improvements','refinery_capacity_fraction_increase_mining'],bayesian_tune=False, n_params=2, n_jobs=3, surrogate_model='ET', log=True):
+    def run_historical_multiple_integration_models(self, n_scenarios, random_state=220621,sensitivity_parameters=['elas','incentive_opening_probability','improvements','refinery_capacity_fraction_increase_mining'],bayesian_tune=False, n_params=2, n_jobs=3, surrogate_model='GBRT', log=True):
 
         '''
         Wrapper to run the run_multiple_integration_models() method on historical data

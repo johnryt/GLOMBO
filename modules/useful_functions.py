@@ -12,6 +12,7 @@ import shutil
 import xmltodict
 from scipy import stats
 import zipfile
+import warnings
 
 def get_sheet_details(file_path):
     sheets = []
@@ -73,6 +74,7 @@ def init_plot2(fontsize=20,figsize=(8,5.5),font='Arial',font_family='sans-serif'
 
     cmap can take any matplotlib colormap string.'''
     import matplotlib as mpl
+    marker = 'None' if marker is None else marker
     params = {
         'axes.labelsize': fontsize,
         'font.size': fontsize,
@@ -542,7 +544,7 @@ def find_best_dist(stacked_df, plot=True, print_chi_squared=False, bins=40, ax=0
         # Set up distribution and get fitted distribution parameters
         dist = getattr(stats, distribution)
         try:
-            param = dist.fit(y)
+            param = dist.fit(y.values)
         except:
             param = [0,1]
 #         print("{}\n{}\n".format(dist, param))
@@ -555,10 +557,11 @@ def find_best_dist(stacked_df, plot=True, print_chi_squared=False, bins=40, ax=0
         for bin in range(len(percentile_bins)-1):
             expected_cdf_area = cdf_fitted[bin+1] - cdf_fitted[bin]
             expected_frequency.append(expected_cdf_area)
-
+        
         # Chi-square Statistics
         expected_frequency = np.array(expected_frequency) * y.size
         cum_expected_frequency = np.cumsum(expected_frequency)
+        cum_observed_frequency[cum_observed_frequency==0] = 1
         ss = sum (((cum_expected_frequency - cum_observed_frequency) ** 2) / cum_observed_frequency)
         chi_square_statistics.append(ss)
 
@@ -590,11 +593,40 @@ def find_best_dist(stacked_df, plot=True, print_chi_squared=False, bins=40, ax=0
         if type(ax)==int:
             fig,ax = easy_subplots(1,1)
             ax = ax[0]
-        ax.hist(x.values.flatten(),bins=np.linspace(y.min(),y.max(),bins),color='tab:blue',alpha=0.5,density=density)
-        ax.hist(best_sim,bins=np.linspace(y.min(),y.max(),bins),color='tab:orange',alpha=0.5,density=density)
-        ax.set(title=results.index[0])
+        if np.min(y)==np.max(y):
+            bins = np.linspace(np.min(y)-10,np.max(y)+10,bins)
+        else:
+            bins = np.linspace(np.min(y),np.max(y),bins)
+
+        ax.hist(x.values.flatten(),bins=bins,color='tab:blue',alpha=0.5,density=density)
+        ax.hist(best_sim,bins=bins,color='tab:orange',alpha=0.5,density=density)
+        ax.set(title=results.idxmin())
 #         ax[1].plot(y,best_dist.pdf(y,))
     return results.index
+
+def plot_best_dists(primary_only, param, xlabel=None, show=True, **kwargs):
+    pp = 100-(primary_only.loc[:,idx[param,:]].astype(float).groupby(level=[0,1]).sum().stack().replace({0:np.nan})).dropna()
+    commodities = list(np.sort(pp.index.get_level_values(1).unique()))
+    iterate_over = commodities+['All']
+    xlabel = '100-Payable percent (%)'
+    fig,ax=easy_subplots(iterate_over, **kwargs)
+    for comm,a in zip(iterate_over, ax):
+        commo = comm
+        if comm=='All':
+            commo = commodities
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore')
+            best_dist = find_best_dist(pp.loc[idx[:,commo,:]], ax=a)[0].capitalize().replace('_',' ').replace('3',' 3')
+            title = f'{comm}: {best_dist}, n={len(pp.loc[idx[:,commo,:]])}'
+            a.set(title=title, xlabel=xlabel if xlabel is not None else param)
+
+    fig.tight_layout()
+    for j in range(1,len(ax)-len(iterate_over)+1):
+        ax[-j].axis('off')
+    if show:
+        plt.show()
+    plt.close()
+    return pp, fig
 
 def year_decimal_to_datetime(year_decimal):
     '''

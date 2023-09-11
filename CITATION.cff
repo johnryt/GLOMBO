@@ -1,0 +1,27 @@
+cff-verions: 1.1.0
+message: "If you use this software, please cite is as below."
+authors:
+  - family-names: Ryter
+    given-names: John
+    orcid: https://orcid.org/0000-0002-0343-7553
+  - family-names: Bhuwalka
+    given-names: Karan
+    orcid: https://orcid.org/0000-0002-1963-6717
+  - family-names: O'Rourke
+    given-names: Michelena
+    orcid: 
+  - family-names: Montanelli
+    given-names: Luca
+    orcid: https://orcid.org/0000-0002-7784-7627
+  - family-names: Cohen-Tanugi
+    given-names: David
+    orcid: https://orcid.org/0000-0003-2488-4819
+  - family-names: Roth
+    given-names: Richard
+    orcid: https://orcid.org/0000-0002-9472-0687
+  - family-names: Olivetti
+    given-names: Elsa
+    orcid: https://orcid.org/0009-0005-4190-8319
+title: johnryt/GLOMBO: For Zenodo to work??
+version: v0.0-alpha-0
+date-released: 2023-09-07

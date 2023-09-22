@@ -1,0 +1,668 @@
+Parameter,General source,Source,Steel,Al,Cu,Au,Pb,Ni,Ag,Sn,Zn
+Collection elasticity to scrap price,Literature,Blomberg and Hellmer (2000),,0.17,,,,,,,
+Collection elasticity to scrap price,Literature,Fisher and Owen (1981),,0.9207,,,,,,,
+Collection elasticity to scrap price,Literature,Zink et al. (2018),,0.174,,,,,,,
+Collection elasticity to scrap price,Literature,Carlsen (1980),,0.32,,,,,,,
+Collection elasticity to scrap price,Literature,Slade (1980a),,0.24,,,,,,,
+Collection elasticity to scrap price,Literature,Suslow (1986),,1.96,,,,,,,
+Collection elasticity to scrap price,Literature,US EPA (1998),,2.33,,,,,,,
+Collection elasticity to scrap price,Literature,Grant (1999),,0.6,,,,,,,
+Collection elasticity to scrap price,Literature,Blomberg and Soderholm (2009),,0.21,,,,,,,
+Collection elasticity to scrap price,Literature,"Gomez (2007), a",,,0.201,,,,,,
+Collection elasticity to scrap price,Literature,"Gomez (2007), b",,,0.272,,,,,,
+Collection elasticity to scrap price,Literature,Slade (1980b),,,0.28,,,,,,
+Collection elasticity to scrap price,Literature,Vial (1988),,,0.33,,,,,,
+Collection elasticity to scrap price,Literature,Vial (1988),,,0.26,,,,,,
+Collection elasticity to scrap price,Literature,Intarapravich (1989),,,0.075,,,,,,
+Collection elasticity to scrap price,Literature,Vial (2004),,,0.2,,,,,,
+Collection elasticity to scrap price,Literature,Vial (2004),,,0.11,,,,,,
+Collection elasticity to scrap price,Literature,Valencia (2005),,,0.32,,,,,,
+Collection elasticity to scrap price,Literature,Valencia (2005),,,0.31,,,,,,
+Collection elasticity to scrap price,Literature,Gupta (1982),,,,,,,,,0.65
+Collection elasticity to scrap price,Literature,"Damuth (2011), a",0.589,,,,,,,,
+Collection elasticity to scrap price,Literature,"Damuth (2011), b",0.885,,,,,,,,
+Collection elasticity to scrap price,Literature,"Damuth (1979), a",0.365,,,,,,,,
+Collection elasticity to scrap price,Literature,"Damuth (1979), b",0.833,,,,,,,,
+Collection elasticity to scrap price,Literature,Sigman (1995),,,,,0.217,,,,
+Collection elasticity to scrap price,Literature,"Sigman (1995), a",,,,,0.192,,,,
+Collection elasticity to scrap price,Literature,"Sigman (1995), b",,,,,0.187,,,,
+Collection elasticity to scrap price,Literature,"Blomberg (2007), a",,0.21,,,,,,,
+Collection elasticity to scrap price,Literature,"Blomberg (2007), b",,0.78,,,,,,,
+Direct melt fraction elasticity to scrap spread,Literature,Zink et al. (2018),,0.191,,,,,,,
+Direct melt fraction elasticity to scrap spread,Literature,Suslow (1986),,1.08,,,,,,,
+Intensity elasticity to GDP,Literature,"Fernandez (2018), a - demand",0.20100000000000007,0.1339999999999999,0.2410000000000001,,1.746,0.272,,0.31899999999999995,-0.11499999999999999
+Intensity elasticity to GDP,Literature,"Fernandez (2018), b - demand",0.15599999999999992,0.2909999999999999,0.10099999999999998,,0.17300000000000004,-0.05500000000000005,,-0.10099999999999998,-0.16100000000000003
+Intensity elasticity to GDP,Literature,"Fernandez (2018), c - demand",0.03600000000000003,0.030999999999999917,-0.31399999999999995,,-0.528,0.2390000000000001,,0.0020000000000000018,-0.08799999999999997
+Intensity elasticity to GDP,Literature,"Fernandez (2018), d - demand",0.026000000000000023,0.06000000000000005,-0.263,,-0.516,0.2649999999999999,,0.040000000000000036,-0.06399999999999995
+Intensity elasticity to GDP,Literature,"Fernandez (2018), e - demand",0.030000000000000027,0.040000000000000036,-0.31599999999999995,,-0.5549999999999999,0.2310000000000001,,0.09699999999999998,-0.10299999999999998
+Intensity elasticity to GDP,Literature,"Fernandez (2018), f - demand",0.026000000000000023,0.06499999999999995,-0.29000000000000004,,-0.562,0.2529999999999999,,0.11699999999999999,-0.11399999999999999
+Intensity elasticity to GDP,Literature,"Pei and Tilton (1999), a - demand",,1.21,0.31000000000000005,,-0.32999999999999996,0.8799999999999999,,0.74,0.79
+Intensity elasticity to GDP,Literature,"Pei and Tilton (1999), b - demand",,-0.122,-0.994,,-0.5349999999999999,0.15599999999999992,,-0.45199999999999996,-1.995
+Intensity elasticity to GDP,Literature,Tcha and Takashina (2002) - demand,0.030000000000000027,-0.15200000000000002,-0.15400000000000003,,-0.353,0.28600000000000003,,-0.08899999999999997,-0.05500000000000005
+Intensity elasticity to GDP,Literature,Evans and Lewis (2005) - demand,-0.7193,0.03810000000000002,-0.22509999999999997,,-0.9006,-0.26659999999999995,,-1.0018,-0.32210000000000005
+Intensity elasticity to GDP,Literature,Stuermer (2017) - demand,,0.655,0.10200000000000009,,-0.32999999999999996,,,-0.405,-0.07699999999999996
+Intensity elasticity to GDP,Literature,Fisher and Owen (1981) - demand,,0.28269999999999995,,,,,,,
+Intensity elasticity to GDP,Literature,Fu (2019),,,0.69,,,,,,
+Intensity elasticity to GDP,Literature,Blomberg (2000) - demand,,-0.48,,,,,,,
+Intensity elasticity to GDP,Literature,"Bozdogan (1979), a - demand",,,0.30000000000000004,,,,,,
+Intensity elasticity to GDP,Literature,"Bozdogan (1979), b - demand",,,0.78,,,,,,
+Intensity elasticity to GDP,Literature,Damuth (2011) - demand,0.597,,,,,,,,
+Intensity elasticity to GDP,Literature,Damuth (2011) - demand,-0.09299999999999997,,,,,,,,
+Intensity elasticity to GDP,Literature,Fernandez (2018) - demand,0.15599999999999992,0.2909999999999999,,,,,,,
+Intensity elasticity to GDP,Literature,"Fernandez (2018), a - demand",0.026000000000000023,0.06000000000000005,-0.263,,-0.8160000000000001,0.2649999999999999,,-0.40700000000000003,-0.06399999999999995
+Intensity elasticity to GDP,Literature,"Fernandez (2018), a - demand",,,,,,,,0.040000000000000036,
+Intensity elasticity to GDP,Literature,"Fernandez (2018), a - demand",,,0.2410000000000001,,1.746,0.272,,0.31899999999999995,-0.11499999999999999
+Intensity elasticity to GDP,Literature,"Fernandez (2018), b - demand",0.03600000000000003,0.030999999999999917,-0.31399999999999995,,-0.528,0.2390000000000001,,-0.273,-0.08799999999999997
+Intensity elasticity to GDP,Literature,"Fernandez (2018), b - demand",,,,,,,,0.0020000000000000018,
+Intensity elasticity to GDP,Literature,"Fernandez (2018), b - demand",,,0.10099999999999998,,0.17300000000000004,-0.05500000000000005,,-0.10099999999999998,-0.16100000000000003
+Intensity elasticity to GDP,Literature,"Fernandez (2018), c - demand",0.026000000000000023,0.06499999999999995,-0.29000000000000004,,-0.562,0.2529999999999999,,-0.46599999999999997,-0.11399999999999999
+Intensity elasticity to GDP,Literature,"Fernandez (2018), c - demand",,,,,,,,0.11699999999999999,
+Intensity elasticity to GDP,Literature,"Fernandez (2018), d - demand",0.030000000000000027,0.040000000000000036,-0.31599999999999995,,-0.5549999999999999,0.2310000000000001,,-0.931,-0.10299999999999998
+Intensity elasticity to GDP,Literature,"Fernandez (2018), d - demand",,,,,,,,0.09699999999999998,
+Intensity elasticity to GDP,Literature,"Fernandez (2018), e - demand",0.09000000000000008,-0.17500000000000004,-0.351,,-0.544,0.16999999999999993,,0.33099999999999996,-0.485
+Intensity elasticity to GDP,Literature,"Fernandez (2018), f - demand",0.03400000000000003,-0.23199999999999998,-0.30900000000000005,,-0.252,-0.344,,-0.247,-0.31599999999999995
+Intensity elasticity to GDP,Literature,"Fernandez (2018), g - demand",0.1339999999999999,-0.403,-0.41900000000000004,,-0.7070000000000001,-0.402,,0.5529999999999999,-0.627
+Intensity elasticity to GDP,Literature,"Fernandez (2018), h - demand",0.07000000000000006,-0.609,0.10000000000000009,,-0.4,0.008000000000000007,,-1.5110000000000001,-0.6619999999999999
+Intensity elasticity to GDP,Literature,"Fernandez (2018), i - demand",0.052999999999999936,-0.275,-0.09799999999999998,,-0.30900000000000005,-0.495,,,-0.802
+Intensity elasticity to GDP,Literature,"Fernandez (2018), j - demand",0.09800000000000009,-0.352,-0.5720000000000001,,-0.14500000000000002,-0.645,,,-0.905
+Intensity elasticity to GDP,Literature,"Fernandez (2018), k - demand",0.16799999999999993,-0.899,-0.751,,-0.652,-0.619,,,-0.21399999999999997
+Intensity elasticity to GDP,Literature,"Fernandez (2018), l - demand",0.262,-1.043,-1.306,,-0.84,-1.946,,,-0.5880000000000001
+Intensity elasticity to GDP,Literature,"Fernandez (2018), m - demand",0.20100000000000007,0.1339999999999999,,,,,,,
+Intensity elasticity to GDP,Literature,Fisher (1972) - demand,,,-0.39859999999999995,,,,,,
+Intensity elasticity to GDP,Literature,Fisher (1972) - demand,,,-0.5912999999999999,,,,,,
+Intensity elasticity to GDP,Literature,Fisher (1972) - demand,,,-0.007900000000000018,,,,,,
+Intensity elasticity to GDP,Literature,"Fisher (1972), a - demand",,,-0.6682,,,,,,
+Intensity elasticity to GDP,Literature,"Fisher (1972), b - demand",,,0.25824800910125,,,,,,
+Intensity elasticity to GDP,Literature,"Fisher (1972), c - demand",,,-0.8471,,,,,,
+Intensity elasticity to GDP,Literature,"Fisher (1981), a - demand",,1.2572999999999999,,,,,,,
+Intensity elasticity to GDP,Literature,"Fisher (1981), b - demand",,0.28269999999999995,,,,,,,
+Intensity elasticity to GDP,Literature,Gupta (1979) - demand,,,,,,,,,0.3549800000000001
+Intensity elasticity to GDP,Literature,Gupta (1979) - demand,,,,,,,,,-0.09397599999999995
+Intensity elasticity to GDP,Literature,Gupta (1979) - demand,,,,,,,,,-0.20461300000000004
+Intensity elasticity to GDP,Literature,Gupta (1979) - demand,,,,,,,,,0.04590000000000005
+Intensity elasticity to GDP,Literature,Gupta (1979) - demand,,,,,,,,,-0.06171800000000005
+Intensity elasticity to GDP,Literature,Gupta (1979) - demand,,,,,,,,,-0.30077299999999996
+Intensity elasticity to GDP,Literature,Gupta (1979) - demand,,,,,,,,,-0.38681
+Intensity elasticity to GDP,Literature,Gupta (1979) - demand,,,,,,,,,-0.16057600000000005
+Intensity elasticity to GDP,Literature,Gupta (1979) - demand,,,,,,,,,-0.358324
+Intensity elasticity to GDP,Literature,Gupta (1979) - demand,,,,,,,,,-0.28564999999999996
+Intensity elasticity to GDP,Literature,Gupta (1979) - demand,,,,,,,,,0.5265200000000001
+Intensity elasticity to GDP,Literature,Gupta (1979) - demand,,,,,,,,,-0.404141
+Intensity elasticity to GDP,Literature,Gupta (1979) - demand,,,,,,,,,1.97622
+Intensity elasticity to GDP,Literature,Gupta (1979) - demand,,,,,,,,,-0.23596899999999998
+Intensity elasticity to GDP,Literature,Gupta (1979) - demand,,,,,,,,,-0.522026
+Intensity elasticity to GDP,Literature,Gupta (1979) - demand,,,,,,,,,-0.5935090000000001
+Intensity elasticity to GDP,Literature,Gupta (1979) - demand,,,,,,,,,-0.213078
+Intensity elasticity to GDP,Literature,Gupta (1979) - demand,,,,,,,,,-0.47673
+Intensity elasticity to GDP,Literature,Gupta (1979) - demand,,,,,,,,,-0.6413070000000001
+Intensity elasticity to GDP,Literature,Gupta (1979) - demand,,,,,,,,,-0.0010639999999999539
+Intensity elasticity to GDP,Literature,Gupta (1979) - demand,,,,,,,,,-0.389471
+Intensity elasticity to GDP,Literature,Gupta (1979) - demand,,,,,,,,,-0.43970699999999996
+Intensity elasticity to GDP,Literature,Gupta (1979) - demand,,,,,,,,,-0.862722
+Intensity elasticity to GDP,Literature,Gupta (1982) - demand,,,,,,,,,-0.33444799999999997
+Intensity elasticity to GDP,Literature,Gupta (1982) - demand,,,,,,,,,0.20933000000000002
+Intensity elasticity to GDP,Literature,Gupta (1982) - demand,,,,,,,,,0.3078399999999999
+Intensity elasticity to GDP,Literature,Gupta (1982) - demand,,,,,,,,,-0.580168
+Intensity elasticity to GDP,Literature,Gupta (1982) - demand,,,,,,,,,-0.16942500000000005
+Intensity elasticity to GDP,Literature,Gupta (1982) - demand,,,,,,,,,-0.18752899999999995
+Intensity elasticity to GDP,Literature,Gupta (1982) - demand,,,,,,,,,-0.455164
+Intensity elasticity to GDP,Literature,Hashimoto (1981) - demand,-0.31000000000000005,,,,,,,,
+Intensity elasticity to GDP,Literature,Hashimoto (1981) - demand,-0.35,,,,,,,,
+Intensity elasticity to GDP,Literature,Hashimoto (1981) - demand,-0.16500000000000004,,,,,,,,
+Intensity elasticity to GDP,Literature,"Hojman (1981), a - demand",,0.72,,,,,,,
+Intensity elasticity to GDP,Literature,"Hojman (1981), a - demand",,1.7599999999999998,,,,,,,
+Intensity elasticity to GDP,Literature,"Hojman (1981), a - demand",,0.33000000000000007,,,,,,,
+Intensity elasticity to GDP,Literature,"Hojman (1981), a - demand",,0.3600000000000001,,,,,,,
+Intensity elasticity to GDP,Literature,"Hojman (1981), a - demand",,1.21,,,,,,,
+Intensity elasticity to GDP,Literature,"Hojman (1981), a - demand",,0.08000000000000007,,,,,,,
+Intensity elasticity to GDP,Literature,"Hojman (1981), a - demand",,0.56,,,,,,,
+Intensity elasticity to GDP,Literature,"Hojman (1981), a - demand",,0.20999999999999996,,,,,,,
+Intensity elasticity to GDP,Literature,"Hojman (1981), b - demand",,-0.040000000000000036,,,,,,,
+Intensity elasticity to GDP,Literature,"Hojman (1981), b - demand",,0.96,,,,,,,
+Intensity elasticity to GDP,Literature,"Hojman (1981), b - demand",,0.29000000000000004,,,,,,,
+Intensity elasticity to GDP,Literature,"Hojman (1981), b - demand",,0.45999999999999996,,,,,,,
+Intensity elasticity to GDP,Literature,"Hojman (1981), b - demand",,0.7,,,,,,,
+Intensity elasticity to GDP,Literature,"Hojman (1981), b - demand",,0.06000000000000005,,,,,,,
+Intensity elasticity to GDP,Literature,"Hojman (1981), b - demand",,0.16999999999999993,,,,,,,
+Intensity elasticity to GDP,Literature,"Hojman (1981), b - demand",,0.9099999999999999,,,,,,,
+Intensity elasticity to GDP,Literature,"McNicol (1975), in McNicol (1975) and Bozdogan (1979), a - demand",,,-0.56,,,,,,
+Intensity elasticity to GDP,Literature,"McNicol (1975), in McNicol (1975) and Bozdogan (1979), b - demand",,,0.06000000000000005,,,,,,
+Intensity elasticity to GDP,Literature,Pei (1999) - demand,,,,,1.9609999999999999,,,,1.133
+Intensity elasticity to GDP,Literature,Pei (1999) - demand,,,-0.6799999999999999,,,,,-2.3369999999999997,
+Intensity elasticity to GDP,Literature,Pei (1999) - demand,,0.04499999999999993,,,-0.661,,,,-0.276
+Intensity elasticity to GDP,Literature,Pei (1999) - demand,,,0.20799999999999996,,0.833,,,,1.041
+Intensity elasticity to GDP,Literature,Pei (1999) - demand,,,-0.597,,,,,-0.20799999999999996,-0.42700000000000005
+Intensity elasticity to GDP,Literature,Pei (1999) - demand,,,-0.42400000000000004,,-0.757,0.10299999999999998,,0.08499999999999996,
+Intensity elasticity to GDP,Literature,Pei (1999) - demand,,,,,-0.671,,,,-0.347
+Intensity elasticity to GDP,Literature,Pei (1999) - demand,,,,,1.3719999999999999,,,,
+Intensity elasticity to GDP,Literature,Pei (1999) - demand,,-0.43000000000000005,,,,,,0.6240000000000001,
+Intensity elasticity to GDP,Literature,Pei (1999) - demand,,,,,-0.34099999999999997,,,-1.471,-0.515
+Intensity elasticity to GDP,Literature,Pei (1999) - demand,,1.194,,,1.213,1.186,,0.32600000000000007,
+Intensity elasticity to GDP,Literature,Pei (1999) - demand,,-0.53,,,,,,0.819,0.6319999999999999
+Intensity elasticity to GDP,Literature,Pei (1999) - demand,,-0.538,,,,-0.398,,0.591,0.913
+Intensity elasticity to GDP,Literature,Pei (1999) - demand,,-0.008000000000000007,,,,,,1.158,0.41900000000000004
+Intensity elasticity to GDP,Literature,Pei (1999) - demand,,0.8600000000000001,,,-0.767,0.671,,,
+Intensity elasticity to GDP,Literature,Pei (1999) - demand,,,,,,,,,-0.821
+Intensity elasticity to GDP,Literature,Pei (1999) - demand,,0.15100000000000002,0.4119999999999999,,,,,,-0.42700000000000005
+Intensity elasticity to GDP,Literature,Pei (1999) - demand,,,,,0.9490000000000001,,,-1.806,
+Intensity elasticity to GDP,Literature,Pei (1999) - demand,,1.2269999999999999,,,,,,1.2730000000000001,
+Intensity elasticity to GDP,Literature,Pei (1999) - demand,,,0.1339999999999999,,,,,,
+Intensity elasticity to GDP,Literature,Pei (1999) - demand,,,1.0070000000000001,,,,,,
+Intensity elasticity to GDP,Literature,Pei (1999) - demand,,,,,,,,,1.165
+Intensity elasticity to GDP,Literature,Pei (1999) - demand,,-0.04200000000000004,-0.5780000000000001,,-0.267,-0.014000000000000012,,-1.308,
+Intensity elasticity to GDP,Literature,Pei (1999) - demand,,,,,0.633,1.2029999999999998,,0.913,
+Intensity elasticity to GDP,Literature,Pei (1999) - demand,,,0.41900000000000004,,,1.919,,0.16399999999999992,1.509
+Intensity elasticity to GDP,Literature,Pei (1999) - demand,,,,,,0.8200000000000001,,,
+Intensity elasticity to GDP,Literature,"Pei (1999), a - demand",,0.3979999999999999,,,,,,,
+Intensity elasticity to GDP,Literature,"Pei (1999), a - demand",,0.351,,,0.21300000000000008,1.6749999999999998,,-0.258,0.1160000000000001
+Intensity elasticity to GDP,Literature,"Pei (1999), a - demand",,-0.42300000000000004,,,,,,,
+Intensity elasticity to GDP,Literature,"Pei (1999), a - demand",,0.74,,,-0.565,-0.014000000000000012,,,
+Intensity elasticity to GDP,Literature,"Pei (1999), a - demand",,0.33299999999999996,,,,,,,-0.5329999999999999
+Intensity elasticity to GDP,Literature,"Pei (1999), a - demand",,0.19399999999999995,-0.507,,,0.8500000000000001,,-0.7,
+Intensity elasticity to GDP,Literature,"Pei (1999), a - demand",,1.62,0.20599999999999996,,,,,,-0.20799999999999996
+Intensity elasticity to GDP,Literature,"Pei (1999), a - demand",,,-0.243,,,-0.513,,,
+Intensity elasticity to GDP,Literature,"Pei (1999), a - demand",,,-0.41200000000000003,,,,,,
+Intensity elasticity to GDP,Literature,"Pei (1999), a - demand",,0.7629999999999999,,,,,,,
+Intensity elasticity to GDP,Literature,"Pei (1999), a - demand",,,-0.344,,,,,,0.30200000000000005
+Intensity elasticity to GDP,Literature,"Pei (1999), a - demand",,,-0.33299999999999996,,,,,,
+Intensity elasticity to GDP,Literature,"Pei (1999), a - demand",,,0.07000000000000006,,,,,,
+Intensity elasticity to GDP,Literature,"Pei (1999), a - demand",,,,,-0.756,,,,
+Intensity elasticity to GDP,Literature,"Pei (1999), a - demand",,,0.15599999999999992,,,,,,0.32899999999999996
+Intensity elasticity to GDP,Literature,"Pei (1999), a - demand",,,,,,-0.16600000000000004,,-0.388,
+Intensity elasticity to GDP,Literature,"Pei (1999), a - demand",,,,,0.30099999999999993,,,,0.121
+Intensity elasticity to GDP,Literature,"Pei (1999), a - demand",,,,,,0.1419999999999999,,-1.812,-0.515
+Intensity elasticity to GDP,Literature,"Pei (1999), a - demand",,-0.41000000000000003,,,-0.44799999999999995,,,-0.31699999999999995,-0.538
+Intensity elasticity to GDP,Literature,"Pei (1999), a - demand",,1.3159999999999998,,,,,,,
+Intensity elasticity to GDP,Literature,"Pei (1999), a - demand",,-0.43700000000000006,,,,,,,
+Intensity elasticity to GDP,Literature,"Pei (1999), a - demand",,,-0.722,,,,,-1.336,
+Intensity elasticity to GDP,Literature,"Pei (1999), b - demand",,0.5780000000000001,,,,,,,
+Intensity elasticity to GDP,Literature,"Pei (1999), b - demand",,0.45399999999999996,,,0.627,1.661,,0.34299999999999997,0.3380000000000001
+Intensity elasticity to GDP,Literature,"Pei (1999), b - demand",,1.0139999999999998,,,,,,,
+Intensity elasticity to GDP,Literature,"Pei (1999), b - demand",,1.1349999999999998,,,-0.04500000000000004,0.5269999999999999,,,
+Intensity elasticity to GDP,Literature,"Pei (1999), b - demand",,0.6839999999999999,,,,,,,0.7649999999999999
+Intensity elasticity to GDP,Literature,"Pei (1999), b - demand",,1.674,0.637,,,0.8200000000000001,,0.2789999999999999,
+Intensity elasticity to GDP,Literature,"Pei (1999), b - demand",,1.7719999999999998,0.22999999999999998,,,,,,0.15100000000000002
+Intensity elasticity to GDP,Literature,"Pei (1999), b - demand",,,1.08,,,1.738,,,
+Intensity elasticity to GDP,Literature,"Pei (1999), b - demand",,,0.946,,,,,,
+Intensity elasticity to GDP,Literature,"Pei (1999), b - demand",,0.242,,,,,,,
+Intensity elasticity to GDP,Literature,"Pei (1999), b - demand",,,-0.32899999999999996,,,,,,1.455
+Intensity elasticity to GDP,Literature,"Pei (1999), b - demand",,,0.966,,,,,,
+Intensity elasticity to GDP,Literature,"Pei (1999), b - demand",,,1.698,,,,,,
+Intensity elasticity to GDP,Literature,"Pei (1999), b - demand",,,,,-0.73,,,,
+Intensity elasticity to GDP,Literature,"Pei (1999), b - demand",,,-0.015000000000000013,,,,,,-0.29500000000000004
+Intensity elasticity to GDP,Literature,"Pei (1999), b - demand",,,,,,-0.09399999999999997,,-0.38,
+Intensity elasticity to GDP,Literature,"Pei (1999), b - demand",,,,,-0.031000000000000028,,,,0.07899999999999996
+Intensity elasticity to GDP,Literature,"Pei (1999), b - demand",,,,,,1.355,,1.7930000000000001,0.5009999999999999
+Intensity elasticity to GDP,Literature,"Pei (1999), b - demand",,1.5859999999999999,,,-0.21599999999999997,,,0.5149999999999999,1.46
+Intensity elasticity to GDP,Literature,"Pei (1999), b - demand",,1.3809999999999998,,,,,,,
+Intensity elasticity to GDP,Literature,"Pei (1999), b - demand",,0.7809999999999999,,,,,,,
+Intensity elasticity to GDP,Literature,"Pei (1999), b - demand",,,1.616,,,,,1.241,
+Intensity elasticity to GDP,Literature,"Tcha (2002), a - demand",0.09699999999999998,-0.84,-0.876,,-0.617,-0.8260000000000001,,-0.41100000000000003,-0.748
+Intensity elasticity to GDP,Literature,"Tcha (2002), a - demand",0.04800000000000004,-0.31100000000000005,-0.31499999999999995,,-0.9299999999999999,0.15599999999999992,,-0.06499999999999995,-0.474
+Intensity elasticity to GDP,Literature,"Tcha (2002), a - demand",0.06499999999999995,0.026999999999999913,-0.41300000000000003,,-0.808,0.44399999999999995,,-0.357,-0.11199999999999999
+Intensity elasticity to GDP,Literature,"Tcha (2002), a - demand",0.135,-0.719,-0.42400000000000004,,-0.546,-0.29900000000000004,,-0.838,-0.8
+Intensity elasticity to GDP,Literature,"Tcha (2002), a - demand",0.07000000000000006,-0.30300000000000005,-0.09699999999999998,,-0.9,-0.385,,-0.46199999999999997,-0.241
+Intensity elasticity to GDP,Literature,"Tcha (2002), a - demand",0.1279999999999999,-0.18100000000000005,-0.8109999999999999,,-0.8049999999999999,0.10099999999999998,,-0.46099999999999997,-0.359
+Intensity elasticity to GDP,Literature,"Tcha (2002), a - demand",0.008000000000000007,0.07000000000000006,-0.367,,0.19500000000000006,-0.391,,-0.562,-0.05800000000000005
+Intensity elasticity to GDP,Literature,"Tcha (2002), a - demand",0.030000000000000027,-0.15200000000000002,-0.15400000000000003,,-0.32599999999999996,0.28600000000000003,,-0.08899999999999997,-0.05500000000000005
+Intensity elasticity to GDP,Literature,"Tcha (2002), b - demand",0.09699999999999998,-0.841,-0.875,,-0.616,-0.825,,-0.44199999999999995,-0.748
+Intensity elasticity to GDP,Literature,"Tcha (2002), b - demand",0.04200000000000004,-0.21699999999999997,-0.23399999999999999,,-0.76,0.10400000000000009,,-0.257,-0.488
+Intensity elasticity to GDP,Literature,"Tcha (2002), b - demand",0.08400000000000007,-0.11199999999999999,-0.46099999999999997,,-0.79,0.30600000000000005,,-0.272,-0.16900000000000004
+Intensity elasticity to GDP,Literature,"Tcha (2002), b - demand",0.1399999999999999,-0.756,-0.44499999999999995,,-0.5589999999999999,-0.379,,-0.835,-0.815
+Intensity elasticity to GDP,Literature,"Tcha (2002), b - demand",0.07099999999999995,-0.31299999999999994,-0.10999999999999999,,-0.904,-0.376,,-0.43799999999999994,-0.237
+Intensity elasticity to GDP,Literature,"Tcha (2002), b - demand",0.1339999999999999,-0.27,-0.8200000000000001,,-0.789,0.1439999999999999,,-0.29000000000000004,-0.372
+Intensity elasticity to GDP,Literature,"Tcha (2002), b - demand",0.006000000000000005,0.030000000000000027,-0.30500000000000005,,0.2569999999999999,-0.354,,-0.5349999999999999,0.014000000000000012
+Intensity elasticity to GDP,Literature,"Tcha (2002), b - demand",0.02400000000000002,-0.029000000000000026,-0.133,,-0.385,0.32099999999999995,,-0.16700000000000004,-0.04800000000000004
+Intensity elasticity to GDP,Literature,"Tims (1977), a - demand",,,-0.28,,,,,,
+Intensity elasticity to GDP,Literature,"Tims (1977), b - demand",,,-0.14081145584725596,,,,,,
+Intensity elasticity to GDP,Literature,Wagenhals (1984) - demand,,,-0.33899999999999997,,,,,,
+Intensity elasticity to GDP,Literature,Wagenhals (1984) - demand,,,-0.17400000000000004,,,,,,
+Intensity elasticity to GDP,Literature,Wagenhals (1984) - demand,,,-0.43500000000000005,,,,,,
+Intensity elasticity to GDP,Literature,Wagenhals (1984) - demand,,,-0.19199999999999995,,,,,,
+Intensity elasticity to GDP,Literature,Wagenhals (1984) - demand,,,-0.17800000000000005,,,,,,
+Intensity elasticity to GDP,Literature,Wagenhals (1984) - demand,,,-0.22099999999999997,,,,,,
+Intensity elasticity to GDP,Literature,Wagenhals (1984) - demand,,,-0.22099999999999997,,,,,,
+Intensity elasticity to GDP,Literature,Wagenhals (1984) - demand,,,-0.252,,,,,,
+Intensity elasticity to GDP,Literature,Wagenhals (1984) - demand,,,-0.10799999999999998,,,,,,
+Intensity elasticity to GDP,Literature,Wagenhals (1984) - demand,,,-0.17400000000000004,,,,,,
+Intensity elasticity to GDP,Literature,Wagenhals (1984) - demand,,,-0.08799999999999997,,,,,,
+Intensity elasticity to GDP,Literature,Wagenhals (1984) - demand,,,0.3700000000000001,,,,,,
+Intensity elasticity to GDP,Literature,Wagenhals (1984) - demand,,,-0.5389999999999999,,,,,,
+Intensity elasticity to price,Literature,"Fernandez (2018), a - demand",-0.238,-0.593,-0.28,,-0.888,-0.448,,-0.486,-0.355
+Intensity elasticity to price,Literature,"Fernandez (2018), b - demand",-0.086,-0.333,-0.202,,-0.099,-0.142,,-0.255,-0.143
+Intensity elasticity to price,Literature,"Fernandez (2018), c - demand",0.005,0.029,0.088,,-0.002,-0.043,,-0.03,-0.003
+Intensity elasticity to price,Literature,"Fernandez (2018), d - demand",-0.017,0.01,-0.014,,-0.008,-0.061,,-0.067,-0.014
+Intensity elasticity to price,Literature,"Fernandez (2018), e - demand",-0.06,-0.07,-0.065,,0.002,-0.102,,-0.156,-0.062
+Intensity elasticity to price,Literature,"Fernandez (2018), f - demand",-0.069,-0.086,-0.042,,0.001,-0.081,,-0.245,-0.068
+Intensity elasticity to price,Literature,"Pei and Tilton (1999), a - demand",,-0.02,0.02,,0.06,-0.03,,-0.03,0.01
+Intensity elasticity to price,Literature,"Pei and Tilton (1999), b - demand",,0.317,0.188,,-0.023,-0.151,,-0.151,0.318
+Intensity elasticity to price,Literature,Tcha and Takashina (2002) - demand,-0.012,0.004,-0.025,,-0.006,-0.047,,-0.064,-0.02
+Intensity elasticity to price,Literature,Evans and Lewis (2005) - demand,-0.1322,-0.0765,-0.1177,,-0.1271,-0.1034,,-0.1185,-0.1021
+Intensity elasticity to price,Literature,Stuermer (2017) - demand,,-0.773,-0.44,,-0.213,,,-0.112,-0.046
+Intensity elasticity to price,Literature,"Fisher and Owen (1981), a - demand",,-0.246,,,,,,,
+Intensity elasticity to price,Literature,"Fisher and Owen (1981), b - demand",,-0.3049,,,,,,,
+Intensity elasticity to price,Literature,"Gupta (1982), a - demand",,,,,,,,,-0.25
+Intensity elasticity to price,Literature,"Gupta (1982), b - demand",,,,,,,,,-0.035
+Intensity elasticity to price,Literature,"Gupta (1982), c - demand",,,,,,,,,-0.077
+Intensity elasticity to price,Literature,"Gupta (1982), d - demand",,,,,,,,,-0.78
+Intensity elasticity to price,Literature,"Gupta (1982), e - demand",,,,,,,,,-0.005
+Intensity elasticity to price,Literature,"Gupta (1982), f - demand",,,,,,,,,-0.443
+Intensity elasticity to price,Literature,"Chhabra (1979), a - demand",,,,,,,,-0.24,
+Intensity elasticity to price,Literature,"Chhabra (1979), b - demand",,,,,,,,-0.3,
+Intensity elasticity to price,Literature,"Chhabra (1979), c - demand",,,,,,,,-0.49,
+Intensity elasticity to price,Literature,"Banks (1972), a - demand",,,,,,,,-0.55,
+Intensity elasticity to price,Literature,"Banks (1972), b - demand",,,,,,,,-1.262,
+Intensity elasticity to price,Literature,"Banks (1974), a - demand",,,-0.177,,,,,,
+Intensity elasticity to price,Literature,"Banks (1974), b - demand",,,-0.127,,,,,,
+Intensity elasticity to price,Literature,"Banks (1974), c - demand",,,-0.152,,,,,,
+Intensity elasticity to price,Literature,"Banks (1974), d - demand",,,-0.294,,,,,,
+Intensity elasticity to price,Literature,"Banks (1974), e - demand",,,-0.29,,,,,,
+Intensity elasticity to price,Literature,"Banks (1974), f - demand",,,-0.228,,,,,,
+Intensity elasticity to price,Literature,"Banks (1974), g - demand",,,-0.21,,,,,,
+Intensity elasticity to price,Literature,Charles River Associates (1970) - demand,,,-0.21,,,,,,
+Intensity elasticity to price,Literature,Charles River Associates (1971) - demand,,-0.2,,,,,,,
+Intensity elasticity to price,Literature,"Hashimoto (1981), a - demand",-0.93,,,,,,,,
+Intensity elasticity to price,Literature,"Hashimoto (1981), b - demand",-1.0,,,,,,,,
+Intensity elasticity to price,Literature,"Hashimoto (1981), c - demand",-0.325,,,,,,,,
+Intensity elasticity to price,Literature,Fu (2019),,,-0.1,,,,,,
+Intensity elasticity to price,Literature,Fu (2019),,,-0.05,,,,,,
+Intensity elasticity to price,Literature,Fu (2019),,,-0.08,,,,,,
+Intensity elasticity to price,Literature,Fu (2019),,,0,,,,,,
+Intensity elasticity to price,Literature,Fu (2019),,,-0.12,,,,,,
+Intensity elasticity to price,Literature,Fu (2019),,,-0.17,,,,,,
+Intensity elasticity to price,Literature,Fu (2019),,,-0.02,,,,,,
+Intensity elasticity to price,Literature,Fu (2019),,,0.02,,,,,,
+Intensity elasticity to price,Literature,Fu (2019),,,-0.16,,,,,,
+Intensity elasticity to price,Literature,Fu (2019),,,-0.07,,,,,,
+Intensity elasticity to price,Literature,Zink et al. (2018) - demand,,-0.202,,,,,,,
+Intensity elasticity to price,Literature,Suslow (1986) - demand,,-1.93,,,,,,,
+Intensity elasticity to price,Literature,"Banks (1974), a - demand",,,-0.252,,,,,,
+Intensity elasticity to price,Literature,"Banks (1974), a - demand",,,-0.253,,,,,,
+Intensity elasticity to price,Literature,"Banks (1974), b - demand",,,-0.221,,,,,,
+Intensity elasticity to price,Literature,"Banks (1974), c - demand",,,-0.368,,,,,,
+Intensity elasticity to price,Literature,"Banks (1974), d - demand",,,-0.421,,,,,,
+Intensity elasticity to price,Literature,"Banks (1974), e - demand",,,-0.328,,,,,,
+Intensity elasticity to price,Literature,"Banks (1974), f - demand",,,-0.294,,,,,,
+Intensity elasticity to price,Literature,"Banks (1974), g - demand",,,-0.39,,,,,,
+Intensity elasticity to price,Literature,Banks (1972) - demand,,,,,,,,-1.262,
+Intensity elasticity to price,Literature,Banks (1972) - demand,,,,,,,,-0.55,
+Intensity elasticity to price,Literature,Bozdogan (1979) - demand,,,-0.64,,,,,,
+Intensity elasticity to price,Literature,Bozdogan (1979) - demand,,,-0.47,,,,,,
+Intensity elasticity to price,Literature,Chhabra (1978) - demand,,,,,,,,0.41,
+Intensity elasticity to price,Literature,Chhabra (1978) - demand,,,,,,,,0.3,
+Intensity elasticity to price,Literature,"Chhabra (1978), a - demand",,,,,,,,1.6,
+Intensity elasticity to price,Literature,"Chhabra (1978), a - demand",,,,,,,,0.37,
+Intensity elasticity to price,Literature,"Chhabra (1978), a - demand",,,,,,,,0.24,
+Intensity elasticity to price,Literature,"Chhabra (1978), b - demand",,,,,,,,0.15,
+Intensity elasticity to price,Literature,"Chhabra (1978), b - demand",,,,,,,,0.11,
+Intensity elasticity to price,Literature,"Chhabra (1978), b - demand",,,,,,,,0.13,
+Intensity elasticity to price,Literature,"Chhabra (1978), c - demand",,,,,,,,0.11,
+Intensity elasticity to price,Literature,"Chhabra (1978), d - demand",,,,,,,,0.18,
+Intensity elasticity to price,Literature,"Chhabra (1978), e - demand",,,,,,,,0.49,
+Intensity elasticity to price,Literature,Fernandez (2018) - demand,0.789,0.367,0.678,,0.876,0.036,,,0.827
+Intensity elasticity to price,Literature,Fernandez (2018) - demand,,,,,,,,0.754,
+Intensity elasticity to price,Literature,Fernandez (2018) - demand,-0.086,-0.333,,,,,,,
+Intensity elasticity to price,Literature,"Fernandez (2018), a - demand",-0.017,0.01,-0.014,,-0.008,-0.061,,,-0.014
+Intensity elasticity to price,Literature,"Fernandez (2018), a - demand",,,,,,,,-0.067,
+Intensity elasticity to price,Literature,"Fernandez (2018), a - demand",,,-0.28,,-0.888,-0.448,,-0.486,-0.355
+Intensity elasticity to price,Literature,"Fernandez (2018), b - demand",0.005,0.029,0.088,,-0.002,-0.043,,,-0.003
+Intensity elasticity to price,Literature,"Fernandez (2018), b - demand",,,,,,,,-0.03,
+Intensity elasticity to price,Literature,"Fernandez (2018), b - demand",,,-0.202,,-0.099,-0.142,,-0.255,-0.143
+Intensity elasticity to price,Literature,"Fernandez (2018), c - demand",-0.238,-0.593,,,,,,,
+Intensity elasticity to price,Literature,Fisher (1972) - demand,,,-0.924808836023789,,,,,,
+Intensity elasticity to price,Literature,Fisher (1972) - demand,,,-0.2177,,,,,,
+Intensity elasticity to price,Literature,"Fisher (1972), a - demand",,,-0.808115282518012,,,,,,
+Intensity elasticity to price,Literature,"Fisher (1972), a - demand",,,-0.2131,,,,,,
+Intensity elasticity to price,Literature,"Fisher (1972), b - demand",,,-0.826315789473684,,,,,,
+Intensity elasticity to price,Literature,"Fisher (1972), b - demand",,,-0.1727,,,,,,
+Intensity elasticity to price,Literature,Fisher (1981) - demand,,-0.3049,,,,,,,
+Intensity elasticity to price,Literature,Fisher (1981) - demand,,-0.2457,,,,,,,
+Intensity elasticity to price,Literature,Gupta (1979) - demand,,,,,,,,,-0.428395
+Intensity elasticity to price,Literature,Gupta (1979) - demand,,,,,,,,,0.0803
+Intensity elasticity to price,Literature,Gupta (1979) - demand,,,,,,,,,-0.140465
+Intensity elasticity to price,Literature,Gupta (1979) - demand,,,,,,,,,-2.062
+Intensity elasticity to price,Literature,Gupta (1979) - demand,,,,,,,,,-0.7
+Intensity elasticity to price,Literature,Gupta (1979) - demand,,,,,,,,,-0.221
+Intensity elasticity to price,Literature,Gupta (1979) - demand,,,,,,,,,-1.62991
+Intensity elasticity to price,Literature,Gupta (1979) - demand,,,,,,,,,-1.2662
+Intensity elasticity to price,Literature,Gupta (1979) - demand,,,,,,,,,-0.5959
+Intensity elasticity to price,Literature,Gupta (1979) - demand,,,,,,,,,-0.78317
+Intensity elasticity to price,Literature,Gupta (1979) - demand,,,,,,,,,-0.06807
+Intensity elasticity to price,Literature,Gupta (1979) - demand,,,,,,,,,-0.03445
+Intensity elasticity to price,Literature,Gupta (1979) - demand,,,,,,,,,-0.028093
+Intensity elasticity to price,Literature,Gupta (1979) - demand,,,,,,,,,-0.2857
+Intensity elasticity to price,Literature,Gupta (1979) - demand,,,,,,,,,-0.139999999999999
+Intensity elasticity to price,Literature,Gupta (1979) - demand,,,,,,,,,-0.1104
+Intensity elasticity to price,Literature,Gupta (1979) - demand,,,,,,,,,-1.241
+Intensity elasticity to price,Literature,Gupta (1979) - demand,,,,,,,,,-0.2172
+Intensity elasticity to price,Literature,Gupta (1979) - demand,,,,,,,,,-0.2265
+Intensity elasticity to price,Literature,Gupta (1979) - demand,,,,,,,,,-0.09777
+Intensity elasticity to price,Literature,Gupta (1979) - demand,,,,,,,,,-0.1038
+Intensity elasticity to price,Literature,Gupta (1982) - demand,,,,,,,,,0.444675988431931
+Intensity elasticity to price,Literature,Gupta (1982) - demand,,,,,,,,,0.316446917845097
+Intensity elasticity to price,Literature,Gupta (1982) - demand,,,,,,,,,0.283802470918597
+Intensity elasticity to price,Literature,Gupta (1982) - demand,,,,,,,,,0.616656427428556
+Intensity elasticity to price,Literature,Gupta (1982) - demand,,,,,,,,,-0.00515
+Intensity elasticity to price,Literature,Gupta (1982) - demand,,,,,,,,,-0.443118
+Intensity elasticity to price,Literature,Gupta (1982) - demand,,,,,,,,,-0.0772
+Intensity elasticity to price,Literature,Gupta (1982) - demand,,,,,,,,,-0.980674
+Intensity elasticity to price,Literature,Gupta (1982) - demand,,,,,,,,,0.227257
+Intensity elasticity to price,Literature,Gupta (1982) - demand,,,,,,,,,0.146932
+Intensity elasticity to price,Literature,Gupta (1982) - demand,,,,,,,,,0.180808
+Intensity elasticity to price,Literature,Gupta (1982) - demand,,,,,,,,,0.365364
+Intensity elasticity to price,Literature,Gupta (1982) - demand,,,,,,,,,-0.000515
+Intensity elasticity to price,Literature,Gupta (1982) - demand,,,,,,,,,-0.0443118
+Intensity elasticity to price,Literature,Gupta (1982) - demand,,,,,,,,,-0.01543714
+Intensity elasticity to price,Literature,Gupta (1982) - demand,,,,,,,,,-0.1442
+Intensity elasticity to price,Literature,Hashimoto (1981) - demand,-1.0,,,,,,,,
+Intensity elasticity to price,Literature,Hashimoto (1981) - demand,-0.929999999999999,,,,,,,,
+Intensity elasticity to price,Literature,Hojman (1981) - demand,,-0.59,,,,,,,
+Intensity elasticity to price,Literature,Hojman (1981) - demand,,-0.45,,,,,,,
+Intensity elasticity to price,Literature,Hojman (1981) - demand,,-1.02,,,,,,,
+Intensity elasticity to price,Literature,Hojman (1981) - demand,,-0.39,,,,,,,
+Intensity elasticity to price,Literature,Hojman (1981) - demand,,-0.61,,,,,,,
+Intensity elasticity to price,Literature,Hojman (1981) - demand,,-0.42,,,,,,,
+Intensity elasticity to price,Literature,Hojman (1981) - demand,,-1.33,,,,,,,
+Intensity elasticity to price,Literature,Hojman (1981) - demand,,-0.4,,,,,,,
+Intensity elasticity to price,Literature,MacKinnon (19980) - demand,,,-0.21,,,,,,
+Intensity elasticity to price,Literature,"MacKinnon (19980), a - demand",,,-0.360112570356472,,,,,,
+Intensity elasticity to price,Literature,"MacKinnon (19980), b - demand",,,-0.305189493433395,,,,,,
+Intensity elasticity to price,Literature,"MacKinnon (19980), c - demand",,,-0.42,,,,,,
+Intensity elasticity to price,Literature,"McNicol (1975), in McNicol (1975) and Bozdogan (1979) - demand",,,-0.77,,,,,,
+Intensity elasticity to price,Literature,"McNicol (1975), in McNicol (1975) and Bozdogan (1979) - demand",,,-0.326,,,,,,
+Intensity elasticity to price,Literature,Pei (1999) - demand,,,,,,-0.506,,,
+Intensity elasticity to price,Literature,Pei (1999) - demand,,,,,,,,,0.207
+Intensity elasticity to price,Literature,Pei (1999) - demand,,-0.367,,,,,,,
+Intensity elasticity to price,Literature,Pei (1999) - demand,,,0.117,,,,,-0.1,
+Intensity elasticity to price,Literature,Pei (1999) - demand,,,0.089,,-0.003,,,,
+Intensity elasticity to price,Literature,Pei (1999) - demand,,,,,,,,-0.07,
+Intensity elasticity to price,Literature,Pei (1999) - demand,,0.216,,,,,,,-0.136
+Intensity elasticity to price,Literature,Pei (1999) - demand,,-0.169,,,,,,-0.185,0.218
+Intensity elasticity to price,Literature,Pei (1999) - demand,,0.372,,,,,,,
+Intensity elasticity to price,Literature,Pei (1999) - demand,,,-0.205,,,0.339,,,
+Intensity elasticity to price,Literature,Pei (1999) - demand,,,,,0.438,,,,
+Intensity elasticity to price,Literature,Pei (1999) - demand,,,,,,,,-0.253,
+Intensity elasticity to price,Literature,Pei (1999) - demand,,,,,,,,-0.406,
+Intensity elasticity to price,Literature,Pei (1999) - demand,,,0.148,,,,,0.355,
+Intensity elasticity to price,Literature,Pei (1999) - demand,,,,,,,,,-0.318
+Intensity elasticity to price,Literature,Pei (1999) - demand,,,,,,,,-0.061,
+Intensity elasticity to price,Literature,Pei (1999) - demand,,,,,,,,-0.084,
+Intensity elasticity to price,Literature,Pei (1999) - demand,,,1.257,,,,,,
+Intensity elasticity to price,Literature,"Pei (1999), a - demand",,0.231,,,0.147,,,,
+Intensity elasticity to price,Literature,"Pei (1999), a - demand",,0.784,,,,,,,
+Intensity elasticity to price,Literature,"Pei (1999), a - demand",,,,,,,,,0.189
+Intensity elasticity to price,Literature,"Pei (1999), a - demand",,,0.163,,,,,-0.082,0.166
+Intensity elasticity to price,Literature,"Pei (1999), a - demand",,,,,,,,-0.095,
+Intensity elasticity to price,Literature,"Pei (1999), a - demand",,,0.157,,,,,,
+Intensity elasticity to price,Literature,"Pei (1999), a - demand",,,0.08,,,,,,
+Intensity elasticity to price,Literature,"Pei (1999), a - demand",,,,,,,,-0.132,
+Intensity elasticity to price,Literature,"Pei (1999), a - demand",,,0.136,,,,,,0.13
+Intensity elasticity to price,Literature,"Pei (1999), a - demand",,0.157,,,,,,-0.359,
+Intensity elasticity to price,Literature,"Pei (1999), a - demand",,,,,-0.385,,,,
+Intensity elasticity to price,Literature,"Pei (1999), b - demand",,0.229,,,0.137,,,,
+Intensity elasticity to price,Literature,"Pei (1999), b - demand",,1.133,,,,,,,
+Intensity elasticity to price,Literature,"Pei (1999), b - demand",,,,,,,,,0.177
+Intensity elasticity to price,Literature,"Pei (1999), b - demand",,,0.153,,,,,-0.122,0.108
+Intensity elasticity to price,Literature,"Pei (1999), b - demand",,,,,,,,-0.164,
+Intensity elasticity to price,Literature,"Pei (1999), b - demand",,,0.111,,,,,,
+Intensity elasticity to price,Literature,"Pei (1999), b - demand",,,0.079,,,,,,
+Intensity elasticity to price,Literature,"Pei (1999), b - demand",,,,,,,,-0.134,
+Intensity elasticity to price,Literature,"Pei (1999), b - demand",,,0.132,,,,,,0.107
+Intensity elasticity to price,Literature,"Pei (1999), b - demand",,0.159,,,,,,-0.422,
+Intensity elasticity to price,Literature,"Pei (1999), b - demand",,,,,-0.307,,,,
+Intensity elasticity to price,Literature,"Tcha (2002), a - demand",-0.006,-0.005,-0.008,,-0.005,-0.055,,-0.068,-0.003
+Intensity elasticity to price,Literature,"Tcha (2002), a - demand",0.1,0.105,0.065,,-0.048,-0.132,,0.036,0.111
+Intensity elasticity to price,Literature,"Tcha (2002), a - demand",0.058,0.082,0.059,,-0.04,0.036,,-0.16,0.015
+Intensity elasticity to price,Literature,"Tcha (2002), a - demand",-0.001,0.016,0.005,,-0.008,-0.08,,-0.091,-0.017
+Intensity elasticity to price,Literature,"Tcha (2002), a - demand",0.028,0.042,0.058,,-0.029,0.087,,0.126,0.043
+Intensity elasticity to price,Literature,"Tcha (2002), a - demand",0.068,0.175,0.042,,0.056,-0.045,,0.031,0.062
+Intensity elasticity to price,Literature,"Tcha (2002), a - demand",0.037,0.142,0.187,,0.093,-0.028,,0.215,0.012
+Intensity elasticity to price,Literature,"Tcha (2002), a - demand",-0.001,-0.036,-0.051,,0.105,-0.018,,-0.121,0.063
+Intensity elasticity to price,Literature,"Tcha (2002), a - demand",-0.012,0.004,-0.025,,-0.006,-0.047,,-0.064,-0.02
+Intensity elasticity to price,Literature,"Tcha (2002), b - demand",-0.009,-0.019,-0.007,,-0.003,-0.058,,-0.05,-0.003
+Intensity elasticity to price,Literature,"Tcha (2002), b - demand",0.1,0.106,0.068,,-0.051,-0.139,,0.078,0.111
+Intensity elasticity to price,Literature,"Tcha (2002), b - demand",0.054,0.077,0.045,,-0.057,0.037,,-0.143,0.016
+Intensity elasticity to price,Literature,"Tcha (2002), b - demand",0.01,0.034,0.01,,-0.008,-0.078,,-0.082,-0.008
+Intensity elasticity to price,Literature,"Tcha (2002), b - demand",0.029,0.047,0.052,,-0.032,0.069,,0.128,0.044
+Intensity elasticity to price,Literature,"Tcha (2002), b - demand",0.069,0.177,0.04,,0.056,-0.044,,0.043,0.061
+Intensity elasticity to price,Literature,"Tcha (2002), b - demand",0.039,0.153,0.187,,0.095,-0.025,,0.271,0.016
+Intensity elasticity to price,Literature,"Tcha (2002), b - demand",-0.002,-0.032,-0.05,,0.107,-0.019,,-0.118,0.055
+Intensity elasticity to price,Literature,"Tcha (2002), b - demand",-0.013,-0.009,-0.025,,0.001,-0.049,,-0.053,-0.02
+Intensity elasticity to price,Literature,Tims (1977) - demand,,,-0.175417661097852,,,,,,
+Intensity elasticity to price,Literature,Tims (1977) - demand,,,-0.147,,,,,,
+Intensity elasticity to price,Literature,Wagenhals (1984) - demand,,,-0.0814,,,,,,
+Intensity elasticity to price,Literature,Wagenhals (1984) - demand,,,-0.076,,,,,,
+Intensity elasticity to price,Literature,Wagenhals (1984) - demand,,,-0.0972,,,,,,
+Intensity elasticity to price,Literature,Wagenhals (1984) - demand,,,-0.0851,,,,,,
+Intensity elasticity to price,Literature,Wagenhals (1984) - demand,,,-0.0954,,,,,,
+Intensity elasticity to price,Literature,"Hojman (1981), a - demand",,-0.04,,,,,,,
+Intensity elasticity to price,Literature,"Hojman (1981), b - demand",,-1.25,,,,,,,
+Intensity elasticity to time,Literature,"Pei and Tilton (1999), a - demand",,-0.03,-0.04,,-0.01,-0.03,,-0.06,-0.04
+Intensity elasticity to time,Literature,"Pei and Tilton (1999), b - demand",,0.152,0.097,,0.042,0.001,,0.001,0.02
+Intensity elasticity to time,Literature,Stuermer (2017) - demand,,-0.008,-0.004,,-0.005,,,-0.001,-0.003
+Intensity elasticity to time,Literature,Fu (2019),,,-0.06,,,,,,
+Intensity elasticity to time,Literature,Fu (2019),,,-0.1,,,,,,
+Intensity elasticity to time,Literature,Fu (2019),,,-0.09,,,,,,
+Intensity elasticity to time,Literature,Fu (2019),,,-0.02,,,,,,
+Intensity elasticity to time,Literature,Fu (2019),,,-0.08,,,,,,
+Mine CU elasticity to TCM,Literature,Zink et al. (2018),,0.425,,,,,,,
+Mine CU elasticity to TCM,Literature,Slade (1980a),,-0.25,,,,,,,
+Mine CU elasticity to TCM,Literature,Hojman (1981),,0.05,,,,,,,
+Mine CU elasticity to TCM,Literature,Deadman and Grace (1979),,0.23,,,,,,,
+Mine CU elasticity to TCM,Literature,Rockerbie (1999),,,,0.492,,,,,
+Mine CU elasticity to TCM,Literature,"Selvanathan (1999), a",,,,0.03,,,,,
+Mine CU elasticity to TCM,Literature,"Selvanathan (1999), b",,,,1.237,,,,,
+Mine CU elasticity to TCM,Literature,"Guzman-Soria (2019), a",0.0425,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Guzman-Soria (2019), b",0.2419,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Priovolos (1987), a",0.49,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Priovolos (1987), b",0.27,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Priovolos (1987), c",0.11,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Priovolos (1987), d",0.55,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Priovolos (1987), e",0.27,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Labson (1995), a",0.3,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Labson (1995), b",0.26,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Labson (1995), c",0.13,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Labson (1995), d",0.1,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Labson (1995), e",0.04,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Labson (1995), f",0.04,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Labson (1995), g",0.43,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Labson (1995), h",0.66,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Labson (1995), i",0.85,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Labson (1995), j",0.72,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Labson (1995), k",0.21,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Labson (1995), l",0.04,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Gupta (1982), a",,,,,,,,,0.24
+Mine CU elasticity to TCM,Literature,"Gupta (1982), b",,,,,,,,,0.445
+Mine CU elasticity to TCM,Literature,"Gupta (1982), c",,,,,,,,,0.316
+Mine CU elasticity to TCM,Literature,"Gupta (1982), d",,,,,,,,,0.284
+Mine CU elasticity to TCM,Literature,"Gupta (1982), e",,,,,,,,,0.617
+Mine CU elasticity to TCM,Literature,"Gupta (1982), f",,,,,,,,,0.573
+Mine CU elasticity to TCM,Literature,"Chhabra (1979), a",,,,,,,,0.31,
+Mine CU elasticity to TCM,Literature,"Chhabra (1979), b",,,,,,,,0.64,
+Mine CU elasticity to TCM,Literature,"Chhabra (1979), c",,,,,,,,0.24,
+Mine CU elasticity to TCM,Literature,"Chhabra (1979), d",,,,,,,,0.3,
+Mine CU elasticity to TCM,Literature,"Chhabra (1979), e",,,,,,,,1.11,
+Mine CU elasticity to TCM,Literature,"Chhabra (1979), f",,,,,,,,0.7,
+Mine CU elasticity to TCM,Literature,"Chhabra (1979), g",,,,,,,,1.25,
+Mine CU elasticity to TCM,Literature,"Chhabra (1979), h",,,,,,,,1.34,
+Mine CU elasticity to TCM,Literature,"Chhabra (1979), i",,,,,,,,0.7,
+Mine CU elasticity to TCM,Literature,"Chhabra (1979), j",,,,,,,,2.09,
+Mine CU elasticity to TCM,Literature,"Banks (1974), a",,,0.237,,,,,,
+Mine CU elasticity to TCM,Literature,"Banks (1974), b",,,0.289,,,,,,
+Mine CU elasticity to TCM,Literature,"Banks (1974), c",,,0.173,,,,,,
+Mine CU elasticity to TCM,Literature,"Banks (1974), d",,,0.542,,,,,,
+Mine CU elasticity to TCM,Literature,"Banks (1974), e",,,0.31,,,,,,
+Mine CU elasticity to TCM,Literature,"Banks (1974), f",,,1.16,,,,,,
+Mine CU elasticity to TCM,Literature,"Banks (1974), g",,,1.22,,,,,,
+Mine CU elasticity to TCM,Literature,"Banks (1974), h",,,0.625,,,,,,
+Mine CU elasticity to TCM,Literature,"Banks (1974), i",,,1.93,,,,,,
+Mine CU elasticity to TCM,Literature,"Banks (1974), j",,,0.63,,,,,,
+Mine CU elasticity to TCM,Literature,Choe (1990),,0.117,0.116,,0.109,0.133,,0.032,0.085
+Mine CU elasticity to TCM,Literature,Charles River Associates (1970),,,0.34,,,,,,
+Mine CU elasticity to TCM,Literature,"Fisher and Owen (1981), a",,0.291,,,,,,,
+Mine CU elasticity to TCM,Literature,"Fisher and Owen (1981), b",,1.502,,,,,,,
+Mine CU elasticity to TCM,Literature,Fu (2019),,,0.024,,,,,,
+Mine CU elasticity to TCM,Literature,"Fisher (1972), a",,,0.6372,,,,,,
+Mine CU elasticity to TCM,Literature,"Fisher (1972), b",,,0.112,,,,,,
+Mine CU elasticity to TCM,Literature,"Fisher (1972), c",,,0.188,,,,,,
+Mine CU elasticity to TCM,Literature,"Fisher (1972), d",,,0.0684,,,,,,
+Mine CU elasticity to TCM,Literature,"Fisher (1972), e",,,0.1963,,,,,,
+Mine CU elasticity to TCM,Literature,"Fisher (1972), f",,,1.67,,,,,,
+Mine CU elasticity to TCM,Literature,"Fisher (1972), g",,,0.402,,,,,,
+Mine CU elasticity to TCM,Literature,"Fisher (1972), i",,,1.68,,,,,,
+Mine CU elasticity to TCM,Literature,Banks (1974),,,1.16,,,,,,
+Mine CU elasticity to TCM,Literature,Banks (1974),,,1.22,,,,,,
+Mine CU elasticity to TCM,Literature,Banks (1974),,,0.63,,,,,,
+Mine CU elasticity to TCM,Literature,Banks (1974),,,0.625,,,,,,
+Mine CU elasticity to TCM,Literature,Banks (1974),,,-0.21,,,,,,
+Mine CU elasticity to TCM,Literature,Banks (1974),,,-0.228,,,,,,
+Mine CU elasticity to TCM,Literature,Banks (1974),,,-0.29,,,,,,
+Mine CU elasticity to TCM,Literature,Banks (1974),,,-0.294,,,,,,
+Mine CU elasticity to TCM,Literature,Banks (1974),,,-0.421,,,,,,
+Mine CU elasticity to TCM,Literature,Banks (1974),,,-0.328,,,,,,
+Mine CU elasticity to TCM,Literature,Banks (1974),,,-0.368,,,,,,
+Mine CU elasticity to TCM,Literature,Banks (1974),,,0.2365,,,,,,
+Mine CU elasticity to TCM,Literature,Banks (1974),,,0.289,,,,,,
+Mine CU elasticity to TCM,Literature,Banks (1974),,,0.31,,,,,,
+Mine CU elasticity to TCM,Literature,Banks (1974),,,0.1726,,,,,,
+Mine CU elasticity to TCM,Literature,Banks (1974),,,-0.152,,,,,,
+Mine CU elasticity to TCM,Literature,Banks (1974),,,-0.127,,,,,,
+Mine CU elasticity to TCM,Literature,Banks (1974),,,-0.177,,,,,,
+Mine CU elasticity to TCM,Literature,Banks (1974),,,-0.253,,,,,,
+Mine CU elasticity to TCM,Literature,Banks (1974),,,-0.221,,,,,,
+Mine CU elasticity to TCM,Literature,Banks (1974),,,-0.252,,,,,,
+Mine CU elasticity to TCM,Literature,Banks (1974),,,-0.39,,,,,,
+Mine CU elasticity to TCM,Literature,Banks (1974),,,-0.294,,,,,,
+Mine CU elasticity to TCM,Literature,Blomberg (2000),,0.17,,,,,,,
+Mine CU elasticity to TCM,Literature,Chhabra (1978),,,,,,,,0.91,
+Mine CU elasticity to TCM,Literature,Chhabra (1978),,,,,,,,0.7,
+Mine CU elasticity to TCM,Literature,Chhabra (1978),,,,,,,,0.21,
+Mine CU elasticity to TCM,Literature,Chhabra (1978),,,,,,,,0.31,
+Mine CU elasticity to TCM,Literature,"Chhabra (1978), a",,,,,,,,1.25,
+Mine CU elasticity to TCM,Literature,"Chhabra (1978), a",,,,,,,,0.6,
+Mine CU elasticity to TCM,Literature,"Chhabra (1978), b",,,,,,,,1.34,
+Mine CU elasticity to TCM,Literature,"Chhabra (1978), b",,,,,,,,0.24,
+Mine CU elasticity to TCM,Literature,"Chhabra (1978), c",,,,,,,,0.7,
+Mine CU elasticity to TCM,Literature,"Chhabra (1978), c",,,,,,,,0.3,
+Mine CU elasticity to TCM,Literature,"Chhabra (1978), d",,,,,,,,2.09,
+Mine CU elasticity to TCM,Literature,"Chhabra (1978), d",,,,,,,,1.11,
+Mine CU elasticity to TCM,Literature,Choe (1990),,,0.116,,0.109,,,,0.085
+Mine CU elasticity to TCM,Literature,Choe (1990),,0.117,,,,,,,
+Mine CU elasticity to TCM,Literature,"Damuth (1979), in Damuth (2011)",0.833,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Damuth (1979), in Damuth (2011)",0.365,,,,,,,,
+Mine CU elasticity to TCM,Literature,Damuth (2011),0.885,,,,,,,,
+Mine CU elasticity to TCM,Literature,Damuth (2011),0.589,,,,,,,,
+Mine CU elasticity to TCM,Literature,Fisher (1972),,,0.400858983536148,,,,,,
+Mine CU elasticity to TCM,Literature,Fisher (1972),,,1.6806506849315,,,,,,
+Mine CU elasticity to TCM,Literature,Fisher (1972),,,0.306218706915318,,,,,,
+Mine CU elasticity to TCM,Literature,Fisher (1972),,,0.156407421059098,,,,,,
+Mine CU elasticity to TCM,Literature,Fisher (1972),,,1.6538882803943,,,,,,
+Mine CU elasticity to TCM,Literature,Fisher (1972),,,0.188,,,,,,
+Mine CU elasticity to TCM,Literature,Fisher (1972),,,0.112,,,,,,
+Mine CU elasticity to TCM,Literature,Fisher (1972),,,0.1963,,,,,,
+Mine CU elasticity to TCM,Literature,Fisher (1972),,,0.422,,,,,,
+Mine CU elasticity to TCM,Literature,Fisher (1972),,,0.2546,,,,,,
+Mine CU elasticity to TCM,Literature,Fisher (1972),,,0.453,,,,,,
+Mine CU elasticity to TCM,Literature,Fisher (1981),,1.5023,,,,,,,
+Mine CU elasticity to TCM,Literature,Fisher (1981),,0.2911,,,,,,,
+Mine CU elasticity to TCM,Literature,Fisher (1981),,0.9207,,,,,,,
+Mine CU elasticity to TCM,Literature,Gupta (1982),,,,,,,,,0.573440322058427
+Mine CU elasticity to TCM,Literature,Gupta (1982),,,,,,,,,0.853744963513751
+Mine CU elasticity to TCM,Literature,Gupta (1982),,,,,,,,,0.147002
+Mine CU elasticity to TCM,Literature,Gupta (1982),,,,,,,,,0.641603
+Mine CU elasticity to TCM,Literature,Hojman (1981),,0.71,,,,,,,
+Mine CU elasticity to TCM,Literature,Hojman (1981),,0.073,,,,,,,
+Mine CU elasticity to TCM,Literature,Hojman (1981),,1.19,,,,,,,
+Mine CU elasticity to TCM,Literature,Hojman (1981),,0.2,,,,,,,
+Mine CU elasticity to TCM,Literature,Hojman (1981),,0.05,,,,,,,
+Mine CU elasticity to TCM,Literature,Marsh (1983),,,,0.708,,,,,
+Mine CU elasticity to TCM,Literature,Marsh (1983),,,,-0.422,,,,,
+Mine CU elasticity to TCM,Literature,"Marsh (1983), a",,,,0.223,,,,,
+Mine CU elasticity to TCM,Literature,"Marsh (1983), a",,,,0.965,,,,,
+Mine CU elasticity to TCM,Literature,"Marsh (1983), a",,,,-0.283,,,,,
+Mine CU elasticity to TCM,Literature,"Marsh (1983), a",,,,-0.446,,,,,
+Mine CU elasticity to TCM,Literature,"Marsh (1983), b",,,,0.234,,,,,
+Mine CU elasticity to TCM,Literature,"Marsh (1983), b",,,,0.898,,,,,
+Mine CU elasticity to TCM,Literature,"Marsh (1983), b",,,,-0.46,,,,,
+Mine CU elasticity to TCM,Literature,"Marsh (1983), b",,,,-0.519,,,,,
+Mine CU elasticity to TCM,Literature,"Marsh (1983), c",,,,1.049,,,,,
+Mine CU elasticity to TCM,Literature,"Marsh (1983), c",,,,-0.522,,,,,
+Mine CU elasticity to TCM,Literature,"Marsh (1983), d",,,,0.768,,,,,
+Mine CU elasticity to TCM,Literature,"Marsh (1983), d",,,,-0.477,,,,,
+Mine CU elasticity to TCM,Literature,Priovolos (1987),1.36,,,,,,,,
+Mine CU elasticity to TCM,Literature,Priovolos (1987),1.01,,,,,,,,
+Mine CU elasticity to TCM,Literature,Priovolos (1987),0.82,,,,,,,,
+Mine CU elasticity to TCM,Literature,Priovolos (1987),0.54,,,,,,,,
+Mine CU elasticity to TCM,Literature,Priovolos (1987),1.03,,,,,,,,
+Mine CU elasticity to TCM,Literature,Priovolos (1987),1.07,,,,,,,,
+Mine CU elasticity to TCM,Literature,Priovolos (1987),0.77,,,,,,,,
+Mine CU elasticity to TCM,Literature,Priovolos (1987),0.12,,,,,,,,
+Mine CU elasticity to TCM,Literature,Priovolos (1987),0.55,,,,,,,,
+Mine CU elasticity to TCM,Literature,Priovolos (1987),-0.17,,,,,,,,
+Mine CU elasticity to TCM,Literature,Priovolos (1987),0.11,,,,,,,,
+Mine CU elasticity to TCM,Literature,Priovolos (1987),-0.07,,,,,,,,
+Mine CU elasticity to TCM,Literature,Priovolos (1987),0.3,,,,,,,,
+Mine CU elasticity to TCM,Literature,Priovolos (1987),-0.12,,,,,,,,
+Mine CU elasticity to TCM,Literature,Priovolos (1987),0.28,,,,,,,,
+Mine CU elasticity to TCM,Literature,Priovolos (1987),0.14,,,,,,,,
+Mine CU elasticity to TCM,Literature,Priovolos (1987),-0.05,,,,,,,,
+Mine CU elasticity to TCM,Literature,Priovolos (1987),-0.15,,,,,,,,
+Mine CU elasticity to TCM,Literature,Priovolos (1987),-0.05,,,,,,,,
+Mine CU elasticity to TCM,Literature,Priovolos (1987),0.18,,,,,,,,
+Mine CU elasticity to TCM,Literature,Priovolos (1987),0.27,,,,,,,,
+Mine CU elasticity to TCM,Literature,Priovolos (1987),-0.04,,,,,,,,
+Mine CU elasticity to TCM,Literature,Priovolos (1987),0.04,,,,,,,,
+Mine CU elasticity to TCM,Literature,Priovolos (1987),0.18,,,,,,,,
+Mine CU elasticity to TCM,Literature,Priovolos (1987),0.05,,,,,,,,
+Mine CU elasticity to TCM,Literature,Priovolos (1987),0.49,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Priovolos (1987), a",0.05,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Priovolos (1987), a",0.05,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Priovolos (1987), a",0.19,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Priovolos (1987), a",0.45,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Priovolos (1987), a",0.27,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Priovolos (1987), a",0.1,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Priovolos (1987), a",0.04,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Priovolos (1987), b",-0.19,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Priovolos (1987), b",-0.31,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Priovolos (1987), b",-0.64,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Priovolos (1987), b",-0.04,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Priovolos (1987), b",-0.13,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Priovolos (1987), b",-0.1,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Priovolos (1987), b",-0.16,,,,,,,,
+Mine CU elasticity to TCM,Literature,"Sigman (1995), a",,,,,0.167,,,,
+Mine CU elasticity to TCM,Literature,"Sigman (1995), b",,,,,0.171,,,,
+Mine CU elasticity to TCM,Literature,Taylor (1979),,,0.254048478597215,,,,,,
+Mine CU elasticity to TCM,Literature,Wagenhals (1984),,,0.23,,,,,,
+Mine CU elasticity to TCM,Literature,Wagenhals (1984),,,0.07,,,,,,
+Mine CU elasticity to TCM,Literature,Wagenhals (1984),,,0.17,,,,,,
+Mine CU elasticity to TCM,Literature,Wagenhals (1984),,,0.07,,,,,,
+Mine CU elasticity to TCM,Literature,Wagenhals (1984),,,0.06,,,,,,
+Mine CU elasticity to TCM,Literature,Wagenhals (1984),,,0.1,,,,,,
+Mine cost change per year,Literature,Bartos (2007),-2.3,-2.3,-2.3,,-2.3,-2.3,,-2.3,-2.3
+Mine cost change per year,Literature,"Topp (2008), a",1.9,10.4,-7.5,-2.6,2.2,10.4,2.2,,2.2
+Mine cost change per year,Literature,"Topp (2008), b",-5.9,-3.8,-5,-1.1,-3.7,-3.8,-3.7,,-3.7
+Mine cost change per year,Literature,"Topp (2008), c",5.5,2,2.7,5.0,6.1,2.0,6.1,,6.1
+Mine cost change per year,Literature,Humphreys (),-2.4,,-3,,,,,,
+Mine cost change per year,Literature,McKinsey (2015),1.6,,1.5,3.5,3.5,3.5,,,3.5
+Mine cost change per year,Literature,This study,,0.56,2.12,3.54,1.43,-0.66,3.01,0.56,-0.79
+Mine cost change per year,Literature,"Young (1991), a",,,-1.38,,,,,,
+Mine cost change per year,Literature,"Young (1991), b",,,2.02,,,,,,
+Mine cost elasticity to ore grade,Literature,Calvo et al. (2016),,,-0.366,-0.275,,,,,-0.786
+Mine cost elasticity to ore grade,Literature,This study,,-0.458,-0.3163,-0.367,-0.6855,-0.5084,-0.1969,-0.458,-0.3486
+Mine cost elasticity to ore grade,Literature,"Young (1991), a",,,-0.63,,,,,,
+Mine cost elasticity to ore grade,Literature,"Young (1991), b",,,-0.68,,,,,,
+Ore grade elasticity to COT distribution mean,Literature,Pustov et al. (2013),3.0,,,,,,,,
+Ore grade elasticity to COT distribution mean,Literature,Calvo et al. (2016),,,2.3,,,,,,
+Ore grade elasticity to COT distribution mean,Literature,"This study, a",,,1.53,4.91,0.51,-1.95,0.095,,1.25
+Ore grade elasticity to COT distribution mean,Literature,"This study, b",,,0.65,2.55,3.48,1.16,0.91,,2.36
+Ore grade elasticity to COT distribution mean,Literature,"This study, c",,,0.098,0.29,-0.13,0.11,0.19,,0.1
+Primary refinery CU elasticity to TCRC,Literature,Fu (2019),,,0.057,,,,,,
+Refined price elasticity to SD,Literature,Fu (2019),,,-0.461,,,,,,
+Refined price elasticity to SD,Literature,"Chhabra (1979), e",,,,,,,,-0.302,
+Refinery SR elasticity to TCRC,Literature,Fu (2019),,,-0.197,,,,,,
+Refinery SR elasticity to scrap spread,Literature,Fu (2019),,,0.316,,,,,,
+Scrap spread elasticity to SD,Literature,Fu (2019),,,0.0845,,,,,,
+Scrap spread elasticity to price,Literature,Fu (2019),,,0.184,,,,,,
+Scrap spread elasticity to price,Literature,"Xiarchos (2009), a - scrap price",,,0.603,,0.621,,,,0.92
+Secondary refinery CU elasticity to TCRC,Literature,Fu (2019),,,0.153,,,,,,
+TCRC elasticity to SD,Literature,Fu (2019),,,0.164,,,,,,

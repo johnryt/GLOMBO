@@ -51,6 +51,10 @@ class LoadFolderContents:
                              'including the folder name, or give the folder name and we will check for it '
                              'inside the following paths:\n' + str(potential_paths + [os.getcwd()])
                              )
+        if not os.path.exists(f'{self.folder_path}/figures'):
+            os.mkdir(f'{self.folder_path}/figures')
+        if not os.path.exists(f'{self.folder_path}/tables'):
+            os.mkdir(f'{self.folder_path}/tables')
 
     def load_scenario_data(self):
         folder_path = self.folder_path
@@ -229,7 +233,8 @@ def create_output_folder_level_one():
     if main_folder_str not in os.listdir(output_data_folder_full):
         print(main_folder_str)
         final_folder = f'{output_data_folder_full}/{main_folder_str}'
-        os.mkdir(final_folder)
+        if not os.path.exists(final_folder):
+            os.mkdir(final_folder)
     else:
         raise ValueError(
             'Scenario folder name already taken (needs to be run at least 0.1 seconds after the other with the same name)')

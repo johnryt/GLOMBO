@@ -1,0 +1,299 @@
+,,,,0
+a,Total demand,Ag,To 2014,0.08286493207349666
+a,Total demand,Ag,To 2015,0.0011933355076652052
+a,Total demand,Ag,To 2016,0.07550359126968265
+a,Total demand,Al,To 2014,0.0032915449847872313
+a,Total demand,Al,To 2015,0.00016075942955018352
+a,Total demand,Al,To 2016,0.0012036293545050203
+a,Total demand,Au,To 2014,0.007127422781000425
+a,Total demand,Au,To 2015,0.013600564660179004
+a,Total demand,Au,To 2016,0.01438098481008665
+a,Total demand,Cu,To 2014,0.021849954011210482
+a,Total demand,Cu,To 2015,0.0005898142707282394
+a,Total demand,Cu,To 2016,0.011554686700112504
+a,Total demand,Ni,To 2014,0.061034028018661646
+a,Total demand,Ni,To 2015,0.02869208172336779
+a,Total demand,Ni,To 2016,0.019194484746318463
+a,Total demand,Pb,To 2014,0.022957905800751077
+a,Total demand,Pb,To 2015,0.006474448038493064
+a,Total demand,Pb,To 2016,0.008486829841252042
+a,Total demand,Sn,To 2014,0.11245400081158152
+a,Total demand,Sn,To 2015,0.029692547639220246
+a,Total demand,Sn,To 2016,0.07097417578307463
+a,Total demand,Steel,To 2014,0.04617943054197371
+a,Total demand,Steel,To 2015,0.019036298234266336
+a,Total demand,Steel,To 2016,0.01022164611477594
+a,Total demand,Zn,To 2014,0.014669622192724163
+a,Total demand,Zn,To 2015,3.331796427685774e-05
+a,Total demand,Zn,To 2016,0.005652537168527649
+a,Mine production,Ag,To 2014,0.02648909106566788
+a,Mine production,Ag,To 2015,0.03859095642351429
+a,Mine production,Ag,To 2016,0.012985615896386693
+a,Mine production,Al,To 2014,0.00234890628549822
+a,Mine production,Al,To 2015,0.0008258997774098775
+a,Mine production,Al,To 2016,0.004849350718624801
+a,Mine production,Au,To 2014,0.05604068023830522
+a,Mine production,Au,To 2015,0.029836303285674326
+a,Mine production,Au,To 2016,0.05183880366839044
+a,Mine production,Cu,To 2014,0.02528933347508877
+a,Mine production,Cu,To 2015,0.13666956375661266
+a,Mine production,Cu,To 2016,0.10964590389278184
+a,Mine production,Ni,To 2014,0.011248607395972554
+a,Mine production,Ni,To 2015,0.00994995731418069
+a,Mine production,Ni,To 2016,0.0104100999008504
+a,Mine production,Pb,To 2014,0.20716128759982
+a,Mine production,Pb,To 2015,0.04117149053431679
+a,Mine production,Pb,To 2016,0.06720641255999749
+a,Mine production,Sn,To 2014,0.29733240602838595
+a,Mine production,Sn,To 2015,0.19193835228986533
+a,Mine production,Sn,To 2016,0.15185481599765183
+a,Mine production,Steel,To 2014,0.05884737776536364
+a,Mine production,Steel,To 2015,0.042648248141509915
+a,Mine production,Steel,To 2016,0.00457164319046266
+a,Mine production,Zn,To 2014,0.01746889975873256
+a,Mine production,Zn,To 2015,0.05398521188529681
+a,Mine production,Zn,To 2016,0.034272463323154034
+a,Refined price,Ag,To 2014,0.16977099241606675
+a,Refined price,Ag,To 2015,0.008218063130334352
+a,Refined price,Ag,To 2016,0.005263998382154966
+a,Refined price,Al,To 2014,0.23058645584720217
+a,Refined price,Al,To 2015,0.10894141043043803
+a,Refined price,Al,To 2016,0.022446785300603955
+a,Refined price,Au,To 2014,0.2982996148973224
+a,Refined price,Au,To 2015,0.09155851991930797
+a,Refined price,Au,To 2016,0.0023161997324023798
+a,Refined price,Cu,To 2014,0.08555755294251799
+a,Refined price,Cu,To 2015,0.011025157500949678
+a,Refined price,Cu,To 2016,0.03582776570052926
+a,Refined price,Ni,To 2014,0.020967609200644555
+a,Refined price,Ni,To 2015,0.012524187369201245
+a,Refined price,Ni,To 2016,0.10656353261130969
+a,Refined price,Pb,To 2014,0.7265363279837191
+a,Refined price,Pb,To 2015,0.1659936388242802
+a,Refined price,Pb,To 2016,0.08397521295559807
+a,Refined price,Sn,To 2014,0.26336473788895953
+a,Refined price,Sn,To 2015,0.17619712879688265
+a,Refined price,Sn,To 2016,0.24175975424347118
+a,Refined price,Steel,To 2014,0.12397798749003475
+a,Refined price,Steel,To 2015,0.29815434842208777
+a,Refined price,Steel,To 2016,0.11512238981423195
+a,Refined price,Zn,To 2014,0.012194331230373945
+a,Refined price,Zn,To 2015,0.3320730550827139
+a,Refined price,Zn,To 2016,0.2925280746266201
+b,b,Collection elasticity to scrap price,Ag,1.7987512867493771
+b,b,Collection elasticity to scrap price,Al,6.7721127914469506
+b,b,Collection elasticity to scrap price,Au,13.54074957755074
+b,b,Collection elasticity to scrap price,Cu,16.317898349563553
+b,b,Collection elasticity to scrap price,Ni,2.5592922021334674
+b,b,Collection elasticity to scrap price,Pb,2.9278073526884
+b,b,Collection elasticity to scrap price,Sn,10.609995155697055
+b,b,Collection elasticity to scrap price,Steel,6.95905605727432
+b,b,Collection elasticity to scrap price,Zn,10.060935906176923
+b,b,Direct melt fraction elasticity to scrap spread,Ag,10.361781306206456
+b,b,Direct melt fraction elasticity to scrap spread,Al,10.317063370654026
+b,b,Direct melt fraction elasticity to scrap spread,Au,10.96752071293853
+b,b,Direct melt fraction elasticity to scrap spread,Cu,5.589252497199931
+b,b,Direct melt fraction elasticity to scrap spread,Zn,11.251738986318797
+b,b,Fraction of viable mines that open,Ag,1.2993969201333455
+b,b,Fraction of viable mines that open,Al,0.8636801799673892
+b,b,Fraction of viable mines that open,Au,4.737805523454972
+b,b,Fraction of viable mines that open,Cu,3.288242755726255
+b,b,Fraction of viable mines that open,Ni,1.0929831457295738
+b,b,Fraction of viable mines that open,Pb,7.230306240854629
+b,b,Fraction of viable mines that open,Sn,7.635937581492255
+b,b,Fraction of viable mines that open,Steel,5.462710608342064
+b,b,Fraction of viable mines that open,Zn,7.69101353122659
+b,b,Incentive mine cost change per year,Ag,6.415875347668584
+b,b,Incentive mine cost change per year,Al,4.075095202244456
+b,b,Incentive mine cost change per year,Au,6.4505947508109545
+b,b,Incentive mine cost change per year,Cu,10.984602982458144
+b,b,Incentive mine cost change per year,Ni,11.53554286528874
+b,b,Incentive mine cost change per year,Pb,4.111690579220973
+b,b,Incentive mine cost change per year,Sn,2.0305839867536557
+b,b,Incentive mine cost change per year,Steel,3.360332602539981
+b,b,Incentive mine cost change per year,Zn,4.818538417045219
+b,b,Incentive ore grade elasticity to COT,Ag,10.931634784848358
+b,b,Incentive ore grade elasticity to COT,Al,15.137580053247296
+b,b,Incentive ore grade elasticity to COT,Au,3.1551107512856245
+b,b,Incentive ore grade elasticity to COT,Cu,6.2848856125376455
+b,b,Incentive ore grade elasticity to COT,Ni,13.246132001976022
+b,b,Incentive ore grade elasticity to COT,Pb,0.8390217913882475
+b,b,Incentive ore grade elasticity to COT,Sn,6.150136841363393
+b,b,Incentive ore grade elasticity to COT,Steel,8.032622910318633
+b,b,Incentive ore grade elasticity to COT,Zn,2.9129097465864033
+b,b,Incentive tonnage elasticity to price,Ag,3.3777576698479583
+b,b,Incentive tonnage elasticity to price,Al,7.180027949600233
+b,b,Incentive tonnage elasticity to price,Au,16.138599392877097
+b,b,Incentive tonnage elasticity to price,Cu,7.52422858248552
+b,b,Incentive tonnage elasticity to price,Ni,0.7310738968332433
+b,b,Incentive tonnage elasticity to price,Pb,12.536595967174428
+b,b,Incentive tonnage elasticity to price,Sn,10.54979979552377
+b,b,Incentive tonnage elasticity to price,Steel,6.511864904525355
+b,b,Incentive tonnage elasticity to price,Zn,2.8093122043805954
+b,b,Intensity elasticity to GDP,Ag,5.278460336749767
+b,b,Intensity elasticity to GDP,Al,7.103598428403661
+b,b,Intensity elasticity to GDP,Au,19.060901780777737
+b,b,Intensity elasticity to GDP,Cu,7.023822905938565
+b,b,Intensity elasticity to GDP,Ni,4.681711483664045
+b,b,Intensity elasticity to GDP,Pb,8.032132520499639
+b,b,Intensity elasticity to GDP,Sn,9.758443024384977
+b,b,Intensity elasticity to GDP,Steel,5.73695298461246
+b,b,Intensity elasticity to GDP,Zn,15.27312297213331
+b,b,Intensity elasticity to price,Ag,18.075033107838472
+b,b,Intensity elasticity to price,Al,7.641858948123209
+b,b,Intensity elasticity to price,Au,14.51820586538818
+b,b,Intensity elasticity to price,Cu,6.603996641047881
+b,b,Intensity elasticity to price,Ni,5.37786390050718
+b,b,Intensity elasticity to price,Pb,2.219159243430816
+b,b,Intensity elasticity to price,Sn,12.59891132981805
+b,b,Intensity elasticity to price,Steel,14.018782673000258
+b,b,Intensity elasticity to price,Zn,11.066783589905524
+b,b,Intensity elasticity to time,Ag,8.163233846329437
+b,b,Intensity elasticity to time,Al,2.8908155527633728
+b,b,Intensity elasticity to time,Au,2.935135891460224
+b,b,Intensity elasticity to time,Cu,4.282759163914936
+b,b,Intensity elasticity to time,Ni,1.9696566244063347
+b,b,Intensity elasticity to time,Pb,3.8787817199574497
+b,b,Intensity elasticity to time,Sn,3.113599579342783
+b,b,Intensity elasticity to time,Steel,4.394523032428395
+b,b,Intensity elasticity to time,Zn,8.215026740279193
+b,b,Mine CU elasticity to TCM,Ag,6.333831794862037
+b,b,Mine CU elasticity to TCM,Al,5.811746765626266
+b,b,Mine CU elasticity to TCM,Au,7.34275412549149
+b,b,Mine CU elasticity to TCM,Cu,7.435162041050143
+b,b,Mine CU elasticity to TCM,Ni,8.604904277224756
+b,b,Mine CU elasticity to TCM,Pb,2.560584629711493
+b,b,Mine CU elasticity to TCM,Sn,9.33429074281694
+b,b,Mine CU elasticity to TCM,Steel,9.031667945354902
+b,b,Mine CU elasticity to TCM,Zn,10.445118320526856
+b,b,Mine cost change per year,Ag,6.415875347668584
+b,b,Mine cost change per year,Al,4.075095202244456
+b,b,Mine cost change per year,Au,6.4505947508109545
+b,b,Mine cost change per year,Cu,10.984602982458144
+b,b,Mine cost change per year,Ni,11.53554286528874
+b,b,Mine cost change per year,Pb,4.111690579220973
+b,b,Mine cost change per year,Sn,2.0305839867536557
+b,b,Mine cost change per year,Steel,3.360332602539981
+b,b,Mine cost change per year,Zn,4.818538417045219
+b,b,Mine cost elasticity to ore grade,Ag,9.507515344143766
+b,b,Mine cost elasticity to ore grade,Al,4.23953992924753
+b,b,Mine cost elasticity to ore grade,Au,6.586287853836027
+b,b,Mine cost elasticity to ore grade,Cu,9.785138314669068
+b,b,Mine cost elasticity to ore grade,Ni,2.00718801519279
+b,b,Mine cost elasticity to ore grade,Pb,3.9544174415727413
+b,b,Mine cost elasticity to ore grade,Sn,9.2609526224343
+b,b,Mine cost elasticity to ore grade,Steel,4.183148705229896
+b,b,Mine cost elasticity to ore grade,Zn,6.2831682628595855
+b,b,Ore grade elasticity to COT distribution mean,Ag,2.033517281271315
+b,b,Ore grade elasticity to COT distribution mean,Al,5.061259696356032
+b,b,Ore grade elasticity to COT distribution mean,Au,3.1981491206191004
+b,b,Ore grade elasticity to COT distribution mean,Cu,7.356042510896367
+b,b,Ore grade elasticity to COT distribution mean,Ni,4.17377320068824
+b,b,Ore grade elasticity to COT distribution mean,Pb,2.5421960972992377
+b,b,Ore grade elasticity to COT distribution mean,Sn,1.0995742892871831
+b,b,Ore grade elasticity to COT distribution mean,Steel,5.217446148055515
+b,b,Ore grade elasticity to COT distribution mean,Zn,5.654927648242554
+b,b,Primary refinery CU elasticity to TCRC,Ag,2.9630475907301013
+b,b,Primary refinery CU elasticity to TCRC,Al,13.186498499169536
+b,b,Primary refinery CU elasticity to TCRC,Au,19.286354295067877
+b,b,Primary refinery CU elasticity to TCRC,Cu,18.889575249742375
+b,b,Primary refinery CU elasticity to TCRC,Ni,5.521080008913803
+b,b,Primary refinery CU elasticity to TCRC,Pb,20.495024053024245
+b,b,Primary refinery CU elasticity to TCRC,Sn,7.192297215145225
+b,b,Primary refinery CU elasticity to TCRC,Steel,8.634409772549397
+b,b,Primary refinery CU elasticity to TCRC,Zn,16.0248204317171
+b,b,Primary refinery CU elasticity to price,Ag,6.657874322272727
+b,b,Primary refinery CU elasticity to price,Al,10.251344788177057
+b,b,Primary refinery CU elasticity to price,Au,7.4138291841849915
+b,b,Primary refinery CU elasticity to price,Cu,8.872257737939176
+b,b,Primary refinery CU elasticity to price,Ni,12.565109452019147
+b,b,Primary refinery CU elasticity to price,Pb,12.280774988653853
+b,b,Primary refinery CU elasticity to price,Sn,6.755771834168681
+b,b,Primary refinery CU elasticity to price,Steel,3.3429152226098493
+b,b,Primary refinery CU elasticity to price,Zn,8.805637693901383
+b,b,Ref. cap. growth frac. from mine prod. growth,Ag,3.4042332425055832
+b,b,Ref. cap. growth frac. from mine prod. growth,Al,10.860046480602584
+b,b,Ref. cap. growth frac. from mine prod. growth,Au,7.180605442655463
+b,b,Ref. cap. growth frac. from mine prod. growth,Cu,3.0259414618934795
+b,b,Ref. cap. growth frac. from mine prod. growth,Ni,13.715358135539885
+b,b,Ref. cap. growth frac. from mine prod. growth,Pb,7.999641846840723
+b,b,Ref. cap. growth frac. from mine prod. growth,Sn,5.842990730253838
+b,b,Ref. cap. growth frac. from mine prod. growth,Steel,6.04623987365351
+b,b,Ref. cap. growth frac. from mine prod. growth,Zn,10.380204934158582
+b,b,Refined price elasticity to SD,Ag,5.891802976393135
+b,b,Refined price elasticity to SD,Al,5.97228255490015
+b,b,Refined price elasticity to SD,Au,10.46184410801815
+b,b,Refined price elasticity to SD,Cu,6.523411860704231
+b,b,Refined price elasticity to SD,Ni,7.503935826093754
+b,b,Refined price elasticity to SD,Pb,4.221052023011628
+b,b,Refined price elasticity to SD,Sn,8.908169602644817
+b,b,Refined price elasticity to SD,Steel,9.661934738339314
+b,b,Refined price elasticity to SD,Zn,10.060069679257824
+b,b,Refinery SR elasticity to TCRC,Ag,4.7090615585906495
+b,b,Refinery SR elasticity to TCRC,Au,8.105779974985117
+b,b,Refinery SR elasticity to TCRC,Cu,4.679258380533118
+b,b,Refinery SR elasticity to TCRC,Ni,5.315703536024166
+b,b,Refinery SR elasticity to TCRC,Pb,5.26396922739427
+b,b,Refinery SR elasticity to TCRC,Sn,6.696164625281289
+b,b,Refinery SR elasticity to TCRC,Steel,13.661628089459674
+b,b,Refinery SR elasticity to TCRC,Zn,0.43572053760771495
+b,b,Refinery SR elasticity to scrap spread,Ag,4.4505088562059045
+b,b,Refinery SR elasticity to scrap spread,Au,8.488668633870894
+b,b,Refinery SR elasticity to scrap spread,Cu,5.717760600127273
+b,b,Refinery SR elasticity to scrap spread,Ni,8.858050573574115
+b,b,Refinery SR elasticity to scrap spread,Pb,2.538324862286769
+b,b,Refinery SR elasticity to scrap spread,Sn,6.066466170717351
+b,b,Refinery SR elasticity to scrap spread,Steel,10.186275694451261
+b,b,Refinery SR elasticity to scrap spread,Zn,12.203954773196864
+b,b,Scrap spread elasticity to SD,Ag,10.597935361604549
+b,b,Scrap spread elasticity to SD,Al,7.508738669751535
+b,b,Scrap spread elasticity to SD,Au,12.810053906542187
+b,b,Scrap spread elasticity to SD,Cu,3.916639120152133
+b,b,Scrap spread elasticity to SD,Ni,4.530482437968404
+b,b,Scrap spread elasticity to SD,Pb,5.263917182928516
+b,b,Scrap spread elasticity to SD,Sn,5.051637691757727
+b,b,Scrap spread elasticity to SD,Steel,6.579626024848306
+b,b,Scrap spread elasticity to SD,Zn,1.4609240461242796
+b,b,Scrap spread elasticity to price,Ag,8.762027122281047
+b,b,Scrap spread elasticity to price,Al,4.791447267994479
+b,b,Scrap spread elasticity to price,Au,7.644894870809568
+b,b,Scrap spread elasticity to price,Cu,8.784199917814888
+b,b,Scrap spread elasticity to price,Ni,10.725147249418834
+b,b,Scrap spread elasticity to price,Pb,5.35900503075674
+b,b,Scrap spread elasticity to price,Sn,7.674543470397438
+b,b,Scrap spread elasticity to price,Steel,6.343616593718739
+b,b,Scrap spread elasticity to price,Zn,5.6775886954762464
+b,b,Secondary refinery CU elasticity to TCRC,Ag,8.959454670921467
+b,b,Secondary refinery CU elasticity to TCRC,Au,7.933586794631835
+b,b,Secondary refinery CU elasticity to TCRC,Cu,19.91703339509754
+b,b,Secondary refinery CU elasticity to TCRC,Ni,10.618077525388808
+b,b,Secondary refinery CU elasticity to TCRC,Pb,9.66956899491575
+b,b,Secondary refinery CU elasticity to TCRC,Sn,7.841938943956378
+b,b,Secondary refinery CU elasticity to TCRC,Steel,3.3778387896116557
+b,b,Secondary refinery CU elasticity to TCRC,Zn,4.793099677173447
+b,b,Secondary refinery CU elasticity to price,Ag,7.445095121777295
+b,b,Secondary refinery CU elasticity to price,Au,6.971439283580307
+b,b,Secondary refinery CU elasticity to price,Cu,11.764493412363585
+b,b,Secondary refinery CU elasticity to price,Ni,4.880192889584669
+b,b,Secondary refinery CU elasticity to price,Pb,14.986907918314232
+b,b,Secondary refinery CU elasticity to price,Sn,10.644597308726414
+b,b,Secondary refinery CU elasticity to price,Steel,5.543875028048554
+b,b,Secondary refinery CU elasticity to price,Zn,11.520295935710207
+b,b,TCRC elasticity to SD,Ag,2.6766788219753352
+b,b,TCRC elasticity to SD,Al,2.5916054280824494
+b,b,TCRC elasticity to SD,Au,5.668720747301592
+b,b,TCRC elasticity to SD,Cu,0.5118104138214226
+b,b,TCRC elasticity to SD,Ni,11.722743806262288
+b,b,TCRC elasticity to SD,Pb,6.69200389080674
+b,b,TCRC elasticity to SD,Sn,3.1946226691100517
+b,b,TCRC elasticity to SD,Steel,11.708424801326403
+b,b,TCRC elasticity to SD,Zn,6.415149031468248
+b,b,TCRC elasticity to price,Ag,5.369113628468444
+b,b,TCRC elasticity to price,Al,7.547910827452188
+b,b,TCRC elasticity to price,Au,11.956155163109111
+b,b,TCRC elasticity to price,Cu,3.7094116079349737
+b,b,TCRC elasticity to price,Ni,1.2058965516769242
+b,b,TCRC elasticity to price,Pb,2.080029779282284
+b,b,TCRC elasticity to price,Sn,4.06059249021573
+b,b,TCRC elasticity to price,Steel,13.180667922227643
+b,b,TCRC elasticity to price,Zn,5.79927188239168

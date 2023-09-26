@@ -980,6 +980,7 @@ def quick_hist(d_f,log=True,norm=False,normer=0,plot=True, show=False, print_pro
         if not plot:
             ax = np.array(iterate_over)
             
+        hist_data = pd.DataFrame()
         for i,a in zip(iterate_over,ax.flatten()):
             if print_progress:
                 print(i,)
@@ -1042,9 +1043,9 @@ def quick_hist(d_f,log=True,norm=False,normer=0,plot=True, show=False, print_pro
                 else:
                     bins_sp = np.linspace(np.min(np.min(ph_mod)),np.max(np.max(ph_mod)),bins)
 
-                a.hist(ph_mod,bins=bins_sp,alpha=alpha, color='tab:blue')
+                (n_hist, bins_hist, patches_hist) = a.hist(ph_mod,bins=bins_sp,alpha=alpha, color='tab:blue')
                 if show_sim:
-                    a.hist(ph_sim,bins=bins_sp,color='tab:orange',alpha=alpha)
+                    (n_sim, bins_sim, patches_sim) = a.hist(ph_sim,bins=bins_sp,color='tab:orange',alpha=alpha)
                 a.legend(['Real','Sim.'])
                 a.set(title=i.split('|')[0]+f', n={len(ph_mod)}')#+'\n|'+', '.join(['{:.3f}'.format(v) if abs(v)>1e-3 and abs(v)<1e3 else '{:.3e}'.format(v) for v in dist_params])+'|')
                 try:
@@ -1055,6 +1056,12 @@ def quick_hist(d_f,log=True,norm=False,normer=0,plot=True, show=False, print_pro
                         a.set(xlabel=r'$log_{10}$('+xlabel+')')
                     else:
                         a.set(xlabel=xlabel)
+                hist_data_i = pd.concat([
+                    pd.concat([pd.Series(n_hist),pd.Series(n_sim)],axis=1,keys=['Historical','Simulated']),
+                    pd.concat([pd.Series(bins_hist),pd.Series(bins_sim)],axis=1,keys=['Historical','Simulated']),
+                    ],keys=['Values','Edges'])
+                hist_data_i = pd.concat([hist_data_i],keys=[i.split('|')[0]])
+                hist_data = pd.concat([hist_data,hist_data_i])
 
         if plot:
             fig.tight_layout()
@@ -1063,7 +1070,7 @@ def quick_hist(d_f,log=True,norm=False,normer=0,plot=True, show=False, print_pro
             if show:
                 plt.show()
             plt.close()
-        return result_df, fig    
+        return result_df, fig, hist_data
 
 def rename_reshuffle_data(data):
     """
@@ -1081,7 +1088,7 @@ def rename_reshuffle_data(data):
     return data
 
 def save_quick_hist(many_sg, fig, data, statistics, figure_description, show=False):
-    data = rename_reshuffle_data(data)
+    # data = rename_reshuffle_data(data)
     fig.savefig(f'{many_sg.folder_path}/figures/figure_{figure_description}.pdf')
     fig.savefig(f'{many_sg.folder_path}/figures/figure_{figure_description}.png')
     if show:
@@ -1530,11 +1537,16 @@ def plot_lin_predict(lin_predict_, ax, xlabel):
     if 'Commodity' in lin_predict.columns:
         lin_predict = lin_predict.drop('Commodity', axis=1)
     bins = np.linspace(lin_predict.min().min(), lin_predict.max().max(), 50)
-    (lin_predict.Actual.dropna()).plot.hist(bins=bins,ax=ax, label='Actual')
-    (lin_predict.Predicted.dropna()).plot.hist(bins=bins,ax=ax, alpha=0.5, label='Predicted').grid(axis='x')
+    (n_hist, bins_hist, patches_hist) = ax.hist((lin_predict.Actual.dropna()), bins=bins, label='Actual')
+    (n_sim, bins_sim, patches_sim) = ax.hist((lin_predict.Predicted.dropna()), bins=bins, alpha=0.5, label='Predicted')
+    hist_data_i = pd.concat([
+        pd.concat([pd.Series(n_hist),pd.Series(n_sim)],axis=1,keys=['Historical','Simulated']),
+        pd.concat([pd.Series(bins_hist),pd.Series(bins_sim)],axis=1,keys=['Historical','Simulated']),
+        ],keys=['Values','Edges'])
     ax.legend()
     ax.set_xlabel(xlabel)
     ax.set(title='Distribution comparison')
+    return hist_data_i
 
 def plot_lin_predict_scatter(lin_predict_, ax, exponentiate=False):
     lin_predict = lin_predict_.copy()
@@ -1858,7 +1870,18 @@ def add_axis_labels(fig, option=None, xloc=-0.1, yloc=1.03):
         
         a.text(xloc,yloc,label+')', transform=a.transAxes)
     
-
+def lin_predict_to_hist(lin_predict):
+    hist_data = pd.DataFrame()
+    for comm in lin_predict.Commodity.unique():
+        n_hist, bins_hist = np.histogram(lin_predict.loc[idx[:,comm,:],'Actual'].dropna(),bins=50)
+        n_sim, bins_sim = np.histogram(lin_predict.loc[idx[:,comm,:],'Predicted'].dropna(),bins=50)
+        hist_data_i = pd.concat([
+            pd.concat([pd.Series(n_hist),pd.Series(n_sim)],axis=1,keys=['Actual','Predicted']),
+            pd.concat([pd.Series(bins_hist),pd.Series(bins_sim)],axis=1,keys=['Actual','Predicted']),
+            ],keys=['Values','Edges'])
+        hist_data_i = pd.concat([hist_data_i],keys=[comm])
+        hist_data = pd.concat([hist_data,hist_data_i])
+    return hist_data
 
 
 
@@ -2313,6 +2336,13 @@ def figures_5_and_s27(many_sg):
     sources, sources_all, this_study, sources_plt, fig = plot_comparative_violins(many_sg, dpi=200, commodity_subset='subset2')
 
 def figure_s4_to_s16_table_s20_to_s24(many_sg, show=False):
+    """
+    All the plots done in this function are using proprietary data that cannot be shared. 
+    To maximize transparency, we include the histogram data for each of the data sets used,
+    including where scatter plots are provided. Histogram plots can be recreated from the 
+    values and edges data (number of items per bin, edges of bins) using the
+    matplotlib.pyplot.stairs() function.
+    """
     data_folder = '../generalization-cannot-share/SP Global data'
     if 'pri_and_co_pm.pkl' not in os.listdir(data_folder) and 'pri_and_co_pm.zip' in os.listdir(data_folder):
         with zipfile.ZipFile(f'{data_folder}/pri_and_co_pm.zip', 'r') as zip_ref:
@@ -2330,25 +2360,25 @@ def figure_s4_to_s16_table_s20_to_s24(many_sg, show=False):
 
     # Figure S4
     production = primary_only[[i for i in primary_only.columns if 'Prod' in i[0]]].droplevel(2).droplevel(0,axis=1).stack().replace(0,np.nan).dropna().astype(float)
-    data, fig = quick_hist(production,height_scale=0.5, xlabel='Production (kt)', width_scale=0.6)
-    save_quick_hist(many_sg, fig, production, data, 's4_production_histogram')
+    data, fig, hist_data = quick_hist(production,height_scale=0.5, xlabel='Production (kt)', width_scale=0.6)
+    save_quick_hist(many_sg, fig, hist_data, data, 's4_production_histogram')
 
     # Figure S5
     hg = (primary_only.loc[:,idx['Head Grade (%)',:]].astype(float).groupby(level=[0,1]).sum().stack().replace({0:np.nan})).dropna()
-    data, fig = quick_hist(hg,width_scale=0.7,height_scale=0.5, xlabel='Head grade (%)')
-    save_quick_hist(many_sg, fig, hg, data, 's5_ore_grade_histogram')
+    data, fig, hist_data = quick_hist(hg,width_scale=0.7,height_scale=0.5, xlabel='Head grade (%)')
+    save_quick_hist(many_sg, fig, hist_data, data, 's5_ore_grade_histogram')
 
     # Figure S6
-    data, fig = plot_best_dists(primary_only, 'Metal Payable Percent (%)', xlabel='100-Payable percent (%)', height_scale=0.5, width_scale=0.7, show=False)
-    save_quick_hist(many_sg, fig, data, None, 's6_payable_percent_histogram')
+    data, fig, hist_data = plot_best_dists(primary_only, 'Metal Payable Percent (%)', xlabel='100-Payable percent (%)', height_scale=0.5, width_scale=0.7, show=False)
+    save_quick_hist(many_sg, fig, hist_data, None, 's6_payable_percent_histogram')
 
     # Figure S7
     tcrc_primary, tcrc_pri = get_tcrc_primary(concentrates, opening)
     regress_yearso = get_regress_yearso(primary_only, pri_and_co, tcrc_primary)
-    stat, fig = quick_hist(regress_yearso['Cumulative Ore Treated (kt)'],height_scale=0.5,)
+    stat, fig, hist_data = quick_hist(regress_yearso['Cumulative Ore Treated (kt)'],height_scale=0.5,)
     data = regress_yearso['Cumulative Ore Treated (kt)'].copy()
     data = pd.concat([data],keys=[0]).unstack(1).stack()
-    save_quick_hist(many_sg, fig, data, stat, 's7_cumu_ot_ratio_ot')
+    save_quick_hist(many_sg, fig, hist_data, stat, 's7_cumu_ot_ratio_ot')
 
     # Figure S8
     fig, ax = easy_subplots(1,height_scale=0.8, width_scale=0.8)
@@ -2358,7 +2388,7 @@ def figure_s4_to_s16_table_s20_to_s24(many_sg, show=False):
     ratio = reserves.loc[:,'Reserves (kt)'].replace(0,np.nan)/reserves.loc[:,'Ore Treated (kt)'].replace(0,np.nan)
     ratio = ratio.stack().dropna()
     ratio_sub = ratio[ratio<ratio.quantile(.95)]
-    find_best_dist(ratio_sub.astype(float), ax=a)
+    r, hist_data = find_best_dist(ratio_sub.astype(float), ax=a)
     fit = stats.lognorm.fit(ratio_sub)
     coef, pval = [], []
     for n in np.arange(0,100):
@@ -2370,12 +2400,12 @@ def figure_s4_to_s16_table_s20_to_s24(many_sg, show=False):
     if show:
         plt.show()
     plt.close()
-    save_quick_hist(many_sg, fig, ratio_sub.droplevel(2), None, 's8_reserve_ratio_ot')
+    save_quick_hist(many_sg, fig, hist_data, None, 's8_reserve_ratio_ot')
 
     # Figure S9
     regress = get_regress(primary_only, pri_and_co)
-    stat, fig = quick_hist(regress['Numerical Risk'],log=False,rounded=True,height_scale=0.5)
-    save_quick_hist(many_sg, fig, regress['Numerical Risk'], stat, 's9_numerical_risk')
+    stat, fig, hist_data = quick_hist(regress['Numerical Risk'],log=False,rounded=True,height_scale=0.5)
+    save_quick_hist(many_sg, fig, hist_data, stat, 's9_numerical_risk')
 
     # Figure S10
     oge_results, regress_oge = get_oge(primary_only, pri_and_co, tcrc_primary)
@@ -2395,11 +2425,15 @@ def figure_s4_to_s16_table_s20_to_s24(many_sg, show=False):
     data = 1-data
     sim = 1-sim
     bins = np.linspace(np.min(data), np.max(data), 40)
-    ax.hist(data, bins=bins, alpha=0.5, label='Real', color='tab:orange')
-    ax.hist(sim, bins=bins, alpha=0.5, label='Simulated', color='tab:blue');
+    (n_hist, bins_hist, patches_hist) = ax.hist(data, bins=bins, alpha=0.5, label='Real', color='tab:orange')
+    (n_sim, bins_sim, patches_sim) = ax.hist(sim, bins=bins, alpha=0.5, label='Simulated', color='tab:blue');
     ax.set(title='Ore grade elasticity to\ncumulative production', ylabel='Count', xlabel='Ore grade elasticity')
     ax.legend()
-    save_quick_hist(many_sg, fig, data, None, 's10_ore_grade_elasticity')
+    hist_data_i = pd.concat([
+        pd.concat([pd.Series(n_hist),pd.Series(n_sim)],axis=1,keys=['Historical','Simulated']),
+        pd.concat([pd.Series(bins_hist),pd.Series(bins_sim)],axis=1,keys=['Historical','Simulated']),
+    ],keys=['Values','Edges'])
+    save_quick_hist(many_sg, fig, hist_data_i, None, 's10_ore_grade_elasticity')
 
     # Figure S11, Table S20
     regress_rr = get_regress_rr(primary_only, pri_and_co, tcrc_primary)
@@ -2419,12 +2453,12 @@ def figure_s4_to_s16_table_s20_to_s24(many_sg, show=False):
     ax[0].legend(title=None, labelspacing=0.2,markerscale=1,fontsize=16,loc='lower left', ncol=2)
     ax[0].set(xlim=(0,110),ylim=(0,110), title='Predicted vs actual')
 
-    plot_lin_predict(lin_predict, ax[1], 'Recovery rate (%)')
+    hist_data = plot_lin_predict(lin_predict, ax[1], 'Recovery rate (%)')
     fig.tight_layout()
     if show:
         plt.show()
     plt.close()
-    save_quick_hist(many_sg, fig, lin_predict, None, 's11_recovery_rate')
+    save_quick_hist(many_sg, fig, hist_data, None, 's11_recovery_rate')
 
     # Figure S12
     tot_reclamation = mine_parameters['Reclamation cost ($M)'].dropna().groupby(level=[0,1]).sum()
@@ -2437,7 +2471,13 @@ def figure_s4_to_s16_table_s20_to_s24(many_sg, show=False):
     do_a_regress(capacity, tot_reclamation, ax=a, log=True)
     a.set(title='Total reclamation cost vs. mill capacity')
     data = pd.concat([pd.concat([tot_reclamation, capacity], axis=1)],keys=[0]).unstack(1).stack()
-    save_quick_hist(many_sg, fig, data, None, 's12_reclamation_costs')
+    n_rec, bins_rec = np.histogram(tot_reclamation)
+    n_cap, bins_cap = np.histogram(capacity)
+    hist_data_i = pd.concat([
+        pd.concat([pd.Series(n_rec),pd.Series(n_cap)],axis=1,keys=['Total reclamation cost','Capacity']),
+        pd.concat([pd.Series(bins_rec),pd.Series(bins_cap)],axis=1,keys=['Total reclamation cost','Capacity']),
+        ],keys=['Values','Edges'])
+    save_quick_hist(many_sg, fig, hist_data_i, None, 's12_reclamation_costs')
 
     # Table S21
     regress_tcrc_conc = get_regress_tcrc_conc(tcrc_pri, pri_and_co)
@@ -2457,7 +2497,8 @@ def figure_s4_to_s16_table_s20_to_s24(many_sg, show=False):
             axis=1,keys=['Actual','Predicted','Commodity']).droplevel(1,axis=1)    
     plot_lin_predict_scatter(lin_predict, ax[0], False)
     plot_lin_predict_scatter(lin_predict, ax[1], True)
-    save_quick_hist(many_sg, fig, lin_predict, None, 's13_tcrc_regression')
+    hist_data = lin_predict_to_hist(lin_predict)
+    save_quick_hist(many_sg, fig, hist_data, None, 's13_tcrc_regression')
 
     # Table S22
     regress_scapex = get_regress_scapex(primary_only, pri_and_co, tcrc_primary)
@@ -2502,7 +2543,8 @@ def figure_s4_to_s16_table_s20_to_s24(many_sg, show=False):
     plot_lin_predict_scatter(lin_predict, ax[0], False)
     lin_predict = lin_predict.loc[lin_predict.Actual<lin_predict.Actual.quantile(0.99)]
     plot_lin_predict_scatter(lin_predict, ax[1], True)
-    save_quick_hist(many_sg, fig, lin_predict, None, 's14_sustaining_capex_regression')
+    hist_data = lin_predict_to_hist(lin_predict)
+    save_quick_hist(many_sg, fig, hist_data, None, 's14_sustaining_capex_regression')
 
     # Table S23
     regress_tcm = get_regress_tcm(primary_only, pri_and_co)
@@ -2527,7 +2569,8 @@ def figure_s4_to_s16_table_s20_to_s24(many_sg, show=False):
         axis=1,keys=['Actual','Predicted','Commodity']).droplevel(1,axis=1)
     plot_lin_predict_scatter(lin_predict, ax[0], False)
     plot_lin_predict_scatter(lin_predict, ax[1], True)
-    save_quick_hist(many_sg, fig, lin_predict, None, 's15_total_cash_margin_regression')
+    hist_data = lin_predict_to_hist(lin_predict)
+    save_quick_hist(many_sg, fig, hist_data, None, 's15_total_cash_margin_regression')
 
     # Table S24
     regress_grade = get_regress_grade(primary_only, pri_and_co, tcrc_primary)

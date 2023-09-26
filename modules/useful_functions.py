@@ -589,6 +589,7 @@ def find_best_dist(stacked_df, plot=True, print_chi_squared=False, bins=40, ax=0
     elif len(best_params)==4:
         best_sim = best_dist.rvs(best_params[0],best_params[1],best_params[2],best_params[3],size=len(y),random_state=0)
 
+    hist_data_i = pd.DataFrame()
     if plot:
         if type(ax)==int:
             fig,ax = easy_subplots(1,1)
@@ -598,11 +599,16 @@ def find_best_dist(stacked_df, plot=True, print_chi_squared=False, bins=40, ax=0
         else:
             bins = np.linspace(np.min(y),np.max(y),bins)
 
-        ax.hist(x.values.flatten(),bins=bins,color='tab:blue',alpha=0.5,density=density)
-        ax.hist(best_sim,bins=bins,color='tab:orange',alpha=0.5,density=density)
+        (n_hist, bins_hist, patches_hist) = ax.hist(x.values.flatten(),bins=bins,color='tab:blue',alpha=0.5,density=density)
+        (n_sim, bins_sim, patches_sim) = ax.hist(best_sim,bins=bins,color='tab:orange',alpha=0.5,density=density)
+        hist_data_i = pd.concat([
+            pd.concat([pd.Series(n_hist),pd.Series(n_sim)],axis=1,keys=['Historical','Simulated']),
+            pd.concat([pd.Series(bins_hist),pd.Series(bins_sim)],axis=1,keys=['Historical','Simulated']),
+            ],keys=['Values','Edges'])
+        
         ax.set(title=results.idxmin())
 #         ax[1].plot(y,best_dist.pdf(y,))
-    return results.index
+    return results.index, hist_data_i
 
 def plot_best_dists(primary_only, param, xlabel=None, show=True, **kwargs):
     pp = 100-(primary_only.loc[:,idx[param,:]].astype(float).groupby(level=[0,1]).sum().stack().replace({0:np.nan})).dropna()
@@ -610,15 +616,19 @@ def plot_best_dists(primary_only, param, xlabel=None, show=True, **kwargs):
     iterate_over = commodities+['All']
     xlabel = '100-Payable percent (%)'
     fig,ax=easy_subplots(iterate_over, **kwargs)
+    hist_data = pd.DataFrame()
     for comm,a in zip(iterate_over, ax):
         commo = comm
         if comm=='All':
             commo = commodities
         with warnings.catch_warnings():
             warnings.filterwarnings('ignore')
-            best_dist = find_best_dist(pp.loc[idx[:,commo,:]], ax=a)[0].capitalize().replace('_',' ').replace('3',' 3')
+            best_dist, hist_data_i = find_best_dist(pp.loc[idx[:,commo,:]], ax=a)
+            best_dist = best_dist[0].capitalize().replace('_',' ').replace('3',' 3')
             title = f'{comm}: {best_dist}, n={len(pp.loc[idx[:,commo,:]])}'
             a.set(title=title, xlabel=xlabel if xlabel is not None else param)
+            hist_data_i = pd.concat([hist_data_i],keys=[comm])
+            hist_data = pd.concat([hist_data,hist_data_i])
 
     fig.tight_layout()
     for j in range(1,len(ax)-len(iterate_over)+1):
@@ -626,7 +636,7 @@ def plot_best_dists(primary_only, param, xlabel=None, show=True, **kwargs):
     if show:
         plt.show()
     plt.close()
-    return pp, fig
+    return pp, fig, hist_data
 
 def year_decimal_to_datetime(year_decimal):
     '''

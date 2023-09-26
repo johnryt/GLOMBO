@@ -32,7 +32,7 @@ def output_figures_tables(main_folder, split_15_folder=None, split_16_folder=Non
     is equal to the author`s original value rely on data outside accessible file paths,
     and will produce errors if a run is attempted. Please contact the author for data
     questions related to these figures (Supplementary Figures 4-16 and 
-    Supplementary Tables 20-24)
+    Supplementary Tables 20-24). The proprietary data source is S&P Global Capital IQ Pro.
     """
     many_sg = Many()
     many_sg.load_data(main_folder)
@@ -73,7 +73,7 @@ def output_figures_tables(main_folder, split_15_folder=None, split_16_folder=Non
         figures_s24_and_s25(many_sg, many_17, many_16, many_15)
         figure_s26(many_sg, many_17, many_16, many_15)
         figure_s28([many_sg, many_17, many_16, many_15])
-        table_s27(many_sg,  many_17, many_16, many_15)
+        table_3(many_sg,  many_17, many_16, many_15)
 
     if user=='jwr':
         figure_s4_to_s16_table_s20_to_s24(many_sg)

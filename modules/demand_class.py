@@ -1,4 +1,7 @@
-from modules.demand_functions import *
+try:
+    from modules.demand_functions import *
+except:
+    from demand_functions import *
 import numpy as np
 import pandas as pd
 idx = pd.IndexSlice

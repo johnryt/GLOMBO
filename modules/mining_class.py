@@ -1,5 +1,9 @@
-from modules.mining_functions import *
-from modules.useful_functions import *
+try:
+    from modules.mining_functions import *
+    from modules.useful_functions import *
+except:
+    from mining_functions import *
+    from useful_functions import *
 import numpy as np
 import pandas as pd
 

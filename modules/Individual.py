@@ -3,13 +3,20 @@ import pandas as pd
 idx = pd.IndexSlice
 from matplotlib import pyplot as plt
 from scipy import stats
-from modules.integration import Integration
 from random import seed, sample, shuffle
-from modules.demand_class import demandModel
-from modules.mining_class import miningModel
+try:
+    from modules.integration import Integration
+    from modules.demand_class import demandModel
+    from modules.mining_class import miningModel
+    from modules.useful_functions import easy_subplots, do_a_regress
+except:
+    from integration import Integration
+    from demand_class import demandModel
+    from mining_class import miningModel
+    from useful_functions import easy_subplots, do_a_regress
+
 import os
 
-from modules.useful_functions import easy_subplots, do_a_regress
 import seaborn as sns
 import statsmodels.api as sm
 

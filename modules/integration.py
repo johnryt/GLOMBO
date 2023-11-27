@@ -1,7 +1,13 @@
-from modules.mining_class import *
-from modules.demand_class import *
-from modules.refining_class import *
-from modules.scenario_parser import *
+try:
+    from modules.mining_class import *
+    from modules.demand_class import *
+    from modules.refining_class import *
+    from modules.scenario_parser import *
+except:
+    from mining_class import *
+    from demand_class import *
+    from refining_class import *
+    from scenario_parser import *
 import numpy as np
 from warnings import warn
 import warnings

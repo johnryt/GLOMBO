@@ -1,10 +1,18 @@
 import warnings
-from modules.integration_functions import Sensitivity
-from modules.scenario_parser import get_scenario_dataframe
-from modules.load_data import LoadFolderContents
+try:
+    from modules.integration_functions import Sensitivity
+    from modules.scenario_parser import get_scenario_dataframe
+    from modules.load_data import LoadFolderContents
+    from modules.useful_functions import *
+    from modules.Individual import *
+except:
+    from integration_functions import Sensitivity
+    from scenario_parser import get_scenario_dataframe
+    from load_data import LoadFolderContents
+    from useful_functions import *
+    from Individual import *
 import numpy as np
 import pandas as pd
-from modules.useful_functions import *
 from matplotlib import pyplot as plt
 import seaborn as sns
 import statsmodels.api as sm
@@ -18,7 +26,6 @@ import os
 from shutil import copyfile
 
 # import shap
-from modules.Individual import *
 from datetime import datetime
 import warnings
 

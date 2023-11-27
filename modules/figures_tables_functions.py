@@ -1,6 +1,13 @@
-from modules.Many import *
-from modules.useful_functions import *
+try:
+    from modules.Many import *
+    from modules.useful_functions import *
+    from modules.demand_class import demandModel
+except:
+    from Many import *
+    from useful_functions import *
+    from demand_class import demandModel
 init_plot2()
+
 
 from statsmodels.stats.diagnostic import lilliefors
 from scipy.special import ndtri
@@ -360,8 +367,8 @@ def plot_colorful_table2(many, stars='ttest', value_in_parentheses='standard err
         height_ratios = [alt_means.loc[i].shape[0] for i in plots]
         fig,axes = easy_subplots(plots,1, height_ratios=height_ratios, use_subplots=True, sharex=True)
         for i,ax in zip(plots, axes):
-            sub_means = alt_means.loc[i]
-            sub_table = alt_table.loc[i]
+            sub_means = alt_means.loc[i].rename(columns={'Steel':'Fe'})
+            sub_table = alt_table.loc[i].rename(columns={'Steel':'Fe'})
             sns.heatmap(sub_means,
                         ax=ax,
                         annot=sub_table,
@@ -500,10 +507,11 @@ def plot_given_columns_for_paper(many, commodity, columns, column_name=None,
                     ).fit(cov_type='HC3')
         mse = round(m.mse_resid**0.5,2)
         mse = round(m.rsquared,2)
+        alt_comm = commodity.replace('Steel','Fe')
         if column_name is not None:
-            title=f'{i}, {column_name} {commodity},\n'+r'$R^2$'+f'={mse}, scenario {columns[0]}'
+            title=f'{i}, {column_name} {alt_comm},\n'+r'$R^2$'+f'={mse}, scenario {columns[0]}'
         else:
-            title=f'{i}, {commodity}'
+            title=f'{i}, {alt_comm}'
         if i=='Primary commodity price':
             maxs *= 1.1
             if show_all_lines:
@@ -529,6 +537,7 @@ def plot_given_columns_for_paper(many, commodity, columns, column_name=None,
         elif i=='Primary supply' and commodity=='Cu':
             mins *=0.9
         title = title.replace('Primary supply','Mine production')
+        title = title.replace('Steel','Fe')
         a.set(title=title,
             ylabel=i+' ('+unit+')',xlabel='Year',ylim=(mins,maxs))
 #         a.text(0.05,0.9, r'$R^2$'+f'={mse}', transform=a.transAxes)
@@ -695,7 +704,7 @@ def plot_given_columns_for_paper_many(many, commodity, columns, column_name=None
         elif i=='Primary supply' and show_all_lines:
             maxs *= 1.1
         title = title.replace('Primary supply','Mine production')
-        a.set(title=title,
+        a.set(title=title.replace('Steel','Fe'),
               ylabel=i+' ('+unit+')',xlabel='Year',ylim=(mins,maxs))
 #         a.text(0.05,0.9, r'$R^2$'+f'={mse}', transform=a.transAxes)
 
@@ -1047,7 +1056,7 @@ def quick_hist(d_f,log=True,norm=False,normer=0,plot=True, show=False, print_pro
                 if show_sim:
                     (n_sim, bins_sim, patches_sim) = a.hist(ph_sim,bins=bins_sp,color='tab:orange',alpha=alpha)
                 a.legend(['Real','Sim.'])
-                a.set(title=i.split('|')[0]+f', n={len(ph_mod)}')#+'\n|'+', '.join(['{:.3f}'.format(v) if abs(v)>1e-3 and abs(v)<1e3 else '{:.3e}'.format(v) for v in dist_params])+'|')
+                a.set(title=i.split('|')[0].replace('Steel','Fe')+f', n={len(ph_mod)}')#+'\n|'+', '.join(['{:.3f}'.format(v) if abs(v)>1e-3 and abs(v)<1e3 else '{:.3e}'.format(v) for v in dist_params])+'|')
                 try:
                     if log: a.set(xlabel=r'$log_{10}$('+df.name.split(' (')[0]+')')
                     else: a.set(xlabel=df.name.split('(')[0])
@@ -1087,7 +1096,7 @@ def rename_reshuffle_data(data):
     data.index = data.index.set_names(['','',''])
     return data
 
-def save_quick_hist(many_sg, fig, data, statistics, figure_description, show=False):
+def save_quick_hist(many_sg, fig, data, statistics, figure_description, show=False, alt_statistics_name=None):
     # data = rename_reshuffle_data(data)
     fig.savefig(f'{many_sg.folder_path}/figures/figure_{figure_description}.pdf')
     fig.savefig(f'{many_sg.folder_path}/figures/figure_{figure_description}.png')
@@ -1096,9 +1105,12 @@ def save_quick_hist(many_sg, fig, data, statistics, figure_description, show=Fal
     plt.close()
     if len(data.shape)>1 and data.shape[1]>data.shape[0]:
         data = data.T
+    data = data.rename(columns={'Steel':'Fe'}).rename({'Steel':'Fe'}).replace({'Steel','Fe'})
     data.to_csv(f'{many_sg.folder_path}/figures/figure_{figure_description}_plot.csv')
     if statistics is not None:
-        statistics.T.to_csv(f'{many_sg.folder_path}/figures/figure_{figure_description}_stats.csv')
+        if alt_statistics_name is None:
+            alt_statistics_name = 'stats'
+        statistics.T.to_csv(f'{many_sg.folder_path}/figures/figure_{figure_description}_{alt_statistics_name}.csv')
 
 def get_regress(primary_only, pri_and_co):
     tmc = primary_only.loc[:,idx['Total Minesite Cost (USD/t)',:]].groupby(level=[0,1]).sum().stack().replace({0:np.nan})
@@ -1553,6 +1565,7 @@ def plot_lin_predict_scatter(lin_predict_, ax, exponentiate=False):
     if exponentiate:
         lin_predict[['Actual','Predicted']] = np.exp(lin_predict[['Actual','Predicted']].astype(float) )
     do_a_regress(lin_predict.Actual.astype(float),lin_predict.Predicted.astype(float),ax=ax,loc='lower right',)
+    lin_predict = lin_predict.rename(columns={'Steel':'Fe'}).replace({'Steel':'Fe'}).rename({'Steel':'Fe'})
     sns.scatterplot(data=lin_predict, x='Actual',y='Predicted',hue='Commodity',ax=ax)
     ax.legend(title=None, labelspacing=0.2,markerscale=1,fontsize=18,loc='upper left')
     ax.set(title='Unlogged' if exponentiate else 'Logged')
@@ -1705,7 +1718,9 @@ def panel_regression_categorical(primary_only, pri_and_co_ot, independent_string
 #         ph = df['Commodity Price (USD/t)'].unstack()[1991].notna()
 #         ph = ph[ph]
 #         indy = ph.index.get_level_values(0)
-    data_folder = '../generalization-cannot-share/Other data'
+    for data_folder in ['../generalization-cannot-share/Other data','generalization-cannot-share/Other data']:
+            if os.path.exists(data_folder):
+                break
     if add_oil:
         oil = pd.read_excel(f'{data_folder}/Oil.xls', index_col=0, header=0).rename(columns={'price':'Oil price'}).resample('AS').mean().loc['19910101':'20180101']
         oil = oil.rename(dict(zip(oil.index,[int(str(i).split('-')[0]) for i in oil.index])))
@@ -1883,9 +1898,64 @@ def lin_predict_to_hist(lin_predict):
         hist_data = pd.concat([hist_data,hist_data_i])
     return hist_data
 
+def plotting_grades_over_time(primary_only, axes=None):
+    ore_treated_d = discont_to_cont(primary_only['Ore Treated (kt)'].droplevel(2))
+    head_grade_d = discont_to_cont(primary_only['Head Grade (%)'].droplevel(2))
+    head_grade_d = head_grade_d.stack()
+    ore_treated_d = ore_treated_d.stack()
+    ind = np.intersect1d(ore_treated_d.index, head_grade_d.index)
+    head_grade_d, ore_treated_d = head_grade_d.loc[ind], ore_treated_d.loc[ind]
+    hgd = head_grade_d.unstack()
+    otd = ore_treated_d.unstack()
+    otd = otd.astype(float)
+    hgd = hgd.astype(float)
 
+    def divide_by_first(ph):
+        first = ph.notna().idxmax()
+        return ph/ph[first]
 
+    def first_greater_than_last(ph):
+        first = ph.notna().idxmax()
+        last = ph.iloc[::-1].notna().idxmax()
+        return ph[first]>ph[last]
 
+    grade_ph = hgd.loc[(hgd.notna().sum(axis=1)>2)].T.sort_index().T
+    grade_ph = grade_ph.loc[idx[:,:,0],:]
+    grade_ph = grade_ph.loc[:,:2018]
+    grade_ph = grade_ph.apply(lambda x: divide_by_first(x), axis=1)
+    first_greater = grade_ph.apply(lambda x: first_greater_than_last(x),axis=1)
+    print('Fraction of mines with decreasing ore grades: {:.3f}'.format(first_greater.sum()/len(first_greater)))
+    deyeared = pd.DataFrame()
+    for i in grade_ph.index:
+        ph = grade_ph.loc[i]
+        first = ph.notna().idxmax()
+        ph = ph.loc[first:].reset_index(drop=True)
+        deyeared = pd.concat([deyeared, ph], axis=1)
+    deyeared = deyeared.T.reset_index(drop=True).T
+
+    if axes is None:
+        fig,axes = easy_subplots(2)
+    elif len(axes) != 2:
+        axes = axes[-2:]
+    ax=axes[0]
+    deyeared = deyeared.T.reset_index(drop=True).T
+    deyeared = deyeared.dropna(how='all', axis=1)
+    deyeared.plot(legend=False, linewidth=1, alpha=0.3, logy=True, ax=ax, )
+    deyeared.mean(axis=1).plot(color='k', linestyle=':', logy=True, ax=ax).grid(axis='x')
+    ax.set(title=f'Ore grade over time, n={deyeared.shape[1]},'+'\nall mines with >2 years\ncontinuous data', 
+        xlabel='Year (indexed to first operating year=0)',
+        ylabel='Relative grade (grade in first year=1)')
+
+    ax=axes[1]
+    nd = deyeared.loc[:,deyeared.apply(lambda x: (x.dropna()<=1).all())]
+    nd = deyeared.loc[:,deyeared.apply(lambda x: (x.dropna().iloc[-1])<1)]
+    deyeared.apply(lambda x: (x.dropna()<=1).all())
+    nd.plot(legend=False, linewidth=1, alpha=0.3, logy=True, ax=ax)
+    nd.mean(axis=1).plot(color='k', linestyle=':', logy=True, ax=ax).grid(axis='x')
+    ax.set(title=f'Ore grade over time, n={nd.shape[1]},'+'\nwhere grade in last\nyear < grade in first year', 
+        xlabel='Year (indexed to first operating year=0)',
+        ylabel='Relative grade (grade in first year=1)')
+    return deyeared
 
 
 def figures_2_and_3(many_sg, show=False):
@@ -1930,12 +2000,16 @@ def figure_4(many_sg, show=False):
     plt.close()
 
 def figures_5_and_s27(many_sg):
+    note_columns = ['Degrees of freedom','Years','Notes','Paper notes']
+
     def cleanup_whole(source):
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             for i in np.arange(0,source.shape[0]):
                 for j in np.arange(0,source.shape[1]):
                     col = source.columns[j]
+                    if col in note_columns:
+                        continue
                     ix = source[col].iloc[i]
                     if type(ix)==str:
                         ind = source.index[i]
@@ -1947,8 +2021,8 @@ def figures_5_and_s27(many_sg):
                                 print(ix)
                                 raise ValueError
                         elif '-' in ix:
-                            source.loc[(ind[0],ind[1]+', a',ind[2]),col]=float(ix.split('-')[0])
-                            source.loc[(ind[0],ind[1]+', b',ind[2]),col]=float(ix.split('-')[-1])
+                            source.loc[(ind[0],ind[1]+', lower bound',ind[2]),col]=float(ix.split('-')[0])
+                            source.loc[(ind[0],ind[1]+', upper bound',ind[2]),col]=float(ix.split('-')[-1])
                         source.iloc[i,j]=np.nan
             source = source.dropna(how='all')
             return source               
@@ -1957,7 +2031,7 @@ def figures_5_and_s27(many_sg):
         sources = pd.read_excel('Sources for elasticities.xlsx',index_col=[0,1,2,3])
         if 'Li' in sources.columns:
             sources.drop(columns=['Li'],inplace=True)
-        sources = sources.loc[:,'Steel':'Zn'].dropna(how='all')
+        sources = sources.dropna(how='all')
         sources.rename(dict(zip(sources.index.get_level_values(0).unique(),
                                 [i.replace('supply-demand imbalance','SD') for i in sources.index.get_level_values(0).unique()])),level=0,inplace=True)
         
@@ -1974,18 +2048,24 @@ def figures_5_and_s27(many_sg):
     #     sources = sources.loc[idx[:,:,['N','From Dahl'],:],:]
         sources = sources.droplevel(2)
         sources = cleanup_whole(sources)
+        many.sources_info_orig = sources.copy()
+        sources_ph = sources.loc[:,'Steel':'Zn']
         new_ind = []
-        for e,i in enumerate(sources.index):
+        for e,i in enumerate(sources_ph.index):
             if 'Demand' in i[0]:
-                new_ind += [(i[0].replace('Demand','Intensity'), i[1]+' - demand', i[2])]
+                new_ind += [(i[0].replace('Demand','Intensity'), i[1]+' - from demand', i[2])]
                 if 'GDP' in i[0]:
-                    sources.iloc[e] = sources.iloc[e] - 1
+                    sources_ph.iloc[e] = sources_ph.iloc[e] - 1
             elif i[0]=='Scrap price elasticity to primary price':
-                new_ind += [('Scrap spread elasticity to price', i[1]+' - scrap price', i[2])]
-                sources.iloc[e] = 1-sources.iloc[e]
+                new_ind += [('Scrap spread elasticity to price', i[1]+' - from scrap price', i[2])]
+                sources_ph.iloc[e] = 1-sources_ph.iloc[e]
             else:
                 new_ind += [i]
+        sources_ph.index = pd.MultiIndex.from_tuples(new_ind)
         sources.index = pd.MultiIndex.from_tuples(new_ind)
+        sources = pd.concat([sources_ph, sources[note_columns]], axis=1)
+        many.sources_info = sources.copy()
+        sources = sources.loc[:,'Steel':'Zn'].dropna(how='all')
         many.sources_methods = sources.copy()
         many.sources = sources.copy().droplevel(2)
 
@@ -2019,22 +2099,31 @@ def figures_5_and_s27(many_sg):
     def get_sources_this_study(many):
         load_sources(many)
         sources = many.sources.copy()
-        many.rmse_df_nice = many.rmse_df_sorted.loc[:,:25].rename(
+        many.rmse_df_nice = many.rmse_df_sorted.iloc[:,:25].rename(
             make_parameter_names_nice(many.rmse_df_sorted.index.get_level_values(1)), level=1
         )
         this_study = many.rmse_df_nice.stack().unstack(0)
+        
+        
+        this_study['Source'] = this_study.index.get_level_values(1)
+        sources['Source'] = sources.index.get_level_values(1)
         ind = np.intersect1d(sources.index.get_level_values(0).unique(), 
                             this_study.index.get_level_values(0).unique())
         sources = sources.loc[ind]
+        this_study_full = this_study.copy()
         this_study = this_study.loc[ind]
-        this_study['Source'] = this_study.index.get_level_values(1)
-        sources['Source'] = sources.index.get_level_values(1)
         this_study = this_study.reset_index().set_index(['level_0','level_1','Source'])
+        this_study_full = this_study_full.reset_index().set_index(['level_0','level_1','Source'])
         sources = sources.reset_index().set_index(['level_0','level_1','Source'])
         this_study = this_study.rename(
             columns=dict(zip(this_study.columns,[i.capitalize() for i in this_study.columns])))
+        this_study_full = this_study_full.rename(
+            columns=dict(zip(this_study_full.columns,[i.capitalize() for i in this_study_full.columns])))
         this_study = this_study.rename(
             dict(zip(np.arange(0,26),[f'This study {i}' for i in np.arange(0,26)]),level=1))
+        this_study_full = this_study_full.rename(
+            dict(zip(np.arange(0,26),[f'This study {i}' for i in np.arange(0,26)]),level=1))
+        many.this_study_full = this_study_full.copy()
         sources = sources.rename(dict(zip(sources.index.get_level_values(1),
                                 ['Literature' if '- demand' not in i else 'Literature' for i in
                                 sources.index.get_level_values(1)
@@ -2212,13 +2301,13 @@ def figures_5_and_s27(many_sg):
         if fontsize is None:
             ax.tick_params(axis='x',rotation=90)
             ax.tick_params(axis='y')
-            ax.set_title(comm)
+            ax.set_title(comm.replace('Steel','Fe'))
             ax.set_ylabel('Value')
             ax.legend(title=None, loc='lower right')
         else:
             ax.tick_params(axis='x',rotation=90,labelsize=fontsize)
             ax.tick_params(axis='y',labelsize=fontsize)
-            ax.set_title(comm,fontsize=fontsize*1.1)
+            ax.set_title(comm.replace('Steel','Fe'),fontsize=fontsize*1.1)
             ax.set_ylabel('Value',fontsize=fontsize)
             ax.set_xlabel('Parameter',fontsize=fontsize)
             ax.legend(title=None, fontsize=fontsize, loc='lower right')
@@ -2314,7 +2403,12 @@ def figures_5_and_s27(many_sg):
                 plt.show()
             sources_all = sources_all.reset_index(drop=True)
             sources.index = sources.index.set_names(['Parameter','General source','Source'])
-            sources.to_csv(f'{many.folder_path}/tables/table_s27_literature_parameter_database.csv')
+            sources = sources.rename(columns={'Steel':'Fe'})
+            many.sources_info_orig.to_csv(f'{many.folder_path}/tables/table_s27_literature_parameter_database_original.csv')
+            many.sources_info.to_csv(f'{many.folder_path}/tables/table_s28_literature_parameter_database_updated.csv')
+            many.rmse_df_sorted.rename(
+                make_parameter_names_nice(many.rmse_df_sorted.index.get_level_values(1)), level=1
+                ).to_csv(f'{many.folder_path}/tables/table_s29_parameter_results_this_study.csv')
             sources_all.to_csv(f'{many.folder_path}/figures/figure_5_literature_comparison.csv')
             sources_all.to_csv(f'{many.folder_path}/figures/figure_s27_literature_comparison.csv')
             if commodity_subset=='all':
@@ -2343,7 +2437,9 @@ def figure_s4_to_s16_table_s20_to_s24(many_sg, show=False):
     values and edges data (number of items per bin, edges of bins) using the
     matplotlib.pyplot.stairs() function.
     """
-    data_folder = '../generalization-cannot-share/SP Global data'
+    for data_folder in ['../generalization-cannot-share/SP Global data','generalization-cannot-share/SP Global data']:
+        if os.path.exists(data_folder):
+            break
     if 'pri_and_co_pm.pkl' not in os.listdir(data_folder) and 'pri_and_co_pm.zip' in os.listdir(data_folder):
         with zipfile.ZipFile(f'{data_folder}/pri_and_co_pm.zip', 'r') as zip_ref:
             zip_ref.extractall(data_folder)
@@ -2421,7 +2517,8 @@ def figure_s4_to_s16_table_s20_to_s24(many_sg, show=False):
         pvals += [pval]
 
     sim = stats.lognorm.rvs(fit[0],fit[1],fit[2], size=len(data), random_state=ind)
-    fig,ax = plt.subplots()
+    fig,axes = easy_subplots(3, ncol=3)
+    ax = axes[0]
     data = 1-data
     sim = 1-sim
     bins = np.linspace(np.min(data), np.max(data), 40)
@@ -2433,7 +2530,10 @@ def figure_s4_to_s16_table_s20_to_s24(many_sg, show=False):
         pd.concat([pd.Series(n_hist),pd.Series(n_sim)],axis=1,keys=['Historical','Simulated']),
         pd.concat([pd.Series(bins_hist),pd.Series(bins_sim)],axis=1,keys=['Historical','Simulated']),
     ],keys=['Values','Edges'])
-    save_quick_hist(many_sg, fig, hist_data_i, None, 's10_ore_grade_elasticity')
+
+    deyeared_grades = plotting_grades_over_time(primary_only=primary_only, axes=axes)
+    fig.tight_layout()
+    save_quick_hist(many_sg, fig, hist_data_i, deyeared_grades, 's10_ore_grade_elasticity', alt_statistics_name='grade_data')
 
     # Figure S11, Table S20
     regress_rr = get_regress_rr(primary_only, pri_and_co, tcrc_primary)
@@ -2654,6 +2754,237 @@ def figure_s4_to_s16_table_s20_to_s24(many_sg, show=False):
 
     print_grade_change_per_year(primary_only)
 
+def figure_s17(many_sg):
+    split_on_china = True
+    pct_change = False
+    include_global = True
+    norm = True
+    norm_year = 2019
+    end_year = 2019
+    dpi = 250
+
+    xl = 'input_files/static/Demand prediction data-copper.xlsx'
+    volumes = pd.read_excel(xl, sheet_name='All sectors', header=[0,1], 
+                index_col=0).sort_index().sort_index(axis=1).stack(0).unstack()
+
+    def get_jewelry_bar_coin():
+        gold_rolling_window=5
+        static_data_folder = 'input_files/static'
+        gold_vols = pd.read_excel(f'{static_data_folder}/Gold demand volume indicators.xlsx',sheet_name='Volume drivers',index_col=0).loc[2001:]
+        gold_vols1 = gold_vols.loc[2001:2019].rolling(gold_rolling_window,min_periods=1,center=True).mean()
+        gold_vols1 = pd.concat([gold_vols1,gold_vols.rolling(5,min_periods=1,center=True).mean().loc[2020:]])
+        gold_vols2 = gold_vols.rolling(gold_rolling_window+2,min_periods=1,center=True).mean()
+        global_cash_reserves = volumes.loc[:,idx[:,'Industrial']].apply(lambda x: x/x.sum(), axis=1).apply(lambda x: x*gold_vols2['Global cash reserves (USD$2021)'])#['US circulating coin production (million coins)'])
+        diamond_demand = volumes.loc[:,idx[:,'Transport']].apply(lambda x: x/x.sum(), axis=1).apply(lambda x: x*gold_vols1['Diamond demand ($B)'])
+        diamond_demand = diamond_demand.rename(columns={'Transport':'Jewelry'},level=1)
+        global_cash_reserves = global_cash_reserves.rename(columns={'Industrial':'Bar and coin'},level=1)
+        return diamond_demand, global_cash_reserves
+
+    jewelry, bar_and_coin = get_jewelry_bar_coin()
+    volumes = pd.concat([volumes, jewelry, bar_and_coin], axis=1)
+    sector_units = {
+        'Transport':'Vehicle sales (million vehicles/year)',
+        'Construction':'Value added in construction (2010 USD)',
+        'Electrical':'Total grid power demand (GW)',
+        'Industrial':'Value added in manufacturing (2010 USD)',
+        'Other':'Proxy: GDP (2010 USD)',
+        'Jewelry':'Diamond demand (billion USD)',
+        'Bar and coin':'Global cash reserves (2021 USD)'
+    }
+    sectors = volumes.columns.get_level_values(1).unique()
+    non_china = ['EU', 'Japan', 'NAM', 'ROW']
+    if split_on_china:
+        ph = pd.concat([volumes.loc[:,idx[non_china,:]].groupby(axis=1,level=1).sum()],keys=['RoW'],axis=1)
+        volumes = pd.concat([volumes, ph],axis=1).drop(non_china,axis=1,level=0)
+    if include_global:
+        ph = pd.concat([volumes.groupby(axis=1,level=1).sum()],keys=['Global'],axis=1)
+        volumes = pd.concat([volumes, ph], axis=1)
+        volumes = volumes.replace(0,np.nan)
+    if pct_change:
+        volumes = volumes.pct_change().dropna()
+    if norm:
+        volumes = volumes.apply(lambda x: x/volumes.loc[norm_year], axis=1)
+    volumes = volumes.loc[:end_year]
+    fig,ax = easy_subplots(sectors, 4)
+    for sector, a in zip(sectors,ax):
+        volumes.loc[:,idx[:,sector]].droplevel(1,axis=1).plot(
+            ax=a, title=sector, xlabel='Year', ylabel=sector_units[sector]
+        )
+        a.legend(title=None)
+
+    which = 'Percent per year' if pct_change else 'Actual'
+    cols_to_use = {'Percent per year':'A:F', 'Actual':'H:M'}
+    if split_on_china: 
+        cols_to_use['Actual'] = 'W:AB'
+    cols = cols_to_use[which]
+    gdp = pd.read_excel(xl, sheet_name='GDP growth', header=[0], 
+                index_col=0, usecols=cols).sort_index().sort_index(axis=1).dropna()
+    if include_global:
+        ph = pd.DataFrame(gdp.sum(axis=1))
+        gdp = pd.concat([gdp, ph.rename(columns={ph.columns[0]:'Global'})], axis=1)
+    if split_on_china:
+        pop = pd.read_excel(xl, sheet_name='GDP growth', header=[0], 
+                index_col=0, usecols='O:T').sort_index().sort_index(axis=1).dropna()
+        if include_global:
+            ph = pd.DataFrame(pop.sum(axis=1))
+            pop = pd.concat([pop, ph.rename(columns={ph.columns[0]:'Global'})], axis=1)
+    if which=='Percent per year':
+        gdp = gdp.mul(100)
+        sector = 'GDP change per year'
+        ylabel = 'GDP change per year (%)'
+    else:
+        sector = 'GDP per capita'
+        ylabel = 'GDP (2018 USD) per capita'
+        gdp = gdp.rename(columns=dict(zip(gdp.columns, [i.split('.')[0] for i in gdp.columns])))
+        if split_on_china:
+            pop = pop.rename(columns=dict(zip(pop.columns, [i.split('.')[0] for i in pop.columns])))
+            gdp.loc[:,'RoW'] = gdp[non_china].sum(axis=1)
+            pop.loc[:,'RoW'] = pop[non_china].sum(axis=1)
+            gdp = gdp/pop/1000
+            gdp.drop(columns=non_china, inplace=True)
+        if norm:
+            gdp = gdp.apply(lambda x: x/gdp.loc[norm_year], axis=1)
+    gdp = gdp.loc[:end_year]
+    gdp.plot(ax=ax[-1], title=sector, ylabel=ylabel, xlabel='Year')
+
+    fig.tight_layout()
+    fig.set_dpi(dpi)
+
+    data = pd.concat([
+        volumes,
+        pd.DataFrame(gdp.stack()).rename(columns={0:'GDP'}).stack().unstack(1).unstack()],
+        axis=1).T.sort_index().T
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s17_sectoral_volume_indicators.pdf')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s17_sectoral_volume_indicators.png')
+    data.to_csv(f'{many_sg.folder_path}/figures/figure_s17_sectoral_volume_indicators.csv')
+    plt.close()
+
+def figure_s18(many_sg, show=False):
+    import matplotlib as mpl
+    target_rir = 0.55
+    with warnings.catch_warnings(): 
+        warnings.simplefilter('error')
+        demands = pd.DataFrame(np.nan, np.arange(1912,2041),[-.03,-.02,-.01,0])
+        models = []
+        for d in demands.columns:
+            dm = demandModel(verbosity=0)
+            dm.hyperparam.loc['historical_growth_rate','Value'] = 0.03
+            dm.hyperparam.loc['china_fraction_demand','Value'] = 0.7
+            dm.hyperparam.loc['sector_specific_dematerialization_tech_growth','Value'] = d
+            dm.hyperparam.loc['recycling_input_rate_china'] = target_rir
+            dm.hyperparam.loc['recycling_input_rate_row'] = target_rir
+            dm.run()
+            if d==-1: d='Copper'
+            else: d = round(d,2)
+            demands.loc[:,d] = dm.demand.sum(axis=1)
+            models += [dm]
+        demands = demands.dropna(axis=1)
+
+    fig,ax = easy_subplots(2)
+    demands.plot(title='Demand, varying dematerialization',xlabel='Year',ylabel='Demand (kt)', ax=ax[0], color=list(mpl.color_sequences['Dark2'][:5])+['k']).grid(axis='x')
+    ax[0].legend(title='Dematerialization rate',fontsize=20, title_fontsize=20, labelspacing=0.4, alignment='left', borderaxespad=0.1)
+    d_a = demands.copy()
+
+    with warnings.catch_warnings(): 
+        warnings.simplefilter('error')
+        demands = pd.DataFrame(np.nan, np.arange(1912,2041),[-3,-1,1,3])
+        models = []
+        for d in demands.columns:
+            dm = demandModel(verbosity=0)
+            dm.hyperparam.loc['historical_growth_rate','Value'] = 0.03
+            dm.hyperparam.loc['china_fraction_demand','Value'] = 0.7
+            dm.commodity_price_series.loc[2019:] = [dm.commodity_price_series.loc[2019]*(1+d/100)**(i-2019) for i in np.arange(2019,2041)]
+            dm.hyperparam.loc['recycling_input_rate_china'] = target_rir
+            dm.hyperparam.loc['recycling_input_rate_row'] = target_rir
+            dm.run()
+            # if d==-1: d='Copper'
+            # else: d = round(d,2)
+            demands.loc[:,d] = dm.demand.sum(axis=1)
+            models += [dm]
+        demands = demands.dropna(axis=1)
+
+    demands.plot(title='Demand, varying price',xlabel='Year',ylabel='Demand (kt)', ax=ax[1], color=list(mpl.color_sequences['Dark2'][:5])+['k']).grid(axis='x')
+    ax[1].legend(title='Price change per year (%)',fontsize=20, title_fontsize=20, labelspacing=0.4, alignment='left', borderaxespad=0.1)
+    fig.tight_layout()
+    d_b = demands.copy()
+
+    data = pd.concat([d_a,d_b], axis=1, keys=['Demand, varying dematerialization','Demand, varying price'])
+    save_quick_hist(many_sg, fig, data, None, figure_description='s18_demand_vary_demat_price',)
+    if show:
+        plt.show()
+    plt.close()
+
+def figure_s19(many_sg, show=False):
+    target_rir = 0.55
+    with warnings.catch_warnings(): 
+        warnings.simplefilter('error')
+        demands = pd.DataFrame(np.nan, np.arange(1912,2041),list(np.arange(0.01,0.051,0.01))+list([-1]))
+        models = []
+        for d in demands.columns:
+            dm = demandModel(verbosity=0)
+            dm.hyperparam.loc['historical_growth_rate','Value'] = 0.03
+            dm.hyperparam.loc['china_fraction_demand','Value'] = 0.7
+            dm.hyperparam.loc['historical_growth_rate','Value'] = d
+            dm.hyperparam.loc['recycling_input_rate_china'] = target_rir
+            dm.hyperparam.loc['recycling_input_rate_row'] = target_rir
+            dm.run()
+            if d==-1: d='Copper'
+            else: d = round(d,2)
+            demands.loc[:,d] = dm.demand.sum(axis=1)
+            models += [dm]
+        demands = demands.dropna(axis=1)
+
+    fig,ax = easy_subplots(2)
+    demands.plot(title='Varying historical growth rate',xlabel='Year',ylabel='Demand (kt)', ax=ax[0], color=list(mpl.color_sequences['Dark2'][:5])+['k']).grid(axis='x')
+    ax[0].legend(title='Historical growth rate',fontsize=20, title_fontsize=20, labelspacing=0.4, alignment='left', borderaxespad=0.1)
+
+
+    collection = pd.concat([i.collection_rate.loc[idx[:,'China'],['Other','Transport']] for i in models],axis=1,keys=demands.columns).loc[2019].loc['China'].unstack().rename(columns={'Transport':'All others','Other':'Transport'})
+    collection.plot.bar( 
+        title='Collection rate for varying historical growth',xlabel='Historical growth rate',ylabel='Collection rate, recycling input rate', ax=ax[1],
+    ).grid(axis='x')
+    pd.Series(target_rir,demands.columns).plot(color='k',linestyle='--',ax=ax[1])
+    rirs = pd.Series([i.hyperparam['Value']['recycling_input_rate_china'] for i in models],demands.columns)
+    rirs.plot(linewidth=0,marker='s',markerfacecolor='k',markersize='15').grid(axis='x')
+    ax[1].legend(['Target recycling input rate','Recycling input rate','Collection rate, transport','Collection rate, other sectors'],fontsize=20, labelspacing=0.25, borderaxespad=0.1)
+    ax[1].set_ylim(0,1.39)
+    fig.tight_layout()
+
+    data = pd.concat([
+        collection.rename(columns={'Transport':'Collection rate, transport','All others':'Collection rate, other sectors'}),
+        pd.DataFrame(rirs).rename(columns={0:'Recycling input rate'})
+        ],axis=1)
+    demands
+    save_quick_hist(many_sg, fig, data, demands, figure_description='s19_demand_growth_rate_collection', alt_statistics_name='leftside')
+    if show:
+        plt.show()
+    plt.close()
+
+def figure_s20(many_sg, show=False):
+    filename = 'input_files/user_defined/price adjustment results.csv'
+    prices = pd.read_csv(filename, index_col=0).sort_index()
+    commodities = sorted(['Aluminum','Steel','Gold','Tin','Copper','Nickel','Silver','Zinc','Lead'])
+    fig,ax=easy_subplots(commodities)
+    col_list = []
+    for com,a in zip(commodities,ax):
+        cols = [com+' original',f'log({com})',f'Rolling {com}']
+        col_list += cols
+        prices[f'Rolling {com}'] = prices[cols[1]].rolling(min_periods=1, window=5, center=True).mean()
+        prices[cols].plot(ax=a, style=[':','--','-']).grid(axis='x')
+        a.legend(['Unadjusted','Inflation and\nregression adjusted','Rolling mean'],loc='upper left')
+        a.set_ylim(a.get_ylim()[0],a.get_ylim()[1]*1.3)
+        a.set(title=f'Annual historical {com.lower()} price',
+            xlabel='Year',
+            ylabel=f'{com} price (USD/t)')
+    fig.tight_layout()
+    data = prices[col_list].rename(columns={f'{c} original':f'{c}, unadjusted' for c in commodities})
+    data = data.rename(columns={f'log({c})':f'{c}, inflation and regression adjusted' for c in commodities})
+    data = data.rename(columns={f'Rolling {c}':f'{c}, rolling mean' for c in commodities})
+    save_quick_hist(many_sg, fig, data, None, figure_description='s20_prices_plus_adjust')
+    if show:
+        plt.show()
+    plt.close()
+
 def figure_s21(many_sg, show=False):
     X1 = many_sg.rmse_df_sorted.loc[idx['Ag','primary_oge_scale'],:25]
     loc, scale = get_correct_loc_scale(X1.name[1])
@@ -2714,6 +3045,7 @@ def figure_s22(many_sg, show=False):
         ax = axes[:,e]
         for i,a in zip(plots, ax):
             sub_means = alt_means.loc[i]
+            sub_means= sub_means.rename({'Steel':'Fe'}).rename(columns={'Steel':'Fe'})
             sns.heatmap(sub_means,
                         ax=a,
                         fmt='s',
@@ -3008,6 +3340,11 @@ def figure_s26(many_sg, many_17, many_16, many_15, show=False):
             cov,
         ],axis=1,keys=['CoV-train','','CoV-parameters'])
 
+    cov_importance_df = cov_importance_df.rename({'Steel':'Fe'}).rename(columns={'Steel':'Fe'})
+    cov_importance_df_nn = cov_importance_df_nn.rename({'Steel':'Fe'}).rename(columns={'Steel':'Fe'})
+    for_r2_diff = for_r2_diff.rename({'Steel':'Fe'}).rename(columns={'Steel':'Fe'})
+    for_r2_diff_nn = for_r2_diff_nn.rename({'Steel':'Fe'}).rename(columns={'Steel':'Fe'})
+
     # combining cov_importance with for_r2_diff
     cov_importance = pd.concat([
         cov_importance_df,
@@ -3018,6 +3355,7 @@ def figure_s26(many_sg, many_17, many_16, many_15, show=False):
         for_r2_diff_nn,
     ])
 
+    
     sns.heatmap(
         cov_importance.drop(columns='All').droplevel(0,axis=1), 
         ax = ax,
@@ -3054,6 +3392,7 @@ def figure_s28(manies, show=False):
         # ind = many.rmse_df.loc[idx[:,'score'],:].min(axis=1).droplevel(1).sort_values(ascending=False).index
         # cummin_score = cummin_score.loc[:,ind]
         cummin_score = cummin_score.T.sort_index().T
+        cummin_score = cummin_score.rename({'Steel':'Fe'}).rename(columns={'Steel':'Fe'})
         cummin_score.plot(ax=a, style=['-','--','-.',':','-','--','-.',':','--']).grid(axis='x')
         # ax.legend(loc=(1.05,0))
         a.legend(ncols=2)
@@ -3070,112 +3409,7 @@ def figure_s28(manies, show=False):
         plt.show()
     plt.close()
     
-def figure_s29(many_sg):
-    split_on_china = True
-    pct_change = False
-    include_global = True
-    norm = True
-    norm_year = 2019
-    end_year = 2019
-    dpi = 250
-
-    xl = 'input_files/static/Demand prediction data-copper.xlsx'
-    volumes = pd.read_excel(xl, sheet_name='All sectors', header=[0,1], 
-                index_col=0).sort_index().sort_index(axis=1).stack(0).unstack()
-
-    def get_jewelry_bar_coin():
-        gold_rolling_window=5
-        static_data_folder = 'input_files/static'
-        gold_vols = pd.read_excel(f'{static_data_folder}/Gold demand volume indicators.xlsx',sheet_name='Volume drivers',index_col=0).loc[2001:]
-        gold_vols1 = gold_vols.loc[2001:2019].rolling(gold_rolling_window,min_periods=1,center=True).mean()
-        gold_vols1 = pd.concat([gold_vols1,gold_vols.rolling(5,min_periods=1,center=True).mean().loc[2020:]])
-        gold_vols2 = gold_vols.rolling(gold_rolling_window+2,min_periods=1,center=True).mean()
-        global_cash_reserves = volumes.loc[:,idx[:,'Industrial']].apply(lambda x: x/x.sum(), axis=1).apply(lambda x: x*gold_vols2['Global cash reserves (USD$2021)'])#['US circulating coin production (million coins)'])
-        diamond_demand = volumes.loc[:,idx[:,'Transport']].apply(lambda x: x/x.sum(), axis=1).apply(lambda x: x*gold_vols1['Diamond demand ($B)'])
-        diamond_demand = diamond_demand.rename(columns={'Transport':'Jewelry'},level=1)
-        global_cash_reserves = global_cash_reserves.rename(columns={'Industrial':'Bar and coin'},level=1)
-        return diamond_demand, global_cash_reserves
-
-    jewelry, bar_and_coin = get_jewelry_bar_coin()
-    volumes = pd.concat([volumes, jewelry, bar_and_coin], axis=1)
-    sector_units = {
-        'Transport':'Vehicle sales (million vehicles/year)',
-        'Construction':'Value added in construction (2010 USD)',
-        'Electrical':'Total grid power demand (GW)',
-        'Industrial':'Value added in manufacturing (2010 USD)',
-        'Other':'Proxy: GDP (2010 USD)',
-        'Jewelry':'Diamond demand (billion USD)',
-        'Bar and coin':'Global cash reserves (2021 USD)'
-    }
-    sectors = volumes.columns.get_level_values(1).unique()
-    non_china = ['EU', 'Japan', 'NAM', 'ROW']
-    if split_on_china:
-        ph = pd.concat([volumes.loc[:,idx[non_china,:]].groupby(axis=1,level=1).sum()],keys=['RoW'],axis=1)
-        volumes = pd.concat([volumes, ph],axis=1).drop(non_china,axis=1,level=0)
-    if include_global:
-        ph = pd.concat([volumes.groupby(axis=1,level=1).sum()],keys=['Global'],axis=1)
-        volumes = pd.concat([volumes, ph], axis=1)
-        volumes = volumes.replace(0,np.nan)
-    if pct_change:
-        volumes = volumes.pct_change().dropna()
-    if norm:
-        volumes = volumes.apply(lambda x: x/volumes.loc[norm_year], axis=1)
-    volumes = volumes.loc[:end_year]
-    fig,ax = easy_subplots(sectors, 4)
-    for sector, a in zip(sectors,ax):
-        volumes.loc[:,idx[:,sector]].droplevel(1,axis=1).plot(
-            ax=a, title=sector, xlabel='Year', ylabel=sector_units[sector]
-        )
-        a.legend(title=None)
-
-    which = 'Percent per year' if pct_change else 'Actual'
-    cols_to_use = {'Percent per year':'A:F', 'Actual':'H:M'}
-    if split_on_china: 
-        cols_to_use['Actual'] = 'W:AB'
-    cols = cols_to_use[which]
-    gdp = pd.read_excel(xl, sheet_name='GDP growth', header=[0], 
-                index_col=0, usecols=cols).sort_index().sort_index(axis=1).dropna()
-    if include_global:
-        ph = pd.DataFrame(gdp.sum(axis=1))
-        gdp = pd.concat([gdp, ph.rename(columns={ph.columns[0]:'Global'})], axis=1)
-    if split_on_china:
-        pop = pd.read_excel(xl, sheet_name='GDP growth', header=[0], 
-                index_col=0, usecols='O:T').sort_index().sort_index(axis=1).dropna()
-        if include_global:
-            ph = pd.DataFrame(pop.sum(axis=1))
-            pop = pd.concat([pop, ph.rename(columns={ph.columns[0]:'Global'})], axis=1)
-    if which=='Percent per year':
-        gdp = gdp.mul(100)
-        sector = 'GDP change per year'
-        ylabel = 'GDP change per year (%)'
-    else:
-        sector = 'GDP per capita'
-        ylabel = 'GDP (2018 USD) per capita'
-        gdp = gdp.rename(columns=dict(zip(gdp.columns, [i.split('.')[0] for i in gdp.columns])))
-        if split_on_china:
-            pop = pop.rename(columns=dict(zip(pop.columns, [i.split('.')[0] for i in pop.columns])))
-            gdp.loc[:,'RoW'] = gdp[non_china].sum(axis=1)
-            pop.loc[:,'RoW'] = pop[non_china].sum(axis=1)
-            gdp = gdp/pop/1000
-            gdp.drop(columns=non_china, inplace=True)
-        if norm:
-            gdp = gdp.apply(lambda x: x/gdp.loc[norm_year], axis=1)
-    gdp = gdp.loc[:end_year]
-    gdp.plot(ax=ax[-1], title=sector, ylabel=ylabel, xlabel='Year')
-
-    fig.tight_layout()
-    fig.set_dpi(dpi)
-
-    data = pd.concat([
-        volumes,
-        pd.DataFrame(gdp.stack()).rename(columns={0:'GDP'}).stack().unstack(1).unstack()],
-        axis=1).T.sort_index().T
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s29_sectoral_volume_indicators.pdf')
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s29_sectoral_volume_indicators.png')
-    data.to_csv(f'{many_sg.folder_path}/figures/figure_s29_sectoral_volume_indicators.csv')
-    plt.close()
-
-def figure_s30(many_sg, show=False):
+def figure_s29(many_sg, show=False):
     log = True
     static_lifetimes=pd.read_excel('input_files/static/Generalization drive file.xlsx',
                                 sheet_name='Static lifetimes', index_col=0,header=[0,1]).loc[2019].unstack()
@@ -3212,7 +3446,7 @@ def figure_s30(many_sg, show=False):
     #     a.plot(a.get_xlim(), a.get_xlim(), color='k', linestyle='--')
         
         for i,j,s in zip(x,y,z):
-            a.annotate(str(s),  xy=(i, j), color=colors[s],
+            a.annotate(str(s.replace('Steel','Fe')),  xy=(i, j), color=colors[s],
                         fontsize="large", weight='heavy',
                         horizontalalignment='center',
                         verticalalignment='center')
@@ -3253,16 +3487,16 @@ def figure_s30(many_sg, show=False):
 
     fig.tight_layout()
     fig.set_dpi(150)
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s30_static_lifetime_fraction_price.pdf')
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s30_static_lifetime_fraction_price.png')
-    both.to_csv(f'{many_sg.folder_path}/figures/figure_s30_static_lifetime_fraction_price.csv')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s29_static_lifetime_fraction_price.pdf')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s29_static_lifetime_fraction_price.png')
+    both.to_csv(f'{many_sg.folder_path}/figures/figure_s29_static_lifetime_fraction_price.csv')
     if show:
         plt.show()
     plt.close()
 
-def figures_s31_and_s33(many, show=False):
-    for which in ['s31','s33']:
-        demand_bool=which=='s31' # demand_bool=true means plot demand, false means plot scrap collected
+def figures_s30_and_s32(many, show=False):
+    for which in ['s30','s32']:
+        demand_bool=which=='s30' # demand_bool=true means plot demand, false means plot scrap collected
         years = np.arange(2001,2020)
         if demand_bool:
             demand_cols = [i for i in many.results.columns if 'demand, global' in i]
@@ -3295,7 +3529,7 @@ def figures_s31_and_s33(many, show=False):
             for stack, hatch in zip(stacks, hatches):
                 stack.set_hatch(hatch)
             label = 'Demand' if demand_bool else 'Scrap collected'
-            a.set(title=comm, xlabel='Year', ylabel=f'{label} ({unit})',
+            a.set(title=comm.replace('Steel','Fe'), xlabel='Year', ylabel=f'{label} ({unit})',
                 )
             a.legend()
             h,l=a.get_legend_handles_labels()
@@ -3312,7 +3546,7 @@ def figures_s31_and_s33(many, show=False):
             plt.show()
         plt.close()
 
-def figure_s32(many_sg, show=False):
+def figure_s31(many_sg, show=False):
     years = np.arange(2001,2020)
     demand_cols = [i for i in many_sg.results.columns if 'demand, global' in i]
     demand = many_sg.results_sorted.loc[idx[:,:25,:],demand_cols].groupby(level=[0,2]).mean()
@@ -3344,7 +3578,7 @@ def figure_s32(many_sg, show=False):
         for stack, hatch in zip(stacks, hatches):
             stack.set_hatch(hatch)
         label = 'Demand distribution'
-        a.set(title=comm, xlabel='Year', ylabel=label)
+        a.set(title=comm.replace('Steel','Fe'), xlabel='Year', ylabel=label)
         a.legend()
         h,l=a.get_legend_handles_labels()
         a.legend(h[::-1],l[::-1], loc='upper left', frameon=True, framealpha=0.5)
@@ -3352,14 +3586,14 @@ def figure_s32(many_sg, show=False):
     data = data.reset_index().rename(columns={'level_0':'Commodity', 'level_1':'Year'})
     # fig.set_dpi(150)
     fig.tight_layout()
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s32_china_fraction_demand.pdf')
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s32_china_fraction_demand.png')
-    data.to_csv(f'{many_sg.folder_path}/figures/figure_s32_china_fraction_demand.csv')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s31_china_fraction_demand.pdf')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s31_china_fraction_demand.png')
+    data.to_csv(f'{many_sg.folder_path}/figures/figure_s31_china_fraction_demand.csv')
     if show: 
         plt.show()
     plt.close()
     
-def figures_s34_to_s37(many_sg, show=False):
+def figures_s33_to_s36(many_sg, show=False):
     def plot_future_for_variable(many, commodity='copper', var='Mean total cash margin', n=50, 
                     color='#1b9e77', dpi=50, end_year=2040, ax=0):
         if type(ax)==int:
@@ -3380,7 +3614,7 @@ def figures_s34_to_s37(many_sg, show=False):
         title=var.replace('Spread','Scrap spread').replace('Refined price','Cathode price')\
                 .replace('Mean ','').replace('mine grade','ore grade')
         if title!='TCRC': title=title.capitalize()
-        ax.set(ylabel=var+f' ({label})', title=commodity.capitalize())
+        ax.set(ylabel=var+f' ({label})', title=commodity.capitalize().replace('Steel','Fe'))
         return fig, ax, data
 
     def plot_actual_variables(many, variable='Mean mine grade', dpi=50, show=False):
@@ -3431,35 +3665,35 @@ def figures_s34_to_s37(many_sg, show=False):
         return fig, all_data
 
     fig, data = plot_actual_variables(many_sg, variable='Mean mine grade')
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s34_mean_ore_grade.pdf')
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s34_mean_ore_grade.png')
-    data.to_csv(f'{many_sg.folder_path}/figures/figure_s34_mean_ore_grade.csv')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s33_mean_ore_grade.pdf')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s33_mean_ore_grade.png')
+    data.to_csv(f'{many_sg.folder_path}/figures/figure_s33_mean_ore_grade.csv')
     if show: 
         plt.show()
     plt.close()
     fig, data = plot_actual_variables(many_sg, variable='TCRC')
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s35_mean_tcrc.pdf')
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s35_mean_tcrc.png')
-    data.to_csv(f'{many_sg.folder_path}/figures/figure_s35_mean_tcrc.csv')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s34_mean_tcrc.pdf')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s34_mean_tcrc.png')
+    data.to_csv(f'{many_sg.folder_path}/figures/figure_s34_mean_tcrc.csv')
     if show: 
         plt.show()
     plt.close()
     fig, data = plot_actual_variables(many_sg, variable='Mean total cash margin')
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s36_mean_total_cash_margin.pdf')
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s36_mean_total_cash_margin.png')
-    data.to_csv(f'{many_sg.folder_path}/figures/figure_s36_mean_total_cash_margin.csv')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s35_mean_total_cash_margin.pdf')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s35_mean_total_cash_margin.png')
+    data.to_csv(f'{many_sg.folder_path}/figures/figure_s35_mean_total_cash_margin.csv')
     if show: 
         plt.show()
     plt.close()
     fig, data = plot_actual_variables(many_sg, variable='Mean total minesite cost')
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s37_mean_total_minesite_cost.pdf')
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s37_mean_total_minesite_cost.png')
-    data.to_csv(f'{many_sg.folder_path}/figures/figure_s37_mean_total_minesite_cost.csv')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s36_mean_total_minesite_cost.pdf')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s36_mean_total_minesite_cost.png')
+    data.to_csv(f'{many_sg.folder_path}/figures/figure_s36_mean_total_minesite_cost.csv')
     if show: 
         plt.show()
     plt.close()
 
-def figure_s38(many_sg, show=False):
+def figure_s37(many_sg, show=False):
     if not hasattr(many_sg, 'colorful_means'):
         figure_4(many_sg)
     means = many_sg.colorful_means.copy()
@@ -3480,14 +3714,16 @@ def figure_s38(many_sg, show=False):
     bhu_param_color = bhu_param_color.div(bhu_param_color.max())
     fig,ax=plt.subplots(figsize=(14,4))
 
+    bhu_param = bhu_param.rename({'Steel':'Fe'}).rename(columns={'Steel':'Fe'})
+    bhu_param_color = bhu_param_color.rename({'Steel':'Fe'}).rename(columns={'Steel':'Fe'})
     sns.heatmap(bhu_param_color.T, annot=bhu_param.T, fmt='.2f',
                 cbar_kws={'label':'Low            Med           High','ticks':[]},)
     ax.set_title(' ')
     fig.set_dpi(200)
     fig.tight_layout()
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s38_decision_tree_assessment.pdf')
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s38_decision_tree_assessment.png')
-    bhu_param_color.T.to_csv(f'{many_sg.folder_path}/figures/figure_s38_decision_tree_assessment.csv')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s37_decision_tree_assessment.pdf')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s37_decision_tree_assessment.png')
+    bhu_param_color.T.to_csv(f'{many_sg.folder_path}/figures/figure_s37_decision_tree_assessment.csv')
     if show:
         plt.show()
     plt.close()

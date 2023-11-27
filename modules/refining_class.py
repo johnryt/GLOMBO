@@ -1,4 +1,7 @@
-from modules.refining_functions import *
+try:
+    from modules.refining_functions import *
+except:
+    from refining_functions import *
 import numpy as np
 import pandas as pd
 idx = pd.IndexSlice

@@ -1,6 +1,44 @@
-image: python:3.6
+.remote_exec_server: &remote_exec_server
+  - "sh"
+  - "-c"
+  - |
+    mkdir -p "$CI_PROJECT_DIR" && cd "$CI_PROJECT_DIR"
+    while true; do
+      nc -l -p 83 -e sh -c '{
+        IFS="|" read -r stdin_base64 cmd_base64
+        stdout_file=$(mktemp)
+        stderr_file=$(mktemp)
+        echo -n "$stdin_base64" | base64 -d | sh -c "$(echo "$cmd_base64" | base64 -d)" > $stdout_file 2> $stderr_file
+        echo "${?}|$(cat $stdout_file | base64 -w 0)|$(cat $stderr_file | base64 -w 0)"
+        rm -f $stdout_file $stderr_file
+      }'
+    done
+
+.remote_exec_client: &remote_exec_client |
+  # Usage: svc_run SERVICE_NAME COMMAND [COMMAND_PARAMS]... # (Supports stdin, stdout, stderr and exit code)
+  svc_run() {
+    local stdin_base64=$(base64 -w 0)
+    local host="$1"; shift
+    local cmd_base64="$(echo "$*" | base64 -w 0)"
+    echo "${stdin_base64}|${cmd_base64}" | nc $host 83 | {
+      IFS='|' read -r exit_code stdout_base64 stderr_base64
+      echo "$stdout_base64" | base64 -d
+      echo "$stderr_base64" | base64 -d 1>&2
+      return $exit_code
+    }
+    return $?
+  }
+
+
+
+
+
+
+
+
 
 send-snapshot:
+  image: python:3.6
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?[0-9]+\.[0-9]+/
   script:

@@ -1,0 +1,9 @@
+"metadata": {
+    "upload_type":"software",
+    "title":"GLOMBO",
+    "publication_date":"2023-11-27",
+    "creators":
+        [{"name":"John Ryter","affiliation":"USGS","orcid":""},
+        {"name":"Karan Bhuwalka"},],
+    "keywords": ["GLOMBO","material flow analysis"]
+}

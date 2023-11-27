@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+.zenodo.json       export-ignore
+.gitlab-ci.yml     export-ignore

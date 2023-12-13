@@ -68,9 +68,9 @@ def output_figures_tables(main_folder, split_15_folder=None, split_16_folder=Non
     # else:
     #     print('no folder given for the train-test 2001-2017 split')
 
-    # figures_2_and_3(many_sg)
+    figures_2_and_3(many_sg)
     # figure_4(many_sg)
-    figures_5_and_s27(many_sg)
+    # figures_5_and_s27(many_sg)
     # figure_s17(many_sg)
     # figure_s18(many_sg)
     # figure_s19(many_sg)
@@ -91,7 +91,7 @@ def output_figures_tables(main_folder, split_15_folder=None, split_16_folder=Non
     #     table_3(many_sg,  many_17, many_16, many_15)
 
     # if user=='jwr':
-    #     figure_s4_to_s16_table_s20_to_s24(many_sg)
+        # figure_s4_to_s16_table_s20_to_s24(many_sg)
 
 output_figures_tables(PAPER_MAIN_FOLDER, PAPER_SPLIT_2015_FOLDER, PAPER_SPLIT_2016_FOLDER, PAPER_SPLIT_2017_FOLDER, USER)
 

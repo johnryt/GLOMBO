@@ -400,6 +400,7 @@ def plot_colorful_table2(many, stars='ttest', value_in_parentheses='standard err
 def plot_given_columns_for_paper(many, commodity, columns, column_name=None, 
                                 ax=None, column_subset=None, start_year=None, end_year=2019, 
                                 show_all_lines=False, r2_on_own_line=True, plot_actual_price=False, 
+                                apply_difference_for_regression=True,
                                 dpi=50):
     """
     Plots historical vs simulated demand, mining,
@@ -435,6 +436,10 @@ def plot_given_columns_for_paper(many, commodity, columns, column_name=None,
         array of numbers corresponding to rmse_df columns.
     plot_actual_price: bool, whether to include the unadjusted 
         historical price in the plot
+    apply_difference_for_regression: bool, whether to apply
+        difference for regressions where we calculate R2 to
+        deal with non-stationarity problem pointed out by
+        reviewer 1
     dpi: dots per inch, controls resolution. Only functions if
         the ax input is None.
     """
@@ -497,16 +502,20 @@ def plot_given_columns_for_paper(many, commodity, columns, column_name=None,
             extra_label=', rolling mean'
         hist_line = a.plot(historical_data,label='Historical'+extra_label,color='k',linewidth=6)
         inter = np.intersect1d(results.index,historical_data.index)
+        endog = historical_data.loc[inter]
         if show_all_lines:
-            m = sm.GLS(historical_data.loc[inter], 
-                    sm.add_constant(results[columns[0]].loc[inter])
-                    ).fit(cov_type='HC3')
+            exog = results[columns[0]].loc[inter]
         else:
-            m = sm.GLS(historical_data.loc[inter], 
-                    sm.add_constant(sim_line[0].get_data()[1])
-                    ).fit(cov_type='HC3')
+            exog = sim_line[0].get_data()[1]
+        m = sm.GLS(endog,sm.add_constant(exog)).fit(cov_type='HC3')
         mse = round(m.mse_resid**0.5,2)
         mse = round(m.rsquared,2)
+        if apply_difference_for_regression:
+            endog = np.diff(endog, axis=0)
+            exog = np.diff(exog, axis=0)
+            m = sm.GLS(endog,sm.add_constant(exog)).fit(cov_type='HC3')
+            diff_mse = round(m.mse_resid**0.5,2)
+            diff_mse = round(m.rsquared,2)
         alt_comm = commodity.replace('Steel','Fe')
         if column_name is not None:
             title=f'{i}, {column_name} {alt_comm},\n'+r'$R^2$'+f'={mse}, scenario {columns[0]}'
@@ -549,6 +558,8 @@ def plot_given_columns_for_paper(many, commodity, columns, column_name=None,
             labels = []
             simulated_string = 'Simulated, best'
             r2_string = r'$R^2$'+f'={mse}'
+            if apply_difference_for_regression:
+                diff_r2_string = r'Diff. $R^2$'+f'={diff_mse}'
             r2_handle = Line2D([0],[0], color='w', linewidth=0)
             if plot_actual_price and i=='Primary commodity price':
                 handles += [orig_hist_line[0]]
@@ -560,6 +571,9 @@ def plot_given_columns_for_paper(many, commodity, columns, column_name=None,
                 if r2_on_own_line:
                     labels += [simulated_string, 'Simulated, other', r2_string]
                     handles += [r2_handle]
+                    if apply_difference_for_regression:
+                        labels += [diff_r2_string]
+                        handles += [r2_handle]
                 else:
                     labels += [' '.join([simulated_string, r2_string]), 'Simulated, other']
                     a.set(title=title+', '+r2_string)
@@ -568,6 +582,9 @@ def plot_given_columns_for_paper(many, commodity, columns, column_name=None,
                 if r2_on_own_line:
                     labels += [simulated_string, r2_string]
                     handles += [r2_handle]
+                    if apply_difference_for_regression:
+                        labels += [diff_r2_string]
+                        handles += [r2_handle]
                 else:
                     labels += [' '.join([simulated_string, r2_string])]
                     a.set(title=title+', '+r2_string)

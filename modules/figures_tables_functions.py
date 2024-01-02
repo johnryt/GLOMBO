@@ -29,7 +29,15 @@ import warnings
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 from IPython.display import display
 from string import printable as character_list
+import statsmodels.tsa.stattools as ts
 
+def cointegration_test(y, x):
+    # Step 1: regress one variable on the other
+    ols_result = sm.OLS(y, x).fit()
+    # Step 2: obtain the residual
+    residual = ols_result.resid
+    # Step 3: apply Augmented Dickey-Fuller test to see whether# the residual is unit root
+    return ts.adfuller(residual)
 
 def pval_to_star(pval, no_star_cut=0.1, period_cut=0.05, one_star_cut=0.01, two_star_cut=0.001):
     """
@@ -400,7 +408,7 @@ def plot_colorful_table2(many, stars='ttest', value_in_parentheses='standard err
 def plot_given_columns_for_paper(many, commodity, columns, column_name=None, 
                                 ax=None, column_subset=None, start_year=None, end_year=2019, 
                                 show_all_lines=False, r2_on_own_line=True, plot_actual_price=False, 
-                                apply_difference_for_regression=True,
+                                apply_difference_for_regression=False, use_r2_instead_of_mape=False,
                                 dpi=50):
     """
     Plots historical vs simulated demand, mining,
@@ -510,6 +518,10 @@ def plot_given_columns_for_paper(many, commodity, columns, column_name=None,
         m = sm.GLS(endog,sm.add_constant(exog)).fit(cov_type='HC3')
         mse = round(m.mse_resid**0.5,2)
         mse = round(m.rsquared,2)
+        cointegration_test_pval = round(cointegration_test(exog, endog)[1],3)
+        mape = round(100*np.mean(abs((exog-endog.values)/endog.values)),1)
+        r2_or_mape_str = r'$R^2$' if use_r2_instead_of_mape else 'MAPE'
+        r2_or_mape = mse if use_r2_instead_of_mape else str(mape)+'%'
         if apply_difference_for_regression:
             endog = np.diff(endog, axis=0)
             exog = np.diff(exog, axis=0)
@@ -518,7 +530,7 @@ def plot_given_columns_for_paper(many, commodity, columns, column_name=None,
             diff_mse = round(m.rsquared,2)
         alt_comm = commodity.replace('Steel','Fe')
         if column_name is not None:
-            title=f'{i}, {column_name} {alt_comm},\n'+r'$R^2$'+f'={mse}, scenario {columns[0]}'
+            title=f'{i}, {column_name} {alt_comm},\n'+f'{r2_or_mape_str}={r2_or_mape}, scenario {columns[0]}'
         else:
             title=f'{i}, {alt_comm}'
         if i=='Primary commodity price':
@@ -557,9 +569,9 @@ def plot_given_columns_for_paper(many, commodity, columns, column_name=None,
             handles = []
             labels = []
             simulated_string = 'Simulated, best'
-            r2_string = r'$R^2$'+f'={mse}'
+            r2_string = f'{r2_or_mape_str}={r2_or_mape}'
             if apply_difference_for_regression:
-                diff_r2_string = r'Diff. $R^2$'+f'={diff_mse}'
+                diff_r2_string = r'Diff. $R^2$'+f'={diff_mse}, avg%err: {mape}'
             r2_handle = Line2D([0],[0], color='w', linewidth=0)
             if plot_actual_price and i=='Primary commodity price':
                 handles += [orig_hist_line[0]]
@@ -607,7 +619,8 @@ def plot_given_columns_for_paper(many, commodity, columns, column_name=None,
 
 def plot_given_columns_for_paper_many(many, commodity, columns, column_name=None, 
                                  ax=None, column_subset=None, start_year=None, end_year=2019, 
-                                 show_all_lines=False, r2_on_own_line=True, dpi=50):
+                                 show_all_lines=False, r2_on_own_line=True, use_r2_instead_of_mape=False, 
+                                 dpi=50):
     """
     Plots historical vs simulated demand, mining,
     and primary commodity price for a given commodity
@@ -666,7 +679,7 @@ def plot_given_columns_for_paper_many(many, commodity, columns, column_name=None
             historical_data = pd.Series(results.min(),[0])
         results_ph = results.copy()
 #         results = results[columns]
-        results = results.loc[:,:25]
+        results = results.loc[:,:24]
 
         # print(commodity, i, results.stack().median(), results.stack().mean())
         # if 10*results.stack().median() < results.stack().mean():
@@ -711,8 +724,12 @@ def plot_given_columns_for_paper_many(many, commodity, columns, column_name=None
                       ).fit(cov_type='HC3')
         mse = round(m.mse_resid**0.5,2)
         mse = round(m.rsquared,2)
+        mape = 100*np.mean(abs((historical_data.loc[inter]-sim_line[-1].get_data()[1])/historical_data.loc[inter]))
+        mape = round(mape,1)
+        r2_or_mape_str = r'$R^2$' if use_r2_instead_of_mape else 'MAPE'
+        r2_or_mape = mse if use_r2_instead_of_mape else str(mape)+'%'
         if column_name is not None:
-            title=f'{i}, {column_name} {commodity},\n'+r'$R^2$'+f'={mse}, scenario {columns[0]}'
+            title=f'{i}, {column_name} {commodity},\n'+r2_or_mape_str+f'={r2_or_mape}, scenario {columns[0]}'
         else:
             title=f'{i}, {commodity}'
         if i=='Primary commodity price':
@@ -731,27 +748,27 @@ def plot_given_columns_for_paper_many(many, commodity, columns, column_name=None
             r2_handle = Line2D([0],[0], color='w', linewidth=0)
             if r2_on_own_line:
                 a.legend([hist_line[0], sim_line[0], r2_handle],
-                         ['Historical','Simulated',r'$R^2$'+f'={mse}'])
+                         ['Historical','Simulated',f'{r2_or_mape_str}={r2_or_mape}'])
             else:
                 a.legend([hist_line[0], sim_line[0]],
-                         ['Historical','Simulated'+r' $R^2$'+f'={mse}'], loc='upper left')
-                sim_line[-1].set_label('Simulated:'+r' $R^2$'+f'={mse}')
+                         ['Historical','Simulated'+f' {r2_or_mape_str}={r2_or_mape}'], loc='upper left')
+                sim_line[-1].set_label('Simulated:'+f' {r2_or_mape_str}={r2_or_mape}')
 
         elif 'best_line' not in locals():
             lines = [i for i in sim_line if i.get_color()!='k']
             labels = [i.get_label().replace('Simulated',j) for i,j in zip(lines,many.many_keys)][:-1]
             a.legend([hist_line[0]]+lines,
-                     ['Historical']+labels+[many.plot_label+r': $R^2$'+f'={mse}'], loc='upper left')
-            sim_line[-1].set_label(many.plot_label+r': $R^2$'+f'={mse}')
+                     ['Historical']+labels+[many.plot_label+f': {r2_or_mape_str}={r2_or_mape}'], loc='upper left')
+            sim_line[-1].set_label(many.plot_label+f': {r2_or_mape_str}={r2_or_mape}')
             a.set_ylim(a.get_ylim()[0], a.get_ylim()[1]*(1+len(sim_line)/4*0.2))
         else:
             r2_handle = Line2D([0],[0], color='w', linewidth=0)
             if r2_on_own_line:
                 a.legend([hist_line[0], best_line[0], sim_line[0], r2_handle],
-                         ['Historical','Simulated, best','Simulated, other',r'$R^2$'+f'={mse}'])
+                         ['Historical','Simulated, best','Simulated, other',f'{r2_or_mape_str}={r2_or_mape}'])
             else:
                 a.legend([hist_line[0], best_line[0], sim_line[0]],
-                         ['Historical','Simulated, best:'+r' $R^2$'+f'={mse}','Simulated, other'])
+                         ['Historical','Simulated, best:'+f' {r2_or_mape_str}={r2_or_mape}','Simulated, other'])
     return fig,ax,data
 
 def plot_best_fits_many(many, show_all_lines=False, commodities='all', dpi=50, show=False):
@@ -827,7 +844,7 @@ def plot_best_fits(many, show_all_lines=False, plot_actual_price=False, commodit
                                             r2_on_own_line=True, ax=a)
         all_data = pd.concat([all_data, data])
 #         a[1].set_ylim(10500,29000)
-    fig.tight_layout()
+    
     add_axis_labels(fig, 'price_middle_column')
     fig.set_dpi(dpi)
     all_data.index = pd.MultiIndex.from_tuples(all_data.index)
@@ -845,12 +862,13 @@ def plot_best_fits(many, show_all_lines=False, plot_actual_price=False, commodit
     all_data.loc[all_data['Scenario']=='Historical, rolling mean', 'Historical or simulated'] = 'Historical, rolling mean'
     all_data = all_data[['Variable','Commodity','Year','Historical or simulated','Scenario','Value']]
     all_data = all_data.reset_index(drop=True)
+    fig.tight_layout()
     if show:
         plt.show()
     plt.close()
     return fig, all_data
 
-def get_r2(many_sg, many_15, many_16, many_17):
+def get_r2(many_sg, many_15, many_16, many_17, use_r2_instead_of_mape=False):
     years = np.arange(2001,2020)
     r2_values = pd.DataFrame()
     commodities = many_sg.rmse_df.index.get_level_values(0).unique()
@@ -862,44 +880,55 @@ def get_r2(many_sg, many_15, many_16, many_17):
         for comm in commodities:
             regr_y = many_sg.historical_data[historical_names[param]].loc[comm].loc[years]
             for many,label in zip([many_sg, many_15, many_16, many_17],['Full','To 2014','To 2015','To 2016']):
-                regr_x = many.results_sorted[param].loc[comm].loc[idx[:25,years]].groupby(level=1).mean()
-                m = do_a_regress(regr_x, regr_y,plot=False)[1]
-                rsquared_df_ph.loc[comm, label] = m.rsquared
+                regr_x = many.results_sorted[param].loc[comm].loc[idx[:24,years]].groupby(level=1).mean()
+                if use_r2_instead_of_mape:
+                    m = do_a_regress(regr_x, regr_y,plot=False)[1]
+                    rsquared_df_ph.loc[comm, label] = m.rsquared
+                else:
+                    rsquared_df_ph.loc[comm, label] = np.mean(abs((regr_x-regr_y)/regr_y))*100
         rsquared_df_ph = pd.concat([rsquared_df_ph],keys=[param])
         rsquared_df = pd.concat([rsquared_df, rsquared_df_ph])
     return rsquared_df
 
-def get_r2_from_plot(many_sg, many_15, many_16, many_17):
+def get_r2_from_plot(many_sg, many_15, many_16, many_17, use_r2_instead_of_mape=False):
     """
     Getting R2 differences from plot above
     """
     if not hasattr(many_sg, 'fig_fits'):
-        figures_s24_and_s25(many_sg, many_17, many_16, many_15, show=False, all_only=True)
+        figures_s28_and_s29(many_sg, many_17, many_16, many_15, show=False, all_only=True)
     fig_fits = many_sg.fig_fits
     r2_df = pd.DataFrame()
     for a in fig_fits.get_axes():
         title = a.get_title()
         lines = a.get_lines()
         labels = [i.get_label() for i in lines]
-        labels = [i.replace('Simulated','Full') for i in labels if i!='Historical']
-        keys = [i.split(':')[0] for i in labels]
-        r2 = [float(i.split('=')[1]) for i in labels]
-        r2_series = pd.Series(r2,keys)
-        r2_series.name = title.split(', ')[1]
-        r2_series = pd.concat([r2_series], keys=[title.split(',')[0]])
+        if use_r2_instead_of_mape:
+            labels = [i.replace('Simulated','Full') for i in labels if i!='Historical']
+            keys = [i.split(':')[0] for i in labels]
+            r2 = [float(i.split('=')[1]) for i in labels]
+            r2_series = pd.Series(r2,keys)
+            r2_series.name = title.split(', ')[1]
+            r2_series = pd.concat([r2_series], keys=[title.split(',')[0]])
+        else:
+            labels = [i.replace('Simulated','Full') for i in labels]
+            line_data = {l.split(':')[0]:pd.Series(d.get_xydata()[:,1], d.get_xydata()[:,0]) for l,d in zip(labels, lines)}
+            line_data = {l: line_data[l][line_data[l]>=0] for l in line_data}
+            r2_dict = {i: np.mean(abs((line_data[i]-line_data['Historical'])/line_data['Historical'])) for i in line_data if i!='Historical'}
+            r2_series = pd.concat([pd.Series(r2_dict)], keys=[title.split(',')[0]])
+            r2_series.name = title.split(', ')[1]
         r2_df = pd.concat([r2_df, r2_series],axis=1)
     r2 = r2_df.stack().unstack(level=1)
     return r2
 
-def run_r2_parameter_change_regressions(many_sg, many_17, many_16, many_15):
+def run_r2_parameter_change_regressions(many_sg, many_17, many_16, many_15, use_r2_instead_of_mape=False):
     # cutoff selection:
     cutoff_dict = {}
     if not hasattr(many_sg, 'means_coef_of_var'):
-        figure_s26(many_sg, many_17, many_16, many_15, show=False)
+        figure_s30(many_sg, many_17, many_16, many_15, show=False)
     means_coef_of_var = many_sg.means_coef_of_var.copy()
     means_all = many_sg.means_all.copy()
     if not hasattr(many_sg, 'largest_diff'):
-        figure_s23(many_sg, many_15, many_16, many_17, show=False)
+        figure_s27(many_sg, many_15, many_16, many_17, show=False)
     largest_diff = many_sg.largest_diff.copy()
     for cutoff in [0.03, 0.05, 0.08, 0.1, 0.12, 0.13, 0.14, 0.16, 0.18, 0.2, 0.3, 0.4, 0.5]:
         include_vals = (means_coef_of_var>cutoff).any(axis=1)
@@ -908,7 +937,7 @@ def run_r2_parameter_change_regressions(many_sg, many_17, many_16, many_15):
         cutoff_dict[cutoff] = len(include_vals)
     print('number of parameters included for different cutoff values:', cutoff_dict)
 
-    # Using cutoff 0.13:
+    # Using cutoff 0.12:
     cutoff = 0.12
     tune_to_list =['Mine production','Refined price','Total demand']
     results_all = pd.DataFrame()
@@ -941,7 +970,10 @@ def run_r2_parameter_change_regressions(many_sg, many_17, many_16, many_15):
         results = pd.DataFrame()
         for e,combo in enumerate(combos):
             x = means_diff.loc[:,combo]
-            r2_d.name = tune_to+' R2 difference from full tuning'
+            if use_r2_instead_of_mape:
+                r2_d.name = tune_to+' R2 difference from full tuning'
+            else:
+                r2_d.name = tune_to+' MAPE difference from full tuning'
             m = sm.GLS(r2_d, sm.add_constant(x)).fit(cov_type='HC3')
             results.loc[e,'AIC'] = m.aic
             results.loc[e,'BIC'] = m.bic
@@ -1974,6 +2006,28 @@ def plotting_grades_over_time(primary_only, axes=None):
         ylabel='Relative grade (grade in first year=1)')
     return deyeared
 
+def get_min_pvals_across_tests(many, n_best=25):
+    """
+    Used by figures S22-S24
+    """
+    tests = ['uniform-min','uniform-min-normality','uniform-ttest','uniform-shapiro','uniform-lilliefors-both','uniform-dagostino','uniform-anderson-both']
+    nice_test_names = {'uniform-min':'All tests, min.\np-value','uniform-min-normality':'All normality\ntests','uniform-shapiro':'Shapiro-Wilk\ntest',
+                    'uniform-lilliefors-both':'Lilliefors-corr.\nK-S test','uniform-dagostino':'D\'Ag.-Pea.\ntest',
+                    'uniform-anderson-both':'And.-Dar.\ntest', 'uniform-ttest':'One-sample\nT-test'}
+    nice_names_list = [nice_test_names[i] for i in tests]
+    pvals_list = []
+    means_list = []
+    for test in tests:
+        table,means,pvals = make_parameter_mean_std_table(many, n_best, stars=test, 
+                                                        value_in_parentheses=None, rand_size=100,
+                                                        how_many_tests=100)
+        pvals_list += [pvals]
+        means_list += [means]
+    min_pvals = pd.concat(pvals_list,keys=range(len(pvals_list))).groupby(level=1).min()
+    return min_pvals
+
+
+
 
 def figures_2_and_3(many_sg, show=False):
     fig, data = plot_best_fits(many_sg, show_all_lines=False, plot_actual_price=True, commodities=['Cu','Ni','Pb','Zn','Au']);
@@ -2016,7 +2070,7 @@ def figure_4(many_sg, show=False):
         plt.show()
     plt.close()
 
-def figures_5_and_s27(many_sg):
+def figures_5_and_s31(many_sg, include_n=True):
     note_columns = ['Degrees of freedom','Years','Notes','Paper notes']
 
     def cleanup_whole(source):
@@ -2200,6 +2254,10 @@ def figures_5_and_s27(many_sg):
         sources_sub.loc[sources_sub.Parameter==
                         'Intensity elasticity to time','Parameter'
                     ] = '10 x Intensity elasticity to time'
+        sources_sub.loc[sources_sub.Parameter=='Ore grade elasticity to COT distribution mean','Value']*=2
+        sources_sub.loc[sources_sub.Parameter==
+                        'Ore grade elasticity to COT distribution mean','Parameter'
+                    ] = '2 x Ore grade elasticity to COT distribution mean'
     #         sources_sub.loc[sources_sub.Parameter=='Ore grade elasticity to COT distribution mean','Value']/=-5
     #         sources_sub.loc[sources_sub.Parameter==
     #                         'Ore grade elasticity to COT distribution mean','Parameter'
@@ -2213,7 +2271,7 @@ def figures_5_and_s27(many_sg):
         return sources_sub, param_list
 
     def update_sources_sub_stars(comm, sources_sub, dist_test_pvals, param_list, include_stars,
-                                stars_overlapping, stars_overlapping90, stars_not_overlapping):
+                                stars_overlapping, stars_overlapping90, stars_not_overlapping, include_n=True):
         if include_stars:
             for x in param_list:
                 dist_param = [i for i in dist_test_pvals.index.get_level_values(0).unique()
@@ -2241,6 +2299,9 @@ def figures_5_and_s27(many_sg):
                     elif (np.min(our_values90)<np.max(lit_values90) and np.min(our_values90)>np.min(lit_values90)):
                         stars_overlapping90 += [(comm,dist_param)]  
                 star = f' ({star})'
+                if include_n:
+                    n_lit_sources = sources_sub.loc[(sources_sub['Parameter']==x)&(sources_sub['General source']!='This study')].shape[0]
+                    star = f'{star}, n={n_lit_sources}'
                 sources_sub.loc[sources_sub['Parameter']==x,'Parameter'] = x+star
             param_list = sources_sub['Parameter'].unique()
         return sources_sub, param_list, stars_overlapping, stars_overlapping90, stars_not_overlapping
@@ -2248,7 +2309,7 @@ def figures_5_and_s27(many_sg):
     def update_sources_sub_linelength(sources_sub, param_list):
         for x in [i for i in param_list if len(i)>len('Mine cost elasticity to ')]:
             split = x.split(' ')
-            num_words = 3 if ' x$ ' not in x else 4
+            num_words = 7 if 'COT dist' in x else 4 if 'Direct melt fraction' in x else 3 if ' x$ ' not in x else 5
             sources_sub.loc[sources_sub.Parameter==
                         x,'Parameter'
                     ] = ' '.join(split[:num_words])+'\n'+' '.join(split[num_words:])
@@ -2399,7 +2460,7 @@ def figures_5_and_s27(many_sg):
                 sources_sub, param_list, stars_overlapping, stars_overlapping90, stars_not_overlapping = \
                     update_sources_sub_stars(comm, sources_sub, dist_test_pvals,
                                             param_list, include_stars,
-                                            stars_overlapping, stars_overlapping90, stars_not_overlapping)
+                                            stars_overlapping, stars_overlapping90, stars_not_overlapping, include_n=include_n)
 
                 sources_sub = \
                     update_sources_sub_linelength(sources_sub, param_list)
@@ -2421,13 +2482,13 @@ def figures_5_and_s27(many_sg):
             sources_all = sources_all.reset_index(drop=True)
             sources.index = sources.index.set_names(['Parameter','General source','Source'])
             sources = sources.rename(columns={'Steel':'Fe'})
-            many.sources_info_orig.to_csv(f'{many.folder_path}/tables/table_s27_literature_parameter_database_original.csv')
-            many.sources_info.to_csv(f'{many.folder_path}/tables/table_s28_literature_parameter_database_updated.csv')
+            many.sources_info_orig.to_csv(f'{many.folder_path}/tables/table_s28_literature_parameter_database_original.csv')
+            many.sources_info.to_csv(f'{many.folder_path}/tables/table_s29_literature_parameter_database_updated.csv')
             many.rmse_df_sorted.rename(
                 make_parameter_names_nice(many.rmse_df_sorted.index.get_level_values(1)), level=1
-                ).to_csv(f'{many.folder_path}/tables/table_s29_parameter_results_this_study.csv')
+                ).to_csv(f'{many.folder_path}/tables/table_s30_parameter_results_this_study.csv')
             sources_all.to_csv(f'{many.folder_path}/figures/figure_5_literature_comparison.csv')
-            sources_all.to_csv(f'{many.folder_path}/figures/figure_s27_literature_comparison.csv')
+            sources_all.to_csv(f'{many.folder_path}/figures/figure_s31_literature_comparison.csv')
             if commodity_subset=='all':
                 fig.savefig(f'{many.folder_path}/figures/figure_none_literature_comparison.pdf')
                 fig.savefig(f'{many.folder_path}/figures/figure_none_literature_comparison.png')
@@ -2435,8 +2496,8 @@ def figures_5_and_s27(many_sg):
                 fig.savefig(f'{many.folder_path}/figures/figure_5_literature_comparison.pdf')
                 fig.savefig(f'{many.folder_path}/figures/figure_5_literature_comparison.png')
             elif commodity_subset=='subset2':
-                fig.savefig(f'{many.folder_path}/figures/figure_s27_literature_comparison.pdf')
-                fig.savefig(f'{many.folder_path}/figures/figure_s27_literature_comparison.png')
+                fig.savefig(f'{many.folder_path}/figures/figure_s31_literature_comparison.pdf')
+                fig.savefig(f'{many.folder_path}/figures/figure_s31_literature_comparison.png')
             plt.close()
             print_paper_info(many, sources_plt, dist_test_pvals,
                             stars_overlapping, stars_overlapping90, stars_not_overlapping)
@@ -2446,332 +2507,7 @@ def figures_5_and_s27(many_sg):
     sources, sources_all, this_study, sources_plt, fig = plot_comparative_violins(many_sg, dpi=200, commodity_subset='subset1')
     sources, sources_all, this_study, sources_plt, fig = plot_comparative_violins(many_sg, dpi=200, commodity_subset='subset2')
 
-def figure_s4_to_s16_table_s20_to_s24(many_sg, show=False):
-    """
-    All the plots done in this function are using proprietary data that cannot be shared. 
-    To maximize transparency, we include the histogram data for each of the data sets used,
-    including where scatter plots are provided. Histogram plots can be recreated from the 
-    values and edges data (number of items per bin, edges of bins) using the
-    matplotlib.pyplot.stairs() function.
-    """
-    for data_folder in ['../generalization-cannot-share/SP Global data','generalization-cannot-share/SP Global data']:
-        if os.path.exists(data_folder):
-            break
-    if 'pri_and_co_pm.pkl' not in os.listdir(data_folder) and 'pri_and_co_pm.zip' in os.listdir(data_folder):
-        with zipfile.ZipFile(f'{data_folder}/pri_and_co_pm.zip', 'r') as zip_ref:
-            zip_ref.extractall(data_folder)
-
-    primary_only = pd.read_pickle(f'{data_folder}/primary_only.pkl')
-    coproduct_only = pd.read_pickle(f'{data_folder}/coproduct_only.pkl')
-    pri_and_co = pd.read_pickle(f'{data_folder}/pri_and_co.pkl')
-    pri_and_co_ot = pd.read_pickle(f'{data_folder}/pri_and_co_ot.pkl')
-    pri_and_co_pm = pd.read_pickle(f'{data_folder}/pri_and_co_pm.pkl')
-    tcrc_ot = pd.read_pickle(f'{data_folder}/tcrc_converted_ore_treated_basis.pkl')
-    concentrates = pd.read_pickle(f'{data_folder}/concentrates.pkl')
-    opening = pd.read_pickle(f'{data_folder}/opening.pkl')
-    mine_parameters = pd.read_pickle(f'{data_folder}/mine_parameters.pkl')
-
-    # Figure S4
-    production = primary_only[[i for i in primary_only.columns if 'Prod' in i[0]]].droplevel(2).droplevel(0,axis=1).stack().replace(0,np.nan).dropna().astype(float)
-    data, fig, hist_data = quick_hist(production,height_scale=0.5, xlabel='Production (kt)', width_scale=0.6)
-    save_quick_hist(many_sg, fig, hist_data, data, 's4_production_histogram')
-
-    # Figure S5
-    hg = (primary_only.loc[:,idx['Head Grade (%)',:]].astype(float).groupby(level=[0,1]).sum().stack().replace({0:np.nan})).dropna()
-    data, fig, hist_data = quick_hist(hg,width_scale=0.7,height_scale=0.5, xlabel='Head grade (%)')
-    save_quick_hist(many_sg, fig, hist_data, data, 's5_ore_grade_histogram')
-
-    # Figure S6
-    data, fig, hist_data = plot_best_dists(primary_only, 'Metal Payable Percent (%)', xlabel='100-Payable percent (%)', height_scale=0.5, width_scale=0.7, show=False)
-    save_quick_hist(many_sg, fig, hist_data, None, 's6_payable_percent_histogram')
-
-    # Figure S7
-    tcrc_primary, tcrc_pri = get_tcrc_primary(concentrates, opening)
-    regress_yearso = get_regress_yearso(primary_only, pri_and_co, tcrc_primary)
-    stat, fig, hist_data = quick_hist(regress_yearso['Cumulative Ore Treated (kt)'],height_scale=0.5,)
-    data = regress_yearso['Cumulative Ore Treated (kt)'].copy()
-    data = pd.concat([data],keys=[0]).unstack(1).stack()
-    save_quick_hist(many_sg, fig, hist_data, stat, 's7_cumu_ot_ratio_ot')
-
-    # Figure S8
-    fig, ax = easy_subplots(1,height_scale=0.8, width_scale=0.8)
-    a = ax[0]
-    reserves = primary_only.copy().rename(columns={'Reserves: Ore Tonnage (tonnes)':'Reserves (kt)','Total Resources: Ore Tonnage Excl Reserves (tonnes)':'Resources excl reserves (kt)','Mill Capacity - tonnes/year':'Capacity (kt)'})
-    reserves.loc[:,idx[['Reserves (kt)','Resources excl reserves (kt)','Capacity (kt)'],:]] = reserves.loc[:,idx[['Reserves (kt)','Resources excl reserves (kt)','Capacity (kt)'],:]].astype(float)/1e3
-    ratio = reserves.loc[:,'Reserves (kt)'].replace(0,np.nan)/reserves.loc[:,'Ore Treated (kt)'].replace(0,np.nan)
-    ratio = ratio.stack().dropna()
-    ratio_sub = ratio[ratio<ratio.quantile(.95)]
-    r, hist_data = find_best_dist(ratio_sub.astype(float), ax=a)
-    fit = stats.lognorm.fit(ratio_sub)
-    coef, pval = [], []
-    for n in np.arange(0,100):
-        sim = stats.lognorm.rvs(fit[0], fit[1], fit[2], size=len(ratio_sub), random_state=n)
-        result = stats.kstest(ratio_sub,sim)
-        coef += [result[0]]
-        pval += [result[1]]
-    a.set(title='Lognorm\n'+'K-S test p-value: {:.3f}'.format(np.mean(pval)))
-    if show:
-        plt.show()
-    plt.close()
-    save_quick_hist(many_sg, fig, hist_data, None, 's8_reserve_ratio_ot')
-
-    # Figure S9
-    regress = get_regress(primary_only, pri_and_co)
-    stat, fig, hist_data = quick_hist(regress['Numerical Risk'],log=False,rounded=True,height_scale=0.5)
-    save_quick_hist(many_sg, fig, hist_data, stat, 's9_numerical_risk')
-
-    # Figure S10
-    oge_results, regress_oge = get_oge(primary_only, pri_and_co, tcrc_primary)
-    data = 1-pd.concat([oge_results.slope],keys=[0]).unstack(1).stack()
-    fit = stats.lognorm.fit(data)
-    pvals = []
-    ind = 0
-    for n in range(0,100):
-        sim = stats.lognorm.rvs(fit[0],fit[1],fit[2], size=len(data), random_state=n)
-        pval = stats.kstest(data, sim)[1]
-        if n>1 and pval>np.max(pvals):
-            ind = n
-        pvals += [pval]
-
-    sim = stats.lognorm.rvs(fit[0],fit[1],fit[2], size=len(data), random_state=ind)
-    fig,axes = easy_subplots(3, ncol=3)
-    ax = axes[0]
-    data = 1-data
-    sim = 1-sim
-    bins = np.linspace(np.min(data), np.max(data), 40)
-    (n_hist, bins_hist, patches_hist) = ax.hist(data, bins=bins, alpha=0.5, label='Real', color='tab:orange')
-    (n_sim, bins_sim, patches_sim) = ax.hist(sim, bins=bins, alpha=0.5, label='Simulated', color='tab:blue');
-    ax.set(title='Ore grade elasticity to\ncumulative production', ylabel='Count', xlabel='Ore grade elasticity')
-    ax.legend()
-    hist_data_i = pd.concat([
-        pd.concat([pd.Series(n_hist),pd.Series(n_sim)],axis=1,keys=['Historical','Simulated']),
-        pd.concat([pd.Series(bins_hist),pd.Series(bins_sim)],axis=1,keys=['Historical','Simulated']),
-    ],keys=['Values','Edges'])
-
-    deyeared_grades = plotting_grades_over_time(primary_only=primary_only, axes=axes)
-    fig.tight_layout()
-    save_quick_hist(many_sg, fig, hist_data_i, deyeared_grades, 's10_ore_grade_elasticity', alt_statistics_name='grade_data')
-
-    # Figure S11, Table S20
-    regress_rr = get_regress_rr(primary_only, pri_and_co, tcrc_primary)
-    x = sm.add_constant(regress_rr[[i for i in regress_rr.columns if ('Head Grade' in i or 'Price' in i or 'SX' in i
-                                                                  or 'Mine Type' in i)]]).astype(float)
-    m = sm.GLS(regress_rr[[i for i in regress_rr.columns if 'Recovery Rate (%)' in i]],x,missing='drop').fit(cov_type='HC3')
-    save_regression_table(many_sg, m, 's20_recovery_rate')
-
-    fig,ax = easy_subplots(2)
-    lin_predict = pd.concat([
-        (regress_rr[[i for i in regress_rr.columns if 'Recovery Rate (%)' in i]]),
-        (m.predict(x)),
-        regress_rr.Commodity],
-        axis=1,keys=['Actual','Predicted','Commodity']).droplevel(1,axis=1)
-    do_a_regress(lin_predict.Actual,lin_predict.Predicted,ax=ax[0],loc='lower right')
-    sns.scatterplot(data=lin_predict, x='Actual',y='Predicted',hue='Commodity',ax=ax[0])
-    ax[0].legend(title=None, labelspacing=0.2,markerscale=1,fontsize=16,loc='lower left', ncol=2)
-    ax[0].set(xlim=(0,110),ylim=(0,110), title='Predicted vs actual')
-
-    hist_data = plot_lin_predict(lin_predict, ax[1], 'Recovery rate (%)')
-    fig.tight_layout()
-    if show:
-        plt.show()
-    plt.close()
-    save_quick_hist(many_sg, fig, hist_data, None, 's11_recovery_rate')
-
-    # Figure S12
-    tot_reclamation = mine_parameters['Reclamation cost ($M)'].dropna().groupby(level=[0,1]).sum()
-    capacity = mine_parameters['Capacity (kt)'].dropna().groupby(level=[0,1]).mean()/1e6 
-    # ^ note that capacity is actually in tonnes, is mislabeled
-    capacity.name = 'Capacity (Mt)'
-    ind = np.intersect1d(tot_reclamation.index, capacity.index)
-    capacity, tot_reclamation = capacity.loc[ind].astype(float), tot_reclamation.loc[ind].astype(float)
-    fig,a = plt.subplots()
-    do_a_regress(capacity, tot_reclamation, ax=a, log=True)
-    a.set(title='Total reclamation cost vs. mill capacity')
-    data = pd.concat([pd.concat([tot_reclamation, capacity], axis=1)],keys=[0]).unstack(1).stack()
-    n_rec, bins_rec = np.histogram(tot_reclamation)
-    n_cap, bins_cap = np.histogram(capacity)
-    hist_data_i = pd.concat([
-        pd.concat([pd.Series(n_rec),pd.Series(n_cap)],axis=1,keys=['Total reclamation cost','Capacity']),
-        pd.concat([pd.Series(bins_rec),pd.Series(bins_cap)],axis=1,keys=['Total reclamation cost','Capacity']),
-        ],keys=['Values','Edges'])
-    save_quick_hist(many_sg, fig, hist_data_i, None, 's12_reclamation_costs')
-
-    # Table S21
-    regress_tcrc_conc = get_regress_tcrc_conc(tcrc_pri, pri_and_co)
-    x = sm.add_constant(regress_tcrc_conc[[i for i in regress_tcrc_conc.columns if ('Head Grade' in i or 'Price' in i or 'SX' in i
-                                        or 'Mine Type' in i or 'Refining charge' in i) and 'Powder' not in i and 'Matte' not in i 
-                                        and '_nan' not in i and 'Dore' not in i and 'Stock Pile' not in i and 'Placer' not in i]])
-    m = sm.GLS(regress_tcrc_conc[[i for i in regress_tcrc_conc.columns if 'TCRC (USD/t ore)' in i]],
-            x.astype(float),missing='drop').fit(cov_type='HC3')
-    save_regression_table(many_sg, m, 's21_tcrc_regression')
-
-    # Figure S13
-    fig,ax = easy_subplots(2)
-    lin_predict = pd.concat([
-            regress_tcrc_conc[[i for i in regress_tcrc_conc.columns if 'TCRC (USD/t ore)' in i]],
-            m.predict(x),
-            regress_tcrc_conc.Commodity],
-            axis=1,keys=['Actual','Predicted','Commodity']).droplevel(1,axis=1)    
-    plot_lin_predict_scatter(lin_predict, ax[0], False)
-    plot_lin_predict_scatter(lin_predict, ax[1], True)
-    hist_data = lin_predict_to_hist(lin_predict)
-    save_quick_hist(many_sg, fig, hist_data, None, 's13_tcrc_regression')
-
-    # Table S22
-    regress_scapex = get_regress_scapex(primary_only, pri_and_co, tcrc_primary)
-    summ = pd.DataFrame()
-    for j in ['Capacity','none']:
-        for k in ['Grade','none']:
-            for n in ['Price','none']:
-                for o in ['SXEW','none']:
-                    for p in ['Numerical','none']:
-                        columnar = [i for i in regress_scapex.columns if (j in i or k in i or n in i or o in i or p in i
-                                                                                or 'Mine Type' in i) and 'Placer' not in i]
-                        x = sm.add_constant(regress_scapex[columnar]).astype(float)
-                        m = sm.GLS(regress_scapex[[i for i in regress_scapex.columns if 'sCAPEX norm' in i]].astype(float),
-                                x,missing='drop').fit(cov_type='HC3')
-                        summ.loc['-'.join([j,k,n,o,p]),'AIC'] = m.aic
-                        summ.loc['-'.join([j,k,n,o,p]),'BIC'] = m.bic
-                        summ.loc['-'.join([j,k,n,o,p]),'rsq'] = m.rsquared
-                        summ.loc['-'.join([j,k,n,o,p]),'model'] = m
-                        
-                        x = regress_scapex[columnar].astype(float).values
-                        summ.loc['-'.join([j,k,n,o,p]),'max_VIF'] = np.max([variance_inflation_factor(x,j) for j in np.arange(0,x.shape[1])])
-    m = summ.loc[summ.BIC.idxmin(),'model']
-    save_regression_table(many_sg, m, 's22_sustaining_capex_regression')
-
-    # Figure S14
-    j,k,n,o,p = summ.BIC.idxmin().split('-')
-    columnar = [i for i in regress_scapex.columns if (j in i or k in i or n in i or o in i or p in i
-                                                            or 'Mine Type' in i)]
-    x = sm.add_constant(regress_scapex[columnar]).astype(float)
-    y = regress_scapex[[i for i in regress_scapex.columns if 'sCAPEX norm' in i]].astype(float)
-    m = sm.GLS(y,x,missing='drop').fit(cov_type='HC3')
-
-    if 'Commodity' not in regress_scapex.columns:
-        regress_scapex['Commodity'] = regress_scapex.index.get_level_values(1)
-    lin_predict = pd.concat([
-                regress_scapex[[i for i in regress_scapex.columns if 'sCAPEX norm' in i]],
-                m.predict(x),
-                regress_scapex.Commodity],
-                axis=1,keys=['Actual','Predicted','Commodity']).droplevel(1,axis=1) 
-    fig,ax=easy_subplots(2)
-    lin_predict = pd.concat([lin_predict],keys=[0]).unstack(1).stack()
-    plot_lin_predict_scatter(lin_predict, ax[0], False)
-    lin_predict = lin_predict.loc[lin_predict.Actual<lin_predict.Actual.quantile(0.99)]
-    plot_lin_predict_scatter(lin_predict, ax[1], True)
-    hist_data = lin_predict_to_hist(lin_predict)
-    save_quick_hist(many_sg, fig, hist_data, None, 's14_sustaining_capex_regression')
-
-    # Table S23
-    regress_tcm = get_regress_tcm(primary_only, pri_and_co)
-    # j,k,n,o,p,q = summ_tcm.BIC.idxmin().split('-')
-    j,k,n,o,p,q = 'none-Grade-Price-SXEW-none-none'.split('-')
-    # j,k,n,o,p,q = 'none-Grade-Price-SXEW-none-Global Region'.split('-')
-    # j,k,n,o,p,q = 'Capacity-Grade-Price-SXEW-Numerical-Global Region'.split('-')
-
-    columnar = [i for i in regress_tcm.columns if (j in i or k in i or n in i or o in i or p in i
-                                                            or 'Mine Type' in i)]
-    x = sm.add_constant(regress_tcm[columnar]).astype(float)
-    y = regress_tcm[[i for i in regress_tcm.columns if 'Total Cash Margin' in i]].astype(float)
-    m = sm.GLS(y,x,missing='drop').fit(cov_type='HC3')
-    save_regression_table(many_sg, m, 's23_total_cash_margin_regression')
-    
-    # Figure S15
-    fig,ax = easy_subplots(2)
-    lin_predict = pd.concat([
-        y,
-        m.predict(x),
-        regress_tcm.Commodity],
-        axis=1,keys=['Actual','Predicted','Commodity']).droplevel(1,axis=1)
-    plot_lin_predict_scatter(lin_predict, ax[0], False)
-    plot_lin_predict_scatter(lin_predict, ax[1], True)
-    hist_data = lin_predict_to_hist(lin_predict)
-    save_quick_hist(many_sg, fig, hist_data, None, 's15_total_cash_margin_regression')
-
-    # Table S24
-    regress_grade = get_regress_grade(primary_only, pri_and_co, tcrc_primary)
-    x = sm.add_constant(regress_grade[[i for i in regress_grade.columns if ('Price' in i
-                                                                    or 'Mine Type' in i)]]).astype(float)
-    m = sm.GLS(regress_grade[[i for i in regress_grade.columns if 'Head Grade (%)' in i]],
-            x,missing='drop').fit(cov_type='HC3')
-    save_regression_table(many_sg, m, 's24_head_grade')
-
-    # Table S25
-    models_cat, results_cat, pval_cat, fe_models_cat, fe_results_cat, fe_pval_cat, best_models_cat, best_result, best_pvals = panel_regression_categorical(
-        primary_only,
-        pri_and_co_ot,
-        dependent_string='Total Minesite Cost (USD/t)',
-        independent_string='Head Grade (%)',
-    #     second_independent_string='Commodity Price (USD/t)',
-        take_diff=False,
-        add_oil=True,
-        add_constant=True,
-        add_categorical=False,
-        add_time=True, 
-        take_log=True,
-        inflation_adjust=True,
-        payable_basis=True,
-        rank_check=False)
-    print('Done')
-    try:
-        comp = compare(best_models_cat,precision='pvalues')
-    except:
-        print('Some models\' pvalues cannot be calculated:')
-        models_cat_drop = {}
-        for i in best_models_cat.keys():
-            try:
-                best_models_cat[i].pvalues
-                models_cat_drop[i] = best_models_cat[i]
-            except:
-                print('\t'+i)
-        comp = compare(models_cat_drop, precision='pvalues')
-    comp.dep_var = pd.Series('log(Total Minesite Cost (USD/t))', comp.cov_estimator.index)
-    concat_list = ['dep_var','estimator_method','nobs','cov_estimator','rsquared','rsquared_within','rsquared_between','rsquared_overall',]
-    ['f_statistic',]
-    comb_param = pd.DataFrame(columns=comp.params.columns)
-    for i in comp.params.index:
-        comb_param.loc[i] = comp.params.loc[i]
-        comb_param.loc[i+' p-value'] = comp.pvalues.loc[i]
-    pd.concat([
-        pd.concat([getattr(comp,i) for i in concat_list], axis=1).T,
-        comp.f_statistic.T,
-        comb_param
-    ], ).to_csv(f'{many_sg.folder_path}/tables/table_s24_panel_regression_minesite_cost.csv')
-
-    # Figure S16:
-    inds = [i for i in results_cat.index if np.any([j in i for j in ['Price','Grade','price']]) or i=='Year']
-    fig,ax=easy_subplots(inds,len(inds))
-    # with warnings.catch_warnings():
-    warnings.filterwarnings('ignore', '.*do not.*', )
-    np.seterr(all='ignore')
-    for i,a in zip(inds, ax):
-        best_result[best_pvals<0.05].loc[i].plot.bar(ax=a,title=i,color='tab:blue',alpha=1).grid(axis='x')
-        best_result[best_pvals>0.05].loc[i].plot.bar(ax=a,title=i,color='tab:blue',alpha=0.25).grid(axis='x')
-    title_str = 'Commodity price excluded' if len(inds)==3 else 'Commodity price included'
-    title_str += ' (light blue = insignificant at 95% confidence level)'
-    if len(inds)==3:
-        best_result_excl = best_result.copy()
-    else:
-        best_result_incl = best_result.copy()
-    fig.suptitle(title_str, 
-                weight='bold', y=0.92)
-    fig.tight_layout()
-    fig.set_dpi(200)
-    # init_plot2(font='Arial',font_family='sans-serif')
-    data = pd.concat([best_result, best_pvals],keys=['Parameter values','p-values'])
-    label = 's16_panel_regression_coef_minesite_cost'
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_{label}.png')
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_{label}.pdf')
-    data.to_csv(f'{many_sg.folder_path}/figures/figure_{label}.csv')
-    if show:
-        plt.show()
-    plt.close()
-
-
-    print_grade_change_per_year(primary_only)
-
-def figure_s17(many_sg):
+def figure_s4(many_sg):
     split_on_china = True
     pct_change = False
     include_global = True
@@ -2871,12 +2607,12 @@ def figure_s17(many_sg):
         volumes,
         pd.DataFrame(gdp.stack()).rename(columns={0:'GDP'}).stack().unstack(1).unstack()],
         axis=1).T.sort_index().T
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s17_sectoral_volume_indicators.pdf')
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s17_sectoral_volume_indicators.png')
-    data.to_csv(f'{many_sg.folder_path}/figures/figure_s17_sectoral_volume_indicators.csv')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s4_sectoral_volume_indicators.pdf')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s4_sectoral_volume_indicators.png')
+    data.to_csv(f'{many_sg.folder_path}/figures/figure_s4_sectoral_volume_indicators.csv')
     plt.close()
 
-def figure_s18(many_sg, show=False):
+def figure_s5(many_sg, show=False):
     import matplotlib as mpl
     target_rir = 0.55
     with warnings.catch_warnings(): 
@@ -2926,12 +2662,12 @@ def figure_s18(many_sg, show=False):
     d_b = demands.copy()
 
     data = pd.concat([d_a,d_b], axis=1, keys=['Demand, varying dematerialization','Demand, varying price'])
-    save_quick_hist(many_sg, fig, data, None, figure_description='s18_demand_vary_demat_price',)
+    save_quick_hist(many_sg, fig, data, None, figure_description='s5_demand_vary_demat_price',)
     if show:
         plt.show()
     plt.close()
 
-def figure_s19(many_sg, show=False):
+def figure_s6(many_sg, show=False):
     target_rir = 0.55
     with warnings.catch_warnings(): 
         warnings.simplefilter('error')
@@ -2972,12 +2708,12 @@ def figure_s19(many_sg, show=False):
         pd.DataFrame(rirs).rename(columns={0:'Recycling input rate'})
         ],axis=1)
     demands
-    save_quick_hist(many_sg, fig, data, demands, figure_description='s19_demand_growth_rate_collection', alt_statistics_name='leftside')
+    save_quick_hist(many_sg, fig, data, demands, figure_description='s6_demand_growth_rate_collection', alt_statistics_name='leftside')
     if show:
         plt.show()
     plt.close()
 
-def figure_s20(many_sg, show=False):
+def figure_s7(many_sg, show=False):
     filename = 'input_files/user_defined/price adjustment results.csv'
     prices = pd.read_csv(filename, index_col=0).sort_index()
     commodities = sorted(['Aluminum','Steel','Gold','Tin','Copper','Nickel','Silver','Zinc','Lead'])
@@ -2997,13 +2733,393 @@ def figure_s20(many_sg, show=False):
     data = prices[col_list].rename(columns={f'{c} original':f'{c}, unadjusted' for c in commodities})
     data = data.rename(columns={f'log({c})':f'{c}, inflation and regression adjusted' for c in commodities})
     data = data.rename(columns={f'Rolling {c}':f'{c}, rolling mean' for c in commodities})
-    save_quick_hist(many_sg, fig, data, None, figure_description='s20_prices_plus_adjust')
+    save_quick_hist(many_sg, fig, data, None, figure_description='s7_prices_plus_adjust')
     if show:
         plt.show()
     plt.close()
 
-def figure_s21(many_sg, show=False):
-    X1 = many_sg.rmse_df_sorted.loc[idx['Ag','primary_oge_scale'],:25]
+def figure_s8_to_s20_table_s2_to_s7(many_sg, show=False):
+    """
+    All the plots done in this function are using proprietary data that cannot be shared. 
+    To maximize transparency, we include the histogram data for each of the data sets used,
+    including where scatter plots are provided. Histogram plots can be recreated from the 
+    values and edges data (number of items per bin, edges of bins) using the
+    matplotlib.pyplot.stairs() function.
+    """
+    for data_folder in ['../generalization-cannot-share/SP Global data','generalization-cannot-share/SP Global data']:
+        if os.path.exists(data_folder):
+            break
+    if 'pri_and_co_pm.pkl' not in os.listdir(data_folder) and 'pri_and_co_pm.zip' in os.listdir(data_folder):
+        with zipfile.ZipFile(f'{data_folder}/pri_and_co_pm.zip', 'r') as zip_ref:
+            zip_ref.extractall(data_folder)
+
+    primary_only = pd.read_pickle(f'{data_folder}/primary_only.pkl')
+    coproduct_only = pd.read_pickle(f'{data_folder}/coproduct_only.pkl')
+    pri_and_co = pd.read_pickle(f'{data_folder}/pri_and_co.pkl')
+    pri_and_co_ot = pd.read_pickle(f'{data_folder}/pri_and_co_ot.pkl')
+    pri_and_co_pm = pd.read_pickle(f'{data_folder}/pri_and_co_pm.pkl')
+    tcrc_ot = pd.read_pickle(f'{data_folder}/tcrc_converted_ore_treated_basis.pkl')
+    concentrates = pd.read_pickle(f'{data_folder}/concentrates.pkl')
+    opening = pd.read_pickle(f'{data_folder}/opening.pkl')
+    mine_parameters = pd.read_pickle(f'{data_folder}/mine_parameters.pkl')
+
+    # Figure S8
+    production = primary_only[[i for i in primary_only.columns if 'Prod' in i[0]]].droplevel(2).droplevel(0,axis=1).stack().replace(0,np.nan).dropna().astype(float)
+    data, fig, hist_data = quick_hist(production,height_scale=0.5, xlabel='Production (kt)', width_scale=0.6)
+    save_quick_hist(many_sg, fig, hist_data, data, 's8_production_histogram')
+
+    # Figure S9
+    hg = (primary_only.loc[:,idx['Head Grade (%)',:]].astype(float).groupby(level=[0,1]).sum().stack().replace({0:np.nan})).dropna()
+    data, fig, hist_data = quick_hist(hg,width_scale=0.7,height_scale=0.5, xlabel='Head grade (%)')
+    save_quick_hist(many_sg, fig, hist_data, data, 's9_ore_grade_histogram')
+
+    # Figure S10
+    data, fig, hist_data = plot_best_dists(primary_only, 'Metal Payable Percent (%)', xlabel='100-Payable percent (%)', height_scale=0.5, width_scale=0.7, show=False)
+    save_quick_hist(many_sg, fig, hist_data, None, 's10_payable_percent_histogram')
+
+    # Figure S11
+    tcrc_primary, tcrc_pri = get_tcrc_primary(concentrates, opening)
+    regress_yearso = get_regress_yearso(primary_only, pri_and_co, tcrc_primary)
+    stat, fig, hist_data = quick_hist(regress_yearso['Cumulative Ore Treated (kt)'],height_scale=0.5,)
+    data = regress_yearso['Cumulative Ore Treated (kt)'].copy()
+    data = pd.concat([data],keys=[0]).unstack(1).stack()
+    save_quick_hist(many_sg, fig, hist_data, stat, 's11_cumu_ot_ratio_ot')
+
+    # Figure S12
+    fig, ax = easy_subplots(1,height_scale=0.8, width_scale=0.8)
+    a = ax[0]
+    reserves = primary_only.copy().rename(columns={'Reserves: Ore Tonnage (tonnes)':'Reserves (kt)','Total Resources: Ore Tonnage Excl Reserves (tonnes)':'Resources excl reserves (kt)','Mill Capacity - tonnes/year':'Capacity (kt)'})
+    reserves.loc[:,idx[['Reserves (kt)','Resources excl reserves (kt)','Capacity (kt)'],:]] = reserves.loc[:,idx[['Reserves (kt)','Resources excl reserves (kt)','Capacity (kt)'],:]].astype(float)/1e3
+    ratio = reserves.loc[:,'Reserves (kt)'].replace(0,np.nan)/reserves.loc[:,'Ore Treated (kt)'].replace(0,np.nan)
+    ratio = ratio.stack().dropna()
+    ratio_sub = ratio[ratio<ratio.quantile(.95)]
+    r, hist_data = find_best_dist(ratio_sub.astype(float), ax=a)
+    fit = stats.lognorm.fit(ratio_sub)
+    coef, pval = [], []
+    for n in np.arange(0,100):
+        sim = stats.lognorm.rvs(fit[0], fit[1], fit[2], size=len(ratio_sub), random_state=n)
+        result = stats.kstest(ratio_sub,sim)
+        coef += [result[0]]
+        pval += [result[1]]
+    a.set(title='Lognorm\n'+'K-S test p-value: {:.3f}'.format(np.mean(pval)))
+    if show:
+        plt.show()
+    plt.close()
+    save_quick_hist(many_sg, fig, hist_data, None, 's12_reserve_ratio_ot')
+
+    # Figure S13
+    regress = get_regress(primary_only, pri_and_co)
+    stat, fig, hist_data = quick_hist(regress['Numerical Risk'],log=False,rounded=True,height_scale=0.5)
+    save_quick_hist(many_sg, fig, hist_data, stat, 's13_numerical_risk')
+
+    # Figure S14
+    oge_results, regress_oge = get_oge(primary_only, pri_and_co, tcrc_primary)
+    data = 1-pd.concat([oge_results.slope],keys=[0]).unstack(1).stack()
+    fit = stats.lognorm.fit(data)
+    pvals = []
+    ind = 0
+    for n in range(0,100):
+        sim = stats.lognorm.rvs(fit[0],fit[1],fit[2], size=len(data), random_state=n)
+        pval = stats.kstest(data, sim)[1]
+        if n>1 and pval>np.max(pvals):
+            ind = n
+        pvals += [pval]
+
+    sim = stats.lognorm.rvs(fit[0],fit[1],fit[2], size=len(data), random_state=ind)
+    fig,axes = easy_subplots(3, ncol=3)
+    ax = axes[0]
+    data = 1-data
+    sim = 1-sim
+    bins = np.linspace(np.min(data), np.max(data), 40)
+    (n_hist, bins_hist, patches_hist) = ax.hist(data, bins=bins, alpha=0.5, label='Real', color='tab:orange')
+    (n_sim, bins_sim, patches_sim) = ax.hist(sim, bins=bins, alpha=0.5, label='Simulated', color='tab:blue');
+    ax.set(title='Ore grade elasticity to\ncumulative production', ylabel='Count', xlabel='Ore grade elasticity')
+    ax.legend()
+    hist_data_i = pd.concat([
+        pd.concat([pd.Series(n_hist),pd.Series(n_sim)],axis=1,keys=['Historical','Simulated']),
+        pd.concat([pd.Series(bins_hist),pd.Series(bins_sim)],axis=1,keys=['Historical','Simulated']),
+    ],keys=['Values','Edges'])
+
+    deyeared_grades = plotting_grades_over_time(primary_only=primary_only, axes=axes)
+    fig.tight_layout()
+    save_quick_hist(many_sg, fig, hist_data_i, deyeared_grades, 's14_ore_grade_elasticity', alt_statistics_name='grade_data')
+
+    # Figure S15, Table S2
+    regress_rr = get_regress_rr(primary_only, pri_and_co, tcrc_primary)
+    x = sm.add_constant(regress_rr[[i for i in regress_rr.columns if ('Head Grade' in i or 'Price' in i or 'SX' in i
+                                                                  or 'Mine Type' in i)]]).astype(float)
+    m = sm.GLS(regress_rr[[i for i in regress_rr.columns if 'Recovery Rate (%)' in i]],x,missing='drop').fit(cov_type='HC3')
+    save_regression_table(many_sg, m, 's2_recovery_rate')
+
+    fig,ax = easy_subplots(2)
+    lin_predict = pd.concat([
+        (regress_rr[[i for i in regress_rr.columns if 'Recovery Rate (%)' in i]]),
+        (m.predict(x)),
+        regress_rr.Commodity],
+        axis=1,keys=['Actual','Predicted','Commodity']).droplevel(1,axis=1)
+    do_a_regress(lin_predict.Actual,lin_predict.Predicted,ax=ax[0],loc='lower right')
+    sns.scatterplot(data=lin_predict, x='Actual',y='Predicted',hue='Commodity',ax=ax[0])
+    ax[0].legend(title=None, labelspacing=0.2,markerscale=1,fontsize=16,loc='lower left', ncol=2)
+    ax[0].set(xlim=(0,110),ylim=(0,110), title='Predicted vs actual')
+
+    hist_data = plot_lin_predict(lin_predict, ax[1], 'Recovery rate (%)')
+    fig.tight_layout()
+    if show:
+        plt.show()
+    plt.close()
+    save_quick_hist(many_sg, fig, hist_data, None, 's15_recovery_rate')
+
+    # Figure S16
+    tot_reclamation = mine_parameters['Reclamation cost ($M)'].dropna().groupby(level=[0,1]).sum()
+    capacity = mine_parameters['Capacity (kt)'].dropna().groupby(level=[0,1]).mean()/1e6 
+    # ^ note that capacity is actually in tonnes, is mislabeled
+    capacity.name = 'Capacity (Mt)'
+    ind = np.intersect1d(tot_reclamation.index, capacity.index)
+    capacity, tot_reclamation = capacity.loc[ind].astype(float), tot_reclamation.loc[ind].astype(float)
+    fig,a = plt.subplots()
+    do_a_regress(capacity, tot_reclamation, ax=a, log=True)
+    a.set(title='Total reclamation cost vs. mill capacity')
+    data = pd.concat([pd.concat([tot_reclamation, capacity], axis=1)],keys=[0]).unstack(1).stack()
+    n_rec, bins_rec = np.histogram(tot_reclamation)
+    n_cap, bins_cap = np.histogram(capacity)
+    hist_data_i = pd.concat([
+        pd.concat([pd.Series(n_rec),pd.Series(n_cap)],axis=1,keys=['Total reclamation cost','Capacity']),
+        pd.concat([pd.Series(bins_rec),pd.Series(bins_cap)],axis=1,keys=['Total reclamation cost','Capacity']),
+        ],keys=['Values','Edges'])
+    save_quick_hist(many_sg, fig, hist_data_i, None, 's16_reclamation_costs')
+
+    # Table S3
+    regress_tcrc_conc = get_regress_tcrc_conc(tcrc_pri, pri_and_co)
+    x = sm.add_constant(regress_tcrc_conc[[i for i in regress_tcrc_conc.columns if ('Head Grade' in i or 'Price' in i or 'SX' in i
+                                        or 'Mine Type' in i or 'Refining charge' in i) and 'Powder' not in i and 'Matte' not in i 
+                                        and '_nan' not in i and 'Dore' not in i and 'Stock Pile' not in i and 'Placer' not in i]])
+    m = sm.GLS(regress_tcrc_conc[[i for i in regress_tcrc_conc.columns if 'TCRC (USD/t ore)' in i]],
+            x.astype(float),missing='drop').fit(cov_type='HC3')
+    save_regression_table(many_sg, m, 's3_tcrc_regression')
+
+    # Figure S17
+    fig,ax = easy_subplots(2)
+    lin_predict = pd.concat([
+            regress_tcrc_conc[[i for i in regress_tcrc_conc.columns if 'TCRC (USD/t ore)' in i]],
+            m.predict(x),
+            regress_tcrc_conc.Commodity],
+            axis=1,keys=['Actual','Predicted','Commodity']).droplevel(1,axis=1)    
+    plot_lin_predict_scatter(lin_predict, ax[0], False)
+    plot_lin_predict_scatter(lin_predict, ax[1], True)
+    hist_data = lin_predict_to_hist(lin_predict)
+    save_quick_hist(many_sg, fig, hist_data, None, 's17_tcrc_regression')
+
+    # Table S4
+    regress_scapex = get_regress_scapex(primary_only, pri_and_co, tcrc_primary)
+    summ = pd.DataFrame()
+    for j in ['Capacity','none']:
+        for k in ['Grade','none']:
+            for n in ['Price','none']:
+                for o in ['SXEW','none']:
+                    for p in ['Numerical','none']:
+                        columnar = [i for i in regress_scapex.columns if (j in i or k in i or n in i or o in i or p in i
+                                                                                or 'Mine Type' in i) and 'Placer' not in i]
+                        x = sm.add_constant(regress_scapex[columnar]).astype(float)
+                        m = sm.GLS(regress_scapex[[i for i in regress_scapex.columns if 'sCAPEX norm' in i]].astype(float),
+                                x,missing='drop').fit(cov_type='HC3')
+                        summ.loc['-'.join([j,k,n,o,p]),'AIC'] = m.aic
+                        summ.loc['-'.join([j,k,n,o,p]),'BIC'] = m.bic
+                        summ.loc['-'.join([j,k,n,o,p]),'rsq'] = m.rsquared
+                        summ.loc['-'.join([j,k,n,o,p]),'model'] = m
+                        
+                        x = regress_scapex[columnar].astype(float).values
+                        summ.loc['-'.join([j,k,n,o,p]),'max_VIF'] = np.max([variance_inflation_factor(x,j) for j in np.arange(0,x.shape[1])])
+    m = summ.loc[summ.BIC.idxmin(),'model']
+    save_regression_table(many_sg, m, 's4_sustaining_capex_regression')
+
+    # Figure S18
+    j,k,n,o,p = summ.BIC.idxmin().split('-')
+    columnar = [i for i in regress_scapex.columns if (j in i or k in i or n in i or o in i or p in i
+                                                            or 'Mine Type' in i)]
+    x = sm.add_constant(regress_scapex[columnar]).astype(float)
+    y = regress_scapex[[i for i in regress_scapex.columns if 'sCAPEX norm' in i]].astype(float)
+    m = sm.GLS(y,x,missing='drop').fit(cov_type='HC3')
+
+    if 'Commodity' not in regress_scapex.columns:
+        regress_scapex['Commodity'] = regress_scapex.index.get_level_values(1)
+    lin_predict = pd.concat([
+                regress_scapex[[i for i in regress_scapex.columns if 'sCAPEX norm' in i]],
+                m.predict(x),
+                regress_scapex.Commodity],
+                axis=1,keys=['Actual','Predicted','Commodity']).droplevel(1,axis=1) 
+    fig,ax=easy_subplots(2)
+    lin_predict = pd.concat([lin_predict],keys=[0]).unstack(1).stack()
+    plot_lin_predict_scatter(lin_predict, ax[0], False)
+    lin_predict = lin_predict.loc[lin_predict.Actual<lin_predict.Actual.quantile(0.99)]
+    plot_lin_predict_scatter(lin_predict, ax[1], True)
+    hist_data = lin_predict_to_hist(lin_predict)
+    save_quick_hist(many_sg, fig, hist_data, None, 's18_sustaining_capex_regression')
+
+    # Table S5
+    regress_tcm = get_regress_tcm(primary_only, pri_and_co)
+    # j,k,n,o,p,q = summ_tcm.BIC.idxmin().split('-')
+    j,k,n,o,p,q = 'none-Grade-Price-SXEW-none-none'.split('-')
+    # j,k,n,o,p,q = 'none-Grade-Price-SXEW-none-Global Region'.split('-')
+    # j,k,n,o,p,q = 'Capacity-Grade-Price-SXEW-Numerical-Global Region'.split('-')
+
+    columnar = [i for i in regress_tcm.columns if (j in i or k in i or n in i or o in i or p in i
+                                                            or 'Mine Type' in i)]
+    x = sm.add_constant(regress_tcm[columnar]).astype(float)
+    y = regress_tcm[[i for i in regress_tcm.columns if 'Total Cash Margin' in i]].astype(float)
+    m = sm.GLS(y,x,missing='drop').fit(cov_type='HC3')
+    save_regression_table(many_sg, m, 's5_total_cash_margin_regression')
+    
+    # Figure S19
+    fig,ax = easy_subplots(2)
+    lin_predict = pd.concat([
+        y,
+        m.predict(x),
+        regress_tcm.Commodity],
+        axis=1,keys=['Actual','Predicted','Commodity']).droplevel(1,axis=1)
+    plot_lin_predict_scatter(lin_predict, ax[0], False)
+    plot_lin_predict_scatter(lin_predict, ax[1], True)
+    hist_data = lin_predict_to_hist(lin_predict)
+    save_quick_hist(many_sg, fig, hist_data, None, 's19_total_cash_margin_regression')
+
+    # Table S6
+    regress_grade = get_regress_grade(primary_only, pri_and_co, tcrc_primary)
+    x = sm.add_constant(regress_grade[[i for i in regress_grade.columns if ('Price' in i
+                                                                    or 'Mine Type' in i)]]).astype(float)
+    m = sm.GLS(regress_grade[[i for i in regress_grade.columns if 'Head Grade (%)' in i]],
+            x,missing='drop').fit(cov_type='HC3')
+    save_regression_table(many_sg, m, 's6_head_grade')
+
+    # Table S7
+    models_cat, results_cat, pval_cat, fe_models_cat, fe_results_cat, fe_pval_cat, best_models_cat, best_result, best_pvals = panel_regression_categorical(
+        primary_only,
+        pri_and_co_ot,
+        dependent_string='Total Minesite Cost (USD/t)',
+        independent_string='Head Grade (%)',
+    #     second_independent_string='Commodity Price (USD/t)',
+        take_diff=False,
+        add_oil=True,
+        add_constant=True,
+        add_categorical=False,
+        add_time=True, 
+        take_log=True,
+        inflation_adjust=True,
+        payable_basis=True,
+        rank_check=False)
+    print('Done')
+    try:
+        comp = compare(best_models_cat,precision='pvalues')
+    except:
+        print('Some models\' pvalues cannot be calculated:')
+        models_cat_drop = {}
+        for i in best_models_cat.keys():
+            try:
+                best_models_cat[i].pvalues
+                models_cat_drop[i] = best_models_cat[i]
+            except:
+                print('\t'+i)
+        comp = compare(models_cat_drop, precision='pvalues')
+    comp.dep_var = pd.Series('log(Total Minesite Cost (USD/t))', comp.cov_estimator.index)
+    concat_list = ['dep_var','estimator_method','nobs','cov_estimator','rsquared','rsquared_within','rsquared_between','rsquared_overall',]
+    ['f_statistic',]
+    comb_param = pd.DataFrame(columns=comp.params.columns)
+    for i in comp.params.index:
+        comb_param.loc[i] = comp.params.loc[i]
+        comb_param.loc[i+' p-value'] = comp.pvalues.loc[i]
+    pd.concat([
+        pd.concat([getattr(comp,i) for i in concat_list], axis=1).T,
+        comp.f_statistic.T,
+        comb_param
+    ], ).to_csv(f'{many_sg.folder_path}/tables/table_s7_panel_regression_minesite_cost.csv')
+
+    # Figure S20:
+    inds = [i for i in results_cat.index if np.any([j in i for j in ['Price','Grade','price']]) or i=='Year']
+    fig,ax=easy_subplots(inds,len(inds))
+    # with warnings.catch_warnings():
+    warnings.filterwarnings('ignore', '.*do not.*', )
+    np.seterr(all='ignore')
+    for i,a in zip(inds, ax):
+        best_result[best_pvals<0.05].loc[i].plot.bar(ax=a,title=i,color='tab:blue',alpha=1).grid(axis='x')
+        best_result[best_pvals>0.05].loc[i].plot.bar(ax=a,title=i,color='tab:blue',alpha=0.25).grid(axis='x')
+    title_str = 'Commodity price excluded' if len(inds)==3 else 'Commodity price included'
+    title_str += ' (light blue = insignificant at 95% confidence level)'
+    if len(inds)==3:
+        best_result_excl = best_result.copy()
+    else:
+        best_result_incl = best_result.copy()
+    fig.suptitle(title_str, 
+                weight='bold', y=0.92)
+    fig.tight_layout()
+    fig.set_dpi(200)
+    # init_plot2(font='Arial',font_family='sans-serif')
+    data = pd.concat([best_result, best_pvals],keys=['Parameter values','p-values'])
+    label = 's20_panel_regression_coef_minesite_cost'
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_{label}.png')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_{label}.pdf')
+    data.to_csv(f'{many_sg.folder_path}/figures/figure_{label}.csv')
+    if show:
+        plt.show()
+    plt.close()
+
+
+    print_grade_change_per_year(primary_only)
+
+def figure_s21(many, show=False):
+    many_sg = many
+    fig,ax = easy_subplots(1, width_scale=2.5)
+    ax = ax[0]
+    data = many_sg.rmse_df_sorted.loc[idx[:,'score'],:].droplevel(1).T
+    ax.set_prop_cycle(plt.cycler('color',mpl.color_sequences['Dark2']+[mpl.color_sequences['Dark2'][0]])+plt.cycler('linestyle',['-','--',':','-.']*2+['--']))
+    data.plot(ax=ax)
+    ax.set(ylim=[ax.get_ylim()[0]*0.7,4], xlabel='Scenario number, sorted', ylabel='Score value', title='Sorted score values for each commodity')
+    ax.legend(ncol=2)
+    fig.set_dpi(150)
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s21_sorted_score_values.pdf')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s21_sorted_score_values.png')
+    data.to_csv(f'{many_sg.folder_path}/figures/figure_s21_sorted_score_values.csv')
+    if show:
+        plt.show()
+    plt.close()
+
+def figure_s22_to_s24(many, show=False):
+    many_sg = many
+    min_pvals = []
+    index = np.arange(8,50)
+    for n in index:
+        min_pvals += [get_min_pvals_across_tests(many, n)]
+    pv = pd.concat(min_pvals, keys=index)
+    commodities = many.rmse_df.index.get_level_values(0).unique()
+    n_per_plot = 5
+    n_subplots = int(np.ceil(pv.shape[1]/n_per_plot))
+
+    n_per_figure = 3
+    n_figures = int(np.ceil(len(commodities)/n_per_figure))
+    for k in range(n_figures):
+        commodities_sub = commodities[k*n_per_figure:(k+1)*n_per_figure]
+        fig,axes = easy_subplots(n_subplots*n_per_figure, n_per_figure, height_scale=0.8)
+        for e,com in enumerate(commodities_sub):
+            pv_ag = pv.loc[idx[:,com],:].droplevel(0,axis=1).droplevel(1)
+            # pv_ag = pv_ag.div(pv_ag.max())
+
+            ax = axes[e::n_per_figure]
+            for i,a in enumerate(ax):
+                if i*n_per_plot>=pv_ag.shape[1]:
+                    continue
+                pv_ag.iloc[:,i*n_per_plot:(i+1)*n_per_plot].plot(ax=a)
+                a.legend(fontsize=14)
+                a.set_ylim(-0.05,a.get_ylim()[1]*1.25)
+                com2 = com.replace('Steel','Fe')
+                a.set(title=f'{com2}, parameter set {i+1}', xlabel='Number of scenarios selected', ylabel='P-value')
+        # fig.set_dpi(150)
+        fig.tight_layout()
+        fig.savefig(f'{many_sg.folder_path}/figures/figure_s{22+k}_uniformity_pvalues.pdf')
+        fig.savefig(f'{many_sg.folder_path}/figures/figure_s{22+k}_uniformity_pvalues.png')
+        if show:
+            plt.show()
+        plt.close()
+    pv.to_csv(f'{many_sg.folder_path}/figures/figure_s22-s24_uniformity_pvalues.csv')
+    
+def figure_s25(many_sg, show=False):
+    X1 = many_sg.rmse_df_sorted.loc[idx['Ag','primary_oge_scale'],:24]
     loc, scale = get_correct_loc_scale(X1.name[1])
     X = (X1.values-loc)/scale
     Y = ndtri(X)
@@ -3017,14 +3133,14 @@ def figure_s21(many_sg, show=False):
     ax[1].set(title='Normal-transformed distribution', ylabel='Frequency', xlabel='Transformed parameter value', xlim=(-2.65,2.65))
     ax[1].text(0.3,0.4, 'Min. norm. p-val.: {:.3f}\nT-test p-value: {:.3f}'.format(lowest_pval,ttest_pval), transform=ax[1].transAxes)
     add_axis_labels(fig)
-    pd.concat([X1,ndtri(X1)], axis=1, keys=['Original','Normal-transformed']).to_csv(f'{many_sg.folder_path}/figures/figure_s21_normality_failure.csv')
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s21_normality_failure.pdf')
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s21_normality_failure.png')
+    pd.concat([X1,ndtri(X1)], axis=1, keys=['Original','Normal-transformed']).to_csv(f'{many_sg.folder_path}/figures/figure_s25_normality_failure.csv')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s25_normality_failure.pdf')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s25_normality_failure.png')
     if show:
         plt.show()
     plt.close()
 
-def figure_s22(many_sg, show=False):
+def figure_s26(many_sg, show=False):
     tests = ['uniform-min','uniform-min-normality','uniform-ttest','uniform-shapiro','uniform-lilliefors-both','uniform-dagostino','uniform-anderson-both']
     nice_test_names = {'uniform-min':'All tests, min.\np-value','uniform-min-normality':'All normality\ntests','uniform-shapiro':'Shapiro-Wilk\ntest',
                     'uniform-lilliefors-both':'Lilliefors-corr.\nK-S test','uniform-dagostino':'D\'Ag.-Pea.\ntest',
@@ -3106,16 +3222,16 @@ def figure_s22(many_sg, show=False):
             pd.concat([i.T for i in means_list], keys=nice_names_list, axis=1), 
             pd.concat([i.T for i in pvals_list], keys=nice_names_list, axis=1), 
     ], axis=1, keys=['Table reproduction','Mean parameter values','P-values']).\
-    to_csv(f'{many_sg.folder_path}/figures/figure_s22_compare_significance_table.csv')
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s22_compare_significance_table.pdf')
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s22_compare_significance_table.png')
+    to_csv(f'{many_sg.folder_path}/figures/figure_s26_compare_significance_table.csv')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s26_compare_significance_table.pdf')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s26_compare_significance_table.png')
     
-def figure_s23(many_sg, many_15, many_16, many_17, show=False):
-    r2 = get_r2(many_sg, many_15, many_16, many_17)
+def figure_s27(many_sg, many_15, many_16, many_17, use_r2_instead_of_mape=False, show=False):
+    r2 = get_r2(many_sg, many_15, many_16, many_17, use_r2_instead_of_mape=use_r2_instead_of_mape)
     r2_difference = r2.mul(-1).add(r2['Full'],axis=0)
 
     # R2 differences
-    largest_diff = r2_difference.apply(lambda x: x.loc[abs(x).idxmax()], axis=1)
+    # largest_diff = r2_difference.apply(lambda x: x.loc[abs(x).idxmax()], axis=1)
     largest_diff = r2_difference.drop(columns='Full')
     # if 'To 2015' in largest_diff.columns:
     #     largest_diff.drop(columns='To 2015',inplace=True)
@@ -3129,8 +3245,15 @@ def figure_s23(many_sg, many_15, many_16, many_17, show=False):
     v = ax.hist(data, cumulative=True, histtype='step', density=True, linewidth=6, bins=50)
     n = v[0]
 
-    for x in [0.01, 0.02, 0.03, 0.04, 0.05, 0.1, 0.2, 0.4]:
-        print('Percent of R2 changes less than {:.02f}: {:.1f}'.format(x,(data<x).sum()/len(data)*100))
+    if use_r2_instead_of_mape:
+        change_list = [0.01, 0.02, 0.03, 0.04, 0.05, 0.1, 0.2, 0.4]
+    else:
+        change_list = [0.2,  0.5,  1,    1.5,  2,    3,   4,   6]
+    for x in change_list:
+        if use_r2_instead_of_mape:
+            print('Percent of R2 changes less than {:.02f}: {:.1f}'.format(x,(data<x).sum()/len(data)*100))
+        else:
+            print('Percent of MAPE changes less than {:.02f}: {:.1f}'.format(x,(data<x).sum()/len(data)*100))
         err = 0.005
     #     val = []
     #     while len(val)==0:
@@ -3139,17 +3262,17 @@ def figure_s23(many_sg, many_15, many_16, many_17, show=False):
     #     new_ticks += [np.mean(val)]
         
     ax.set(xlim=(ax.get_xlim()[0], data.max()),
-        title=r'$R^2$ difference from full tuning'+'\ncumulative density',
-        xlabel=r'Absolute difference in $R^2$',
+        title=r'$R^2$ difference from full tuning'+'\ncumulative density' if use_r2_instead_of_mape else 'MAPE difference from full tuning\ncumulative density',
+        xlabel=r'Absolute difference in $R^2$' if use_r2_instead_of_mape else 'Absolute difference in MAPE',
         ylabel='Cumulative density',
     #        yticks=new_ticks,
-        yticks=[0, n[0],n[1],n[4], n[8], n[14], 1]
+        yticks=[0, n[0],n[1],n[4], n[8], n[14], 1] if use_r2_instead_of_mape else [0,n[0],n[1],n[2],n[4],1]
         );
     ax.grid(True, axis='both')
     ax.yaxis.set_major_formatter(mpl.ticker.FormatStrFormatter('%0.3f'))
 
     if not hasattr(many_sg, 'means_coef_of_var'):
-        figure_s26(many_sg, many_17, many_16, many_15, show=False)    
+        figure_s30(many_sg, many_17, many_16, many_15, use_r2_instead_of_mape=use_r2_instead_of_mape, show=False)    
     means_coef_of_var = many_sg.means_coef_of_var.copy()
 
     # Coef of variation
@@ -3177,10 +3300,16 @@ def figure_s23(many_sg, many_15, many_16, many_17, show=False):
         for x in [25,50,75,100]:
             print('Percent of coefficients of variation less than {:.0f}: {:.1f}'.format(x,(data<x).sum()/len(data)*100))
 
-        print('\nLargest 10% of R2 differences')
+        if use_r2_instead_of_mape:
+            print('\nLargest 10% of R2 differences')
+        else:
+            print('\nLargest 10% of MAPE differences')
         print(largest_diff[(largest_diff>largest_diff.quantile(0.9))])
 
-        print('\nAdditional next 10% of R2 differences')
+        if use_r2_instead_of_mape:
+            print('\nAdditional next 10% of R2 differences')
+        else:
+            print('\nAdditional next 10% of MAPE differences')
         print(largest_diff[(largest_diff>largest_diff.quantile(0.8))&(largest_diff<largest_diff.quantile(0.9))])
 
     data = pd.concat([
@@ -3189,14 +3318,15 @@ def figure_s23(many_sg, many_15, many_16, many_17, show=False):
     
     fig.tight_layout()
     add_axis_labels(fig, xloc=-0.19, yloc=1.12)
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s23_cumulative_densities_r2_cov.pdf')
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s23_cumulative_densities_r2_cov.png')
-    data.to_csv(f'{many_sg.folder_path}/figures/figure_s23_cumulative_densities_r2_cov.csv')
+    r2_or_mape = 'r2' if use_r2_instead_of_mape else 'mape'
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s27_cumulative_densities_{r2_or_mape}_cov.pdf')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s27_cumulative_densities_{r2_or_mape}_cov.png')
+    data.to_csv(f'{many_sg.folder_path}/figures/figure_s27_cumulative_densities_{r2_or_mape}_cov.csv')
     if show:
         plt.show()
     plt.close()
 
-def figures_s24_and_s25(many_sg, many_17, many_16, many_15, show=False, all_only=False):
+def figures_s28_and_s29(many_sg, many_17, many_16, many_15, show=False, all_only=False):
     if not all_only:
         fig, data = plot_best_fits_many({'Full':many_sg, 
                         'To 2016':many_17, 
@@ -3204,9 +3334,9 @@ def figures_s24_and_s25(many_sg, many_17, many_16, many_15, show=False, all_only
                         'To 2014':many_15}, 
                     commodities='subset1',
                     show_all_lines=False, dpi=150)
-        fig.savefig(f'{many_sg.folder_path}/figures/figure_s24_tuning_results_training1.pdf')
-        fig.savefig(f'{many_sg.folder_path}/figures/figure_s24_tuning_results_training1.png')
-        data.to_csv(f'{many_sg.folder_path}/figures/figure_s24_tuning_results_training1.csv')
+        fig.savefig(f'{many_sg.folder_path}/figures/figure_s28_tuning_results_training1.pdf')
+        fig.savefig(f'{many_sg.folder_path}/figures/figure_s28_tuning_results_training1.png')
+        data.to_csv(f'{many_sg.folder_path}/figures/figure_s28_tuning_results_training1.csv')
         if show:
             plt.show()
         plt.close()
@@ -3217,9 +3347,9 @@ def figures_s24_and_s25(many_sg, many_17, many_16, many_15, show=False, all_only
                         'To 2014':many_15}, 
                     commodities='subset2',
                     show_all_lines=False, dpi=150)
-        fig.savefig(f'{many_sg.folder_path}/figures/figure_s25_tuning_results_training2.pdf')
-        fig.savefig(f'{many_sg.folder_path}/figures/figure_s25_tuning_results_training2.png')
-        data.to_csv(f'{many_sg.folder_path}/figures/figure_s25_tuning_results_training2.csv')
+        fig.savefig(f'{many_sg.folder_path}/figures/figure_s29_tuning_results_training2.pdf')
+        fig.savefig(f'{many_sg.folder_path}/figures/figure_s29_tuning_results_training2.png')
+        data.to_csv(f'{many_sg.folder_path}/figures/figure_s29_tuning_results_training2.csv')
         if show:
             plt.show()
         plt.close()
@@ -3229,11 +3359,11 @@ def figures_s24_and_s25(many_sg, many_17, many_16, many_15, show=False, all_only
                     'To 2015':many_16, 
                     'To 2014':many_15}, 
                 commodities='all',
-                show_all_lines=False, dpi=150)
+                show_all_lines=False, dpi=10)
     plt.close()
     many_sg.fig_fits = fig_fits
     
-def figure_s26(many_sg, many_17, many_16, many_15, show=False):
+def figure_s30(many_sg, many_17, many_16, many_15, use_r2_instead_of_mape=False, show=False):
     table, means, pvals_loc_loc, alt_means, fig = plot_colorful_table2(many_sg, stars='uniform-min', dpi=50, rand_size=None);
     plt.close()
     table15, means15, pvals15, alt_means15, fig = plot_colorful_table2(many_15, stars='uniform-min', dpi=50, rand_size=None);
@@ -3243,7 +3373,7 @@ def figure_s26(many_sg, many_17, many_16, many_15, show=False):
     table17, means17, pvals17, alt_means17, fig = plot_colorful_table2(many_17, stars='uniform-min', dpi=50, rand_size=None);
     plt.close()
 
-    rmse_df = many_sg.rmse_df_sorted.loc[:,:25]
+    rmse_df = many_sg.rmse_df_sorted.loc[:,:24]
     rmse_df = rmse_df.loc[idx[:,[i for i in rmse_df.index.levels[1] if np.all([j not in i for j in ['R2','RMSE','score']])]],:]
     scales = rmse_df.apply(lambda x: get_correct_loc_scale(x.name[1])[1], axis=1)
     scales_nice = scales.rename(make_parameter_names_nice(scales.index.levels[1]), level=1)
@@ -3252,7 +3382,7 @@ def figure_s26(many_sg, many_17, many_16, many_15, show=False):
     cov_within = cov_within.rename(make_parameter_names_nice(cov_within.columns), axis=1).T
 
     if not hasattr(many_sg, 'fig_fits'):
-        figures_s24_and_s25(many_sg, many_17, many_16, many_15, show=False, all_only=True)
+        figures_s28_and_s29(many_sg, many_17, many_16, many_15, show=False, all_only=True)
     fig_fits = many_sg.fig_fits
     means_all = pd.concat([means, means15, means16, means17], 
                         keys=['Full','Split, 2014','Split, 2015', 'Split, 2016']).unstack(0).droplevel(0,axis=1)
@@ -3284,12 +3414,20 @@ def figure_s26(many_sg, many_17, many_16, many_15, show=False):
         title = a.get_title()
         lines = a.get_lines()
         labels = [i.get_label() for i in lines]
-        labels = [i.replace('Simulated','Full') for i in labels if i!='Historical']
-        keys = [i.split(':')[0] for i in labels]
-        r2 = [float(i.split('=')[1]) for i in labels]
-        r2_series = pd.Series(r2,keys)
-        r2_series.name = title.split(', ')[1]
-        r2_series = pd.concat([r2_series], keys=[title.split(',')[0]])
+        if use_r2_instead_of_mape:
+            labels = [i.replace('Simulated','Full') for i in labels if i!='Historical']
+            keys = [i.split(':')[0] for i in labels]
+            r2 = [float(i.split('=')[1]) for i in labels]
+            r2_series = pd.Series(r2,keys)
+            r2_series.name = title.split(', ')[1]
+            r2_series = pd.concat([r2_series], keys=[title.split(',')[0]])
+        else:
+            labels = [i.replace('Simulated','Full') for i in labels]
+            line_data = {l.split(':')[0]:pd.Series(d.get_xydata()[:,1], d.get_xydata()[:,0]) for l,d in zip(labels, lines)}
+            line_data = {l: line_data[l][line_data[l]>=0] for l in line_data}
+            r2_dict = {i: np.mean(abs((line_data[i]-line_data['Historical'])/line_data['Historical'])) for i in line_data if i!='Historical'}
+            r2_series = pd.concat([pd.Series(r2_dict)], keys=[title.split(',')[0]])
+            r2_series.name = title.split(', ')[1]
         r2_df = pd.concat([r2_df, r2_series],axis=1)
     r2 = r2_df.stack().unstack(level=1)
     r2_difference = r2.mul(-1).add(r2['Full'],axis=0)
@@ -3335,7 +3473,10 @@ def figure_s26(many_sg, many_17, many_16, many_15, show=False):
         for_r2_diff
     ],axis=1,keys=['CoV-train','','CoV-parameters'])
     quantile = for_r2_diff.droplevel(0,axis=1).stack().quantile(0.9)
-    print(f'R2 difference divided by 90th percentile: {quantile}')
+    if use_r2_instead_of_mape:
+        print(f'R2 difference divided by 90th percentile: {quantile}')
+    else:
+        print(f'MAPE difference divided by 90th percentile: {quantile}')
     for_r2_diff /= quantile
     for_r2_diff.loc[:,'All'] = np.nan
     for_r2_diff = pd.concat([
@@ -3372,6 +3513,11 @@ def figure_s26(many_sg, many_17, many_16, many_15, show=False):
         for_r2_diff_nn,
     ])
 
+    if 'Region specific intensity elasticity to price' in cov_importance.index:
+        cov_importance = cov_importance.drop('Region specific intensity elasticity to price')
+    if 'Region specific intensity elasticity to price' in cov_importance_nn.index:
+        cov_importance_nn = cov_importance_nn.drop('Region specific intensity elasticity to price')
+    
     
     sns.heatmap(
         cov_importance.drop(columns='All').droplevel(0,axis=1), 
@@ -3385,19 +3531,22 @@ def figure_s26(many_sg, many_17, many_16, many_15, show=False):
         cmap='Reds',
         cbar_kws={'ticks':[], 'label':'Increasing value →'}
     )
+    xlab = r'Relative $R^2$ change                                      Relative $R^2$ change   ' if use_r2_instead_of_mape else \
+            'Relative MAPE change                                    Relative MAPE change'
     ax.set(title ='CoV - means across training sets              CoV - full tuning parameters    ',
-        xlabel=r'Relative $R^2$ change                                      Relative $R^2$ change   ',
+        xlabel=xlab,
         )
     fig.set(dpi=150)
     if show:
         plt.show()
     plt.close()
     data = cov_importance.copy()
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s26_cov_rel_r2.pdf')
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s26_cov_rel_r2.png')
-    data.to_csv(f'{many_sg.folder_path}/figures/figure_s26_cov_rel_r2.csv')
+    r2_or_mape = 'r2' if use_r2_instead_of_mape else 'mape'
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s30_cov_rel_{r2_or_mape}.pdf')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s30_cov_rel_{r2_or_mape}.png')
+    data.to_csv(f'{many_sg.folder_path}/figures/figure_s30_cov_rel_{r2_or_mape}.csv')
 
-def figure_s28(manies, show=False):
+def figure_s32(manies, show=False):
     """must be [many_sg, many_17, many_16, many_15] in that order"""
     many_sg, many_17, many_16, many_15 = manies
     many_names = ['2001-2019', '2001-2016', '2001-2015', '2001-2014']
@@ -3405,7 +3554,7 @@ def figure_s28(manies, show=False):
     data = pd.DataFrame()
     for many,a,name in zip(manies, ax, many_names):
         cummin_score = many.rmse_df.loc[idx[:,'score'],:].cummin(axis=1).droplevel(1).T
-    #     cummin_score = many.rmse_df.loc[idx[:,'score'],:].droplevel(1).T.rolling(20).mean()
+        # cummin_score = many.rmse_df.loc[idx[:,'score'],:].droplevel(1).T.rolling(20).mean()
         # ind = many.rmse_df.loc[idx[:,'score'],:].min(axis=1).droplevel(1).sort_values(ascending=False).index
         # cummin_score = cummin_score.loc[:,ind]
         cummin_score = cummin_score.T.sort_index().T
@@ -3419,21 +3568,21 @@ def figure_s28(manies, show=False):
         data = pd.concat([data,score])
     fig.tight_layout()
     fig.set_dpi(150)
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s28_bo_learning_curves.pdf')
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s28_bo_learning_curves.png')
-    data.to_csv(f'{many_sg.folder_path}/figures/figure_s28_bo_learning_curves.csv')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s32_bo_learning_curves.pdf')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s32_bo_learning_curves.png')
+    data.to_csv(f'{many_sg.folder_path}/figures/figure_s32_bo_learning_curves.csv')
     if show:
         plt.show()
     plt.close()
     
-def figure_s29(many_sg, show=False):
+def figure_s33(many_sg, show=False):
     log = True
     static_lifetimes=pd.read_excel('input_files/static/Generalization drive file.xlsx',
                                 sheet_name='Static lifetimes', index_col=0,header=[0,1]).loc[2019].unstack()
     static_lifetimes.loc[:,'Static lifetime'] = static_lifetimes['Reserves']/static_lifetimes['Mine production']
     static_lifetime = static_lifetimes['Static lifetime']
     opening_probs = many_sg.rmse_df_sorted.loc[idx[:,'incentive_opening_probability'],
-                                            :25].astype(float).mean(axis=1).droplevel(1)
+                                            :24].astype(float).mean(axis=1).droplevel(1)
     price = many_sg.historical_data.loc[idx[:,2019],'Primary commodity price'].droplevel(1)
     both = pd.concat([static_lifetime, opening_probs, price],axis=1,
                     keys=['Static lifetime','Opening probability','Price'])
@@ -3504,24 +3653,24 @@ def figure_s29(many_sg, show=False):
 
     fig.tight_layout()
     fig.set_dpi(150)
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s29_static_lifetime_fraction_price.pdf')
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s29_static_lifetime_fraction_price.png')
-    both.to_csv(f'{many_sg.folder_path}/figures/figure_s29_static_lifetime_fraction_price.csv')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s33_static_lifetime_fraction_price.pdf')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s33_static_lifetime_fraction_price.png')
+    both.to_csv(f'{many_sg.folder_path}/figures/figure_s33_static_lifetime_fraction_price.csv')
     if show:
         plt.show()
     plt.close()
 
-def figures_s30_and_s32(many, show=False):
-    for which in ['s30','s32']:
-        demand_bool=which=='s30' # demand_bool=true means plot demand, false means plot scrap collected
+def figures_s34_and_s36(many, show=False):
+    for which in ['s34','s36']:
+        demand_bool=which=='s34' # demand_bool=true means plot demand, false means plot scrap collected
         years = np.arange(2001,2020)
         if demand_bool:
             demand_cols = [i for i in many.results.columns if 'demand, global' in i]
-            demand = many.results_sorted.loc[idx[:,:25,:],demand_cols].groupby(level=[0,2]).mean()
+            demand = many.results_sorted.loc[idx[:,:24,:],demand_cols].groupby(level=[0,2]).mean()
             demand = demand.rename(columns=dict(zip(demand.columns,[i.split(' ')[0] for i in demand.columns])))
         else:
             demand_cols = [i for i in many.results.columns if 'Old scrap' in i and 'collection' not in i]
-            demand = many.results_sorted.loc[idx[:,:25,:],demand_cols].groupby(level=[0,2]).mean()
+            demand = many.results_sorted.loc[idx[:,:24,:],demand_cols].groupby(level=[0,2]).mean()
             demand = demand.rename(columns=dict(zip(demand.columns,[i.split(' ')[-1].capitalize() for i in demand.columns])))
 
         comms = demand.index.get_level_values(0).unique()
@@ -3563,14 +3712,14 @@ def figures_s30_and_s32(many, show=False):
             plt.show()
         plt.close()
 
-def figure_s31(many_sg, show=False):
+def figure_s35(many_sg, show=False):
     years = np.arange(2001,2020)
     demand_cols = [i for i in many_sg.results.columns if 'demand, global' in i]
-    demand = many_sg.results_sorted.loc[idx[:,:25,:],demand_cols].groupby(level=[0,2]).mean()
+    demand = many_sg.results_sorted.loc[idx[:,:24,:],demand_cols].groupby(level=[0,2]).mean()
     demand = demand.rename(columns=dict(zip(demand.columns,[i.split(' ')[0] for i in demand.columns])))
 
     demand_cols_cn = [i for i in many_sg.results.columns if 'demand, China' in i]
-    demand_cn = many_sg.results_sorted.loc[idx[:,:25,:],demand_cols_cn].groupby(level=[0,2]).mean()
+    demand_cn = many_sg.results_sorted.loc[idx[:,:24,:],demand_cols_cn].groupby(level=[0,2]).mean()
     demand_cn = demand_cn.rename(columns=dict(zip(demand_cn.columns,[i.split(' ')[0] for i in demand_cn.columns])))
 
     china_demand_fraction = demand_cn.sum(axis=1)/demand.sum(axis=1)
@@ -3603,14 +3752,14 @@ def figure_s31(many_sg, show=False):
     data = data.reset_index().rename(columns={'level_0':'Commodity', 'level_1':'Year'})
     # fig.set_dpi(150)
     fig.tight_layout()
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s31_china_fraction_demand.pdf')
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s31_china_fraction_demand.png')
-    data.to_csv(f'{many_sg.folder_path}/figures/figure_s31_china_fraction_demand.csv')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s35_china_fraction_demand.pdf')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s35_china_fraction_demand.png')
+    data.to_csv(f'{many_sg.folder_path}/figures/figure_s35_china_fraction_demand.csv')
     if show: 
         plt.show()
     plt.close()
     
-def figures_s33_to_s36(many_sg, show=False):
+def figures_s37_to_s40(many_sg, show=False):
     def plot_future_for_variable(many, commodity='copper', var='Mean total cash margin', n=50, 
                     color='#1b9e77', dpi=50, end_year=2040, ax=0):
         if type(ax)==int:
@@ -3634,7 +3783,7 @@ def figures_s33_to_s36(many_sg, show=False):
         ax.set(ylabel=var+f' ({label})', title=commodity.capitalize().replace('Steel','Fe'))
         return fig, ax, data
 
-    def plot_actual_variables(many, variable='Mean mine grade', dpi=50, show=False):
+    def plot_actual_variables(many, variable='Mean mine grade', dpi=50, use_r2_instead_of_mape=False, show=False):
         """
         varible: str, options are: `Mean mine grade`, 
         `Mean total minesite cost`, `Mean total cash margin`, 
@@ -3642,8 +3791,8 @@ def figures_s33_to_s36(many_sg, show=False):
         """
         colors = ['#1b9e77','#d95f02','#7570b3','#e7298a','#66a61e','#e6ab02','#a6761d','#666666']
         commodities = many.rmse_df.index.get_level_values(0).unique()
-    #     mean_grade_actual = pd.read_excel('generalization/input_files/user_defined/case study data.xlsx',
-    #                                       sheet_name='Ore grade', index_col=0)
+        # mean_grade_actual = pd.read_excel('generalization/input_files/user_defined/case study data.xlsx',
+        #                                   sheet_name='Ore grade', index_col=0)
         mean_grade_actual = pd.read_excel(
             'input_files/static/SP Global weighted mean mine parameters update.xlsx',
             index_col=0, header=[0,1])
@@ -3653,7 +3802,7 @@ def figures_s33_to_s36(many_sg, show=False):
                     'Mean total cash margin':'Inflation-adjusted total cash margin (USD/t)'
                     }
         actual_variable = variable_map[variable]
-        mean_grade_actual = mean_grade_actual.loc[:2019,idx[:,actual_variable]].droplevel(1,axis=1)
+        mean_grade_actual = mean_grade_actual.loc[:2019,idx[:,actual_variable]].droplevel(1,axis=1).dropna(how='all',axis=1)
         all_sim_data = pd.DataFrame()
         fig,ax = easy_subplots(commodities, dpi=dpi, height_scale=0.8)
         for comm,color,a in zip(commodities, np.tile(colors,(2)),ax):
@@ -3662,7 +3811,22 @@ def figures_s33_to_s36(many_sg, show=False):
                                             color=color, dpi=50, n=25, commodity=comm, end_year=2019)[1:]
             if comm.capitalize() in mean_grade_actual.columns:
                 ax.plot(mean_grade_actual.loc[2001:, comm.capitalize()], color='k', label='Historical')
-                ax.legend()
+                lines = a.get_lines()
+                labels = [i.get_label() for i in lines]
+                line_data = {l:pd.Series(d.get_xydata()[:,1], d.get_xydata()[:,0]) for l,d in zip(labels, lines)}
+                if use_r2_instead_of_mape:
+                    r2_or_mape = sm.GLS(line_data['Historical'], sm.add_constant(line_data['Simulated'])).fit(cov_type='HC3').rsquared
+                    r2_or_mape_str = r'$R^2$'+'={:.2f}'.format(r2_or_mape)
+                else:
+                    s = line_data['Simulated']
+                    h = line_data['Historical']
+                    s,h = s[h>0], h[h>0]
+                    r2_or_mape = np.median(abs((s-h)/h))*100
+                    r2_or_mape_str = 'MAPE={:.1f}%'.format(r2_or_mape)
+                h,l = ax.get_legend_handles_labels()
+                h += [Line2D([0],[0], color='w', linewidth=0)]
+                l += [r2_or_mape_str]
+                ax.legend(handles=h, labels=l)
             else:
                 ax.get_legend().remove()
             sim_data['Commodity'] = comm
@@ -3682,35 +3846,35 @@ def figures_s33_to_s36(many_sg, show=False):
         return fig, all_data
 
     fig, data = plot_actual_variables(many_sg, variable='Mean mine grade')
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s33_mean_ore_grade.pdf')
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s33_mean_ore_grade.png')
-    data.to_csv(f'{many_sg.folder_path}/figures/figure_s33_mean_ore_grade.csv')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s37_mean_ore_grade.pdf')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s37_mean_ore_grade.png')
+    data.to_csv(f'{many_sg.folder_path}/figures/figure_s37_mean_ore_grade.csv')
     if show: 
         plt.show()
     plt.close()
     fig, data = plot_actual_variables(many_sg, variable='TCRC')
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s34_mean_tcrc.pdf')
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s34_mean_tcrc.png')
-    data.to_csv(f'{many_sg.folder_path}/figures/figure_s34_mean_tcrc.csv')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s38_mean_tcrc.pdf')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s38_mean_tcrc.png')
+    data.to_csv(f'{many_sg.folder_path}/figures/figure_s38_mean_tcrc.csv')
     if show: 
         plt.show()
     plt.close()
     fig, data = plot_actual_variables(many_sg, variable='Mean total cash margin')
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s35_mean_total_cash_margin.pdf')
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s35_mean_total_cash_margin.png')
-    data.to_csv(f'{many_sg.folder_path}/figures/figure_s35_mean_total_cash_margin.csv')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s39_mean_total_cash_margin.pdf')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s39_mean_total_cash_margin.png')
+    data.to_csv(f'{many_sg.folder_path}/figures/figure_s39_mean_total_cash_margin.csv')
     if show: 
         plt.show()
     plt.close()
     fig, data = plot_actual_variables(many_sg, variable='Mean total minesite cost')
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s36_mean_total_minesite_cost.pdf')
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s36_mean_total_minesite_cost.png')
-    data.to_csv(f'{many_sg.folder_path}/figures/figure_s36_mean_total_minesite_cost.csv')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s40_mean_total_minesite_cost.pdf')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s40_mean_total_minesite_cost.png')
+    data.to_csv(f'{many_sg.folder_path}/figures/figure_s40_mean_total_minesite_cost.csv')
     if show: 
         plt.show()
     plt.close()
 
-def figure_s37(many_sg, show=False):
+def figure_s41(many_sg, show=False):
     if not hasattr(many_sg, 'colorful_means'):
         figure_4(many_sg)
     means = many_sg.colorful_means.copy()
@@ -3738,17 +3902,17 @@ def figure_s37(many_sg, show=False):
     ax.set_title(' ')
     fig.set_dpi(200)
     fig.tight_layout()
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s37_decision_tree_assessment.pdf')
-    fig.savefig(f'{many_sg.folder_path}/figures/figure_s37_decision_tree_assessment.png')
-    bhu_param_color.T.to_csv(f'{many_sg.folder_path}/figures/figure_s37_decision_tree_assessment.csv')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s41_decision_tree_assessment.pdf')
+    fig.savefig(f'{many_sg.folder_path}/figures/figure_s41_decision_tree_assessment.png')
+    bhu_param_color.T.to_csv(f'{many_sg.folder_path}/figures/figure_s41_decision_tree_assessment.csv')
     if show:
         plt.show()
     plt.close()
 
-def table_3(many_sg,  many_17, many_16, many_15):
+def table_s27(many_sg,  many_17, many_16, many_15, use_r2_instead_of_mape=False):
     # Regression table:
     if not hasattr(many_sg,'results_all') or True:
-        results_all = run_r2_parameter_change_regressions(many_sg, many_17, many_16, many_15)
+        results_all = run_r2_parameter_change_regressions(many_sg, many_17, many_16, many_15, use_r2_instead_of_mape=use_r2_instead_of_mape)
     else:
         results_all = many_sg.results_all
     results_all_3 = results_all.copy()
@@ -3756,7 +3920,13 @@ def table_3(many_sg,  many_17, many_16, many_15):
     for p in ['Total demand', 'Refined price','Mine production']:
         results = results_all_3.loc[p]
         min_frac = 0.4 if p=='Mine production' else 0.6
-        m = results.loc[(results.frac_positive>0.4)&(results.f_pvalue<0.1)].sort_values(by='AIC').m.iloc[0]
+        if use_r2_instead_of_mape:
+            m = results.loc[(results.frac_positive>0.4)&(results.f_pvalue<0.1)].sort_values(by='AIC').m.iloc[0]
+        else:
+            if (results.f_pvalue<0.1).sum()>0:
+                m = results.loc[(results.frac_positive>0)&(results.f_pvalue<0.2)].sort_values(by='AIC').m.iloc[0]
+            else:
+                m = results.sort_values(by='AIC').m.iloc[0]
         out = pd.DataFrame('', index=[], columns=[0,1])
         out.loc['R-squared:',1] = round(m.rsquared,3)
         out.loc['Adj. R-squared:',1] = round(m.rsquared_adj,3)
@@ -3776,7 +3946,7 @@ def table_3(many_sg,  many_17, many_16, many_15):
         table_stats = pd.concat([table_stats,out],axis=1)
     table_stats = table_stats.fillna('').droplevel(1,axis=1)
     many_sg.table_stats = table_stats.copy()
-    table_stats.to_csv(f'{many_sg.folder_path}/tables/table_3_regression_results_table.csv')
+    table_stats.to_csv(f'{many_sg.folder_path}/tables/table_s27_regression_results_table.csv')
 
 def print_grade_change_per_year(primary_only):
     df = primary_only.loc[:,

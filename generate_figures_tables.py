@@ -43,55 +43,61 @@ def output_figures_tables(main_folder, split_15_folder=None, split_16_folder=Non
     saved in a publicly-accessible space. The functions called when the user string
     is equal to the author`s original value rely on data outside accessible file paths,
     and will produce errors if a run is attempted. Please contact the author for data
-    questions related to these figures (Supplementary Figures 4-16 and 
-    Supplementary Tables 20-24). The proprietary data source is S&P Global Capital IQ Pro.
+    questions related to these figures (Supplementary Figures 8-20 and 
+    Supplementary Tables 2-7). The proprietary data source is S&P Global Capital IQ Pro.
     """
     many_sg = Many()
     many_sg.load_data(main_folder)
 
 
-    # if split_15_folder is not None:
-    #     many_15 = Many()
-    #     many_15.load_data(split_15_folder)
-    # else:
-    #     print('no folder given for the train-test 2001-2015 split')
+    if split_15_folder is not None:
+        many_15 = Many()
+        many_15.load_data(split_15_folder)
+    else:
+        print('no folder given for the train-test 2001-2015 split')
 
-    # if split_16_folder is not None:
-    #     many_16 = Many()
-    #     many_16.load_data(split_16_folder)
-    # else:
-    #     print('no folder given for the train-test 2001-2016 split')
+    if split_16_folder is not None:
+        many_16 = Many()
+        many_16.load_data(split_16_folder)
+    else:
+        print('no folder given for the train-test 2001-2016 split')
 
-    # if split_17_folder is not None:
-    #     many_17 = Many()
-    #     many_17.load_data(split_17_folder)
-    # else:
-    #     print('no folder given for the train-test 2001-2017 split')
+    if split_17_folder is not None:
+        many_17 = Many()
+        many_17.load_data(split_17_folder)
+    else:
+        print('no folder given for the train-test 2001-2017 split')
 
     figures_2_and_3(many_sg)
-    # figure_4(many_sg)
-    # figures_5_and_s27(many_sg)
-    # figure_s17(many_sg)
-    # figure_s18(many_sg)
-    # figure_s19(many_sg)
-    # figure_s20(many_sg)
-    # figure_s21(many_sg)
-    # figure_s22(many_sg)
-    # figure_s29(many_sg)
-    # figures_s30_and_s32(many_sg)
-    # figure_s31(many_sg)
-    # figures_s33_to_s36(many_sg)
-    # figure_s37(many_sg)
+    figure_4(many_sg)
+    figures_5_and_s31(many_sg)
     
-    # if np.all([i is not None for i in [split_15_folder, split_16_folder, split_17_folder]]):
-    #     figure_s23(many_sg, many_15, many_16, many_17)
-    #     figures_s24_and_s25(many_sg, many_17, many_16, many_15)
-    #     figure_s26(many_sg, many_17, many_16, many_15)
-    #     figure_s28([many_sg, many_17, many_16, many_15])
-    #     table_3(many_sg,  many_17, many_16, many_15)
+    figure_s4(many_sg)
+    figure_s5(many_sg)
+    figure_s6(many_sg)
+    figure_s7(many_sg)
+    figure_s21(many_sg)
+    figure_s22_to_s24(many_sg)
+    figure_s25(many_sg)
+    figure_s26(many_sg)
+    figure_s33(many_sg)
+    figures_s34_and_s36(many_sg)
+    figure_s35(many_sg)
+    figures_s37_to_s40(many_sg)
+    figure_s41(many_sg)
+    
+    if np.all([i is not None for i in [split_15_folder, split_16_folder, split_17_folder]]):
+        table_s27(many_sg,  many_17, many_16, many_15)
+        figure_s27(many_sg, many_15, many_16, many_17, show=False)
+        figures_s28_and_s29(many_sg, many_17, many_16, many_15, show=False, all_only=False)
+        figure_s30(many_sg, many_17, many_16, many_15, show=False)
+        figure_s32([many_sg, many_17, many_16, many_15], show=False)
+        
 
-    # if user=='jwr':
-        # figure_s4_to_s16_table_s20_to_s24(many_sg)
+    if user=='jwr':
+        figure_s8_to_s20_table_s2_to_s7(many_sg)
+    return
 
 output_figures_tables(PAPER_MAIN_FOLDER, PAPER_SPLIT_2015_FOLDER, PAPER_SPLIT_2016_FOLDER, PAPER_SPLIT_2017_FOLDER, USER)
+# output_figures_tables(PAPER_MAIN_FOLDER, None, None, None, USER)
 

@@ -1,0 +1,17 @@
+,Total demand,Total demand,Total demand,Refined price,Refined price,Refined price,Mine production,Mine production,Mine production
+0,R-squared:,,0.314,R-squared:,,0.577,R-squared:,,0.543
+1,Adj. R-squared:,,0.15,Adj. R-squared:,,0.45,Adj. R-squared:,,0.406
+2,F-statistic:,,1.669,F-statistic:,,0.209,F-statistic:,,3.253
+3,Prob(F-statistic):,,0.186,Prob(F-statistic):,,0.97,Prob(F-statistic):,,0.021
+4,No. Observations:,,27.0,No. Observations:,,27.0,No. Observations:,,27.0
+5,Df Residuals:,,21.0,Df Residuals:,,20.0,Df Residuals:,,20.0
+6,Df Model:,,5.0,Df Model:,,6.0,Df Model:,,6.0
+7,Covariance Type:,,HC3,Covariance Type:,,HC3,Covariance Type:,,HC3
+8,Parameter,Value,P>|z|,Parameter,Value,P>|z|,Parameter,Value,P>|z|
+9,Constant,3.356,0.078,Constant,-0.706,0.882,Constant,2.636,0.098
+10,Ref. cap. growth frac. from mine prod. growth,-8.246,0.203,Collection elasticity to scrap price,-30.021,0.353,Intensity elasticity to GDP,-6.072,0.005
+11,Refinery SR elasticity to TCRC,10.841,0.086,Incentive tonnage elasticity to price,43.258,0.386,Primary refinery CU elasticity to price,11.799,0.212
+12,Scrap spread elasticity to SD,8.731,0.075,Intensity elasticity to price,-34.309,0.37,Ref. cap. growth frac. from mine prod. growth,-9.011,0.256
+13,Secondary refinery CU elasticity to TCRC,-15.132,0.101,Primary refinery CU elasticity to TCRC,36.467,0.366,Refinery SR elasticity to TCRC,13.5,0.051
+14,TCRC elasticity to price,-13.205,0.204,Refinery SR elasticity to scrap spread,-76.667,0.3,Secondary refinery CU elasticity to TCRC,-10.547,0.234
+15,,,,Secondary refinery CU elasticity to price,88.937,0.313,Secondary refinery CU elasticity to price,6.365,0.219

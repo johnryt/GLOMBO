@@ -23,3 +23,4 @@ You can check the glombo working environment was created by running `conda env l
  The full historical tuning presented in the paper can be run using the `run.py` python file. It took several days on a PC with a 13th generation Intel i9 2200 MHz, 24 core processor and 64 GB of RAM, so understand that this is a substantial commitment. 
 
  All the remaining code is within the `modules` folder, with `Many.py` the most useful for running several iterations of the model (recommended in all circumstances, as there are instances of instability).
+ 

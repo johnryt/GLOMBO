@@ -9,7 +9,7 @@
 7,Covariance Type:,,HC3,Covariance Type:,,HC3,Covariance Type:,,HC3
 8,Parameter,Value,P>|z|,Parameter,Value,P>|z|,Parameter,Value,P>|z|
 9,Constant,3.356,0.078,Constant,-0.706,0.882,Constant,2.636,0.098
-10,Ref. cap. growth frac. from mine prod. growth,-8.246,0.203,Collection elasticity to scrap price,-30.021,0.353,Intensity elasticity to GDP,-6.072,0.005
+10,Ref. cap. growth frac. from mine prod. growth,-8.246,0.203,Collection elasticity to scrap price,-30.021,0.353,Intensity elasticity to GDPPC,-6.072,0.005
 11,Refinery SR elasticity to TCRC,10.841,0.086,Incentive tonnage elasticity to price,43.258,0.386,Primary refinery CU elasticity to price,11.799,0.212
 12,Scrap spread elasticity to SD,8.731,0.075,Intensity elasticity to price,-34.309,0.37,Ref. cap. growth frac. from mine prod. growth,-9.011,0.256
 13,Secondary refinery CU elasticity to TCRC,-15.132,0.101,Primary refinery CU elasticity to TCRC,36.467,0.366,Refinery SR elasticity to TCRC,13.5,0.051

@@ -960,7 +960,7 @@ def run_r2_parameter_change_regressions(many_sg, many_17, many_16, many_15, use_
             include_vals = include_vals[include_vals].index
             include_vals = include_vals[~include_vals.isin(['Incentive mine cost change per year'])]
         else:
-            include_vals = ['Intensity elasticity to time','Intensity elasticity to GDP','Mine cost change per year',
+            include_vals = ['Intensity elasticity to time','Intensity elasticity to GDPPC','Mine cost change per year',
                             'Ore grade elasticity to COT distribution mean','Mine CU elasticity to TCM',
                             'Secondary refinery CU elasticity to price','Fraction of viable mines that open']
         combos = []
@@ -1920,16 +1920,23 @@ def panel_regression_categorical(primary_only, pri_and_co_ot, independent_string
 def add_axis_labels(fig, option=None, xloc=-0.1, yloc=1.03):
     chars = character_list[10:36]
     ax = fig.axes
+    xlocs     = {1:-0.06, 2:-0.12, 3:-0.15, 4:-0.18, 5:-0.21, 6:-0.24}
+    xlocs_dec = {1:-0.11, 2:-0.14, 3:-0.17, 4:-0.20, 5:-0.23, 6:-0.26}
     for label,a in zip(chars, ax):
         xticks = len(a.get_xticks())
-        if option=='price_middle_column':
+        ylabel_width = max([len(str(i).split("'")[1].split("'")[0]) for i in a.get_yticklabels()])
+        ylabel_width_no_dec = max([len(str(i).split("'")[1].split("'")[0].replace('.','')) for i in a.get_yticklabels()])
+        has_dec = ylabel_width!=ylabel_width_no_dec
+        if option=='ylabel_width':
+            xloc = xlocs_dec[ylabel_width_no_dec] if has_dec else xlocs[ylabel_width]
+        elif option=='price_middle_column':
             xloc = -0.21 if a in ax[1::3] else -0.17
             yloc = 1.02
         elif option in ['subset1','all']:
-            xloc = -0.035 if xticks>10 else -0.07 if xticks>7 else -0.08
+            xloc = -0.03 if xticks>10 else -0.085 if xticks>7 and has_dec else -0.06 if xticks>7 else -0.055 if xticks>6 else -0.095
             yloc = 1.03
         elif option=='subset2':
-            xloc = -0.05 if xticks>6 else -0.08 if xticks>4 else -0.13 if xticks>3 else -0.18
+            xloc = -0.05 if xticks>5 else -0.06 if xticks>4 else -0.13 if xticks>3 else -0.18
             yloc = 1.03
         
         a.text(xloc,yloc,label+')', transform=a.transAxes)
@@ -2315,8 +2322,9 @@ def figures_5_and_s31(many_sg, include_n=True):
                     ] = ' '.join(split[:num_words])+'\n'+' '.join(split[num_words:])
         return sources_sub
 
-    def initialize_big_plot(commodity_subset):
+    def initialize_big_plot(commodity_subset, figsize=None):
         if commodity_subset == 'all':
+            figsize=(30,28) if figsize is None else figsize
             shapex, shapey = 20,3
             cu_span = 15
             al_span = 8
@@ -2327,7 +2335,7 @@ def figures_5_and_s31(many_sg, include_n=True):
             fig, ax = plt.subplot_mosaic('A'*cu_span + 'B'*(shapex-cu_span)+';'+
                                         'C'*al_span + 'D'*ni_span + 'E'*(shapex-al_span-ni_span)+';'+
                                         'F'*pb_span + 'G'*au_span + 'H'*ag_span + 'I'*(shapex-pb_span-au_span-ag_span),
-                                        figsize=(30,28)
+                                        figsize=figsize,
                                         )
             axes = {}
             axes['Cu'] = ax['A']
@@ -2341,13 +2349,14 @@ def figures_5_and_s31(many_sg, include_n=True):
             axes['Zn'] = ax['I']
         elif commodity_subset=='subset1':
             # ['Cu','Al','Ni','Pb','Zn']
+            figsize=(30,32) if figsize is None else figsize
             shapex, shapey = 20,3
             al_span = 11
             pb_span = 10
-            fig, ax = plt.subplot_mosaic('A'*shapex + ';'+
+            fig=plt.figure(figsize=figsize)
+            ax = fig.subplot_mosaic('A'*shapex + ';'+
                                         'C'*al_span + 'D'*(shapex-al_span) +';'+
                                         'F'*pb_span + 'I'*(shapex-pb_span),
-                                        figsize=(26,30)
                                         )
             axes = {}
             axes['Cu'] = ax['A']
@@ -2356,12 +2365,13 @@ def figures_5_and_s31(many_sg, include_n=True):
             axes['Pb'] = ax['F']
             axes['Zn'] = ax['I']
         elif commodity_subset=='subset2':
+            figsize=(22,18) if figsize is None else figsize
             shapex, shapey = 20,3
             steel_span = 12
             sn_span = 14
             fig, ax = plt.subplot_mosaic('A'*steel_span + 'B'*(shapex-steel_span)+';'+
                                         'C'*sn_span + 'E'*(shapex-sn_span),
-                                        figsize=(22,18)
+                                        figsize=figsize,
                                         )
             axes = {}
             axes['Steel'] = ax['A']

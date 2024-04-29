@@ -130,15 +130,15 @@ b,b,Incentive tonnage elasticity to price,Pb,12.536595967174428
 b,b,Incentive tonnage elasticity to price,Sn,10.54979979552377
 b,b,Incentive tonnage elasticity to price,Steel,6.511864904525355
 b,b,Incentive tonnage elasticity to price,Zn,2.8093122043805954
-b,b,Intensity elasticity to GDP,Ag,5.278460336749767
-b,b,Intensity elasticity to GDP,Al,7.103598428403661
-b,b,Intensity elasticity to GDP,Au,19.060901780777737
-b,b,Intensity elasticity to GDP,Cu,7.023822905938565
-b,b,Intensity elasticity to GDP,Ni,4.681711483664045
-b,b,Intensity elasticity to GDP,Pb,8.032132520499639
-b,b,Intensity elasticity to GDP,Sn,9.758443024384977
-b,b,Intensity elasticity to GDP,Steel,5.73695298461246
-b,b,Intensity elasticity to GDP,Zn,15.27312297213331
+b,b,Intensity elasticity to GDPPC,Ag,5.278460336749767
+b,b,Intensity elasticity to GDPPC,Al,7.103598428403661
+b,b,Intensity elasticity to GDPPC,Au,19.060901780777737
+b,b,Intensity elasticity to GDPPC,Cu,7.023822905938565
+b,b,Intensity elasticity to GDPPC,Ni,4.681711483664045
+b,b,Intensity elasticity to GDPPC,Pb,8.032132520499639
+b,b,Intensity elasticity to GDPPC,Sn,9.758443024384977
+b,b,Intensity elasticity to GDPPC,Steel,5.73695298461246
+b,b,Intensity elasticity to GDPPC,Zn,15.27312297213331
 b,b,Intensity elasticity to price,Ag,18.075033107838472
 b,b,Intensity elasticity to price,Al,7.641858948123209
 b,b,Intensity elasticity to price,Au,14.51820586538818

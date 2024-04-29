@@ -1455,7 +1455,7 @@ def make_parameter_names_nice(ind):
     """
     updated = [i.replace('_', ' ').replace('sector specific ', '').replace('dematerialization tech growth',
                                                                            'Intensity elasticity to time').replace(
-        'price response', 'intensity response to price').capitalize().replace('gdp', 'GDP').replace(
+        'price response', 'intensity response to price').capitalize().replace('gdp', 'GDPPC').replace(
         ' cu ', ' CU ').replace(' og ', ' OG ').replace('Primary price resources contained elas',
                                                         'Incentive tonnage response to price').replace(
         'OG elas', 'elasticity to ore grade').replace('Initial', 'Incentive').replace('Primary oge scale',
@@ -1587,7 +1587,7 @@ def plot_demand_parameter_correlation(self, scatter=True, percentile=25, n=None,
     else:
         df, _, _ = prep_for_snsplots(self, demand_mining_integ='integ', percentile=percentile,
                                      n_most_important=self.integ.importances_df.shape[0])
-        demand_params = ['Intensity elasticity to GDP', 'Intensity elasticity to time', 'Intensity elasticity to price']
+        demand_params = ['Intensity elasticity to GDPPC', 'Intensity elasticity to time', 'Intensity elasticity to price']
     #         df = df.set_index(['Commodity','Scenario number','Parameter']).loc[idx[:,:,demand_params]]
     #         df = df.unstack().reset_index(drop=False)
     self.df = df
@@ -1652,7 +1652,7 @@ def plot_important_parameter_scatter(self, mining_or_integ='mining', percentile=
     df2 = df2.set_index(['Commodity', 'Scenario number']).stack().reset_index(drop=False).rename(
         columns={'level_2': 'Parameter', 0: 'Value'})
     if mining_or_integ == 'demand':
-        demand_params = ['Intensity elasticity to GDP', 'Intensity elasticity to time', 'Mine cost change per year']
+        demand_params = ['Intensity elasticity to GDPPC', 'Intensity elasticity to time', 'Mine cost change per year']
         df2 = df2.loc[[i in demand_params for i in df2['Parameter']]]
 
     if normalize:
@@ -1826,7 +1826,7 @@ def commodity_level_feature_importance_heatmap(self, dpi=50, recalculate=True, o
       where most important parameter has the value 1, rather than all summing
       to 1
     """
-    names = ['Intensity elasticity to GDP',
+    names = ['Intensity elasticity to GDPPC',
              'Intensity decline per year',
              'Intensity elasticity to price',
              'Mine CU elasticity to TCM',
